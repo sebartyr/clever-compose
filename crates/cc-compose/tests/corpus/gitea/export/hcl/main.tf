@@ -1,0 +1,60 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.1" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "gitea-default"
+  tags = ["compose-project=gitea", "compose-network=default", "compose-spec=9aa14d857c9c7c91984add8639f6f607"]
+}
+
+resource "clevercloud_postgresql" "db" {
+  name    = "gitea-db"
+  plan    = "dev"
+  region  = "par"
+  version = "17"
+}
+
+resource "clevercloud_docker" "gitea" {
+  name               = "gitea-gitea"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    CC_COMPOSE_EXPAND = "DB_HOST,DB_NAME,DB_USER,DB_PASSWD"
+    DB_HOST           = "$${POSTGRESQL_ADDON_HOST}:$${POSTGRESQL_ADDON_PORT}"
+    DB_NAME           = "$${POSTGRESQL_ADDON_DB}"
+    DB_PASSWD         = "$${POSTGRESQL_ADDON_PASSWORD}"
+    DB_TYPE           = "postgres"
+    DB_USER           = "$${POSTGRESQL_ADDON_USER}"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "gitea.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/gitea"
+  }
+  dependencies       = [clevercloud_postgresql.db.id]
+}

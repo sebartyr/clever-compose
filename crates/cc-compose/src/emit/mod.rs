@@ -2,6 +2,7 @@
 //! §10). Terraform (réconciliable) et script clever-tools (bootstrap).
 
 pub mod export;
+pub mod hcl;
 pub mod script;
 pub mod terraform;
 

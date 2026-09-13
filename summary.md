@@ -276,7 +276,11 @@ modification du fichier source ; page d'installation servie.
 
 *Questions ouvertes restantes :*
 
-- Rendu HCL lisible par templating depuis le JSON (confort, pas bloquant).
+- Rendu HCL : fait le 13/09/2026 (`emit/hcl.rs`), depuis la même structure
+  JSON, blocs contre attributs d'après le schéma, `type = string` nu,
+  expression nue pour une interpolation unique (`var.x`, `file(...)`).
+  `export` écrit `main.tf` ; le JSON reste la forme validée en test, et le
+  HCL rendu est validé à son tour (`export/hcl/`).
 - `deployment.repository` : Terraform attend que les branches
   `clever-compose/<service>` soient poussées sur un dépôt de l'utilisateur
   (§10) ; c'est l'exécuteur ou `export` qui les poussera (phase 3).

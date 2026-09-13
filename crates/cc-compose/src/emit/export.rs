@@ -19,9 +19,11 @@ pub fn write(plan: &Plan, project_dir: &FsPath, out_dir: &FsPath, what: &What, d
     std::fs::create_dir_all(out_dir).map_err(|e| Diagnostic::error("export-io", format!("{} : {e}", out_dir.display())))?;
     let io = |p: &FsPath, e: std::io::Error| Diagnostic::error("export-io", format!("{} : {e}", p.display()));
     if what.terraform {
+        // HCL lisible pour l'utilisateur ; la structure JSON reste celle qui
+        // est validée en test.
         let tf = terraform::emit(plan, &terraform::Options { out_dir, project_dir }, diags);
-        let p = out_dir.join("main.tf.json");
-        std::fs::write(&p, serde_json::to_string_pretty(&tf).unwrap() + "\n").map_err(|e| io(&p, e))?;
+        let p = out_dir.join("main.tf");
+        std::fs::write(&p, super::hcl::render(&tf, &terraform::schema())).map_err(|e| io(&p, e))?;
     }
     if what.script {
         let p = out_dir.join("bootstrap.sh");

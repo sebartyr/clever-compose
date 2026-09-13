@@ -218,7 +218,7 @@ fn addon_resource_type(provider: &str) -> Option<&'static str> {
     })
 }
 
-fn schema() -> J {
+pub fn schema() -> J {
     serde_json::from_str(include_str!("../../data/terraform-provider-schema.json")).expect("schéma du provider invalide")
 }
 

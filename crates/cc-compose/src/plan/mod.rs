@@ -511,7 +511,7 @@ fn plan_service(
     if !dns_map.0.is_empty() {
         let image_name = s.image.as_deref().unwrap_or("").rsplit('/').next().unwrap_or("").split(':').next().unwrap_or("").to_string();
         if ["nginx", "haproxy", "traefik", "openresty"].contains(&image_name.as_str()) {
-            diags.push(Diagnostic::warning("proxy-resolver", format!("`{name}` ({image_name}) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez un `resolver` (adresse dans /etc/resolv.conf, TTL court) et passez l'hôte amont par une variable pour forcer la résolution à chaque requête")).with_path(&p.child("image")));
+            diags.push(Diagnostic::warning("proxy-resolver", format!("`{name}` ({image_name}) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez `resolver 127.0.0.153 valid=30s;` (le stub DNS du shim) et passez l'hôte amont par une variable (`set $upstream http://app:8000; proxy_pass $upstream;`) pour forcer la résolution à chaque requête")).with_path(&p.child("image")));
         }
     }
     env.sort_by(|a, b| a.key.cmp(&b.key));

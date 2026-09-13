@@ -1,0 +1,59 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.1" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "nextcloud-default"
+  tags = ["compose-project=nextcloud", "compose-network=default", "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"]
+}
+
+resource "clevercloud_postgresql" "db" {
+  name    = "nextcloud-db"
+  plan    = "dev"
+  region  = "par"
+  version = "17"
+}
+
+resource "clevercloud_docker" "nc" {
+  name               = "nextcloud-nc"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    CC_COMPOSE_EXPAND = "POSTGRES_HOST,POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
+    POSTGRES_DB       = "$${POSTGRESQL_ADDON_DB}"
+    POSTGRES_HOST     = "$${POSTGRESQL_ADDON_HOST}"
+    POSTGRES_PASSWORD = "$${POSTGRESQL_ADDON_PASSWORD}"
+    POSTGRES_USER     = "$${POSTGRESQL_ADDON_USER}"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "nc.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/nc"
+  }
+  dependencies       = [clevercloud_postgresql.db.id]
+}
