@@ -40,6 +40,10 @@ propriétaire.**
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
+CI GitHub Actions retirée le 13/09/2026 à la demande du propriétaire (elle
+avait servi à corriger deux portabilités du corpus : chemins absolus dans
+`expected.yaml` remplacés par `<project>`, répertoires vides suivis par
+`.gitkeep`). Les tests se lancent en local avec `cargo test`.
 
 ## Références
 
