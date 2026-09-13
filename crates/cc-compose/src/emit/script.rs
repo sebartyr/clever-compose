@@ -72,6 +72,17 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
         let _ = writeln!(s);
     }
 
+    let addons: Vec<&Addon> = plan.resources.iter().filter_map(|r| if let Resource::Addon(a) = r { Some(a) } else { None }).collect();
+    if !addons.is_empty() {
+        let _ = writeln!(s, "# Addons managés (facturés selon le plan)");
+        for a in &addons {
+            let version = a.version.as_ref().map(|v| format!(" --version {}", sq(v))).unwrap_or_default();
+            let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version);
+            let _ = writeln!(s, "ADDON_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .addonId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
+        }
+        let _ = writeln!(s);
+    }
+
     let _ = writeln!(s, "# Applications, créées sans déploiement");
     for a in &apps {
         let task = if a.kind == AppKind::Task { " --task ''" } else { "" };
@@ -96,6 +107,16 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
             let (Some(service), Some(net)) = (m.member.0.strip_prefix("app/"), m.group.0.strip_prefix("ng/")) else { continue };
             let group = groups.iter().find(|g| g.network == net).map(|g| g.name.as_str()).unwrap_or(net);
             let _ = writeln!(s, "clever ng link \"$APP_{}\" {} -o \"$ORG\"", ident(service), sq(group));
+        }
+        let _ = writeln!(s);
+    }
+
+    if !addons.is_empty() {
+        let _ = writeln!(s, "# Liaisons aux addons (injection de leurs variables)");
+        for a in &apps {
+            for dep in a.depends_on.iter().filter_map(|d| d.0.strip_prefix("addon/")) {
+                let _ = writeln!(s, "clever service link-addon \"$ADDON_{}\" --app \"$APP_{}\"", ident(dep), ident(&a.service));
+            }
         }
         let _ = writeln!(s);
     }

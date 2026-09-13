@@ -99,8 +99,30 @@ pub struct NewApp {
     pub description: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct AddonInfo {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub plan_slug: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAddon {
+    pub name: String,
+    pub provider: String,
+    /// Slug du plan ; l'implémentation retrouve son id.
+    pub plan: String,
+    pub region: String,
+    pub version: Option<String>,
+}
+
 /// Ce que l'exécuteur demande à la plateforme.
 pub trait Platform: Send + Sync {
+    fn list_addons(&self) -> impl Future<Output = PResult<Vec<AddonInfo>>> + Send;
+    fn create_addon(&self, addon: &NewAddon) -> impl Future<Output = PResult<AddonInfo>> + Send;
+    fn linked_addons(&self, app: &str) -> impl Future<Output = PResult<Vec<String>>> + Send;
+    fn link_addon(&self, app: &str, addon: &str) -> impl Future<Output = PResult<()>> + Send;
     fn list_apps(&self) -> impl Future<Output = PResult<Vec<AppInfo>>> + Send;
     fn get_app(&self, app: &str) -> impl Future<Output = PResult<AppInfo>> + Send;
     fn create_app(&self, app: &NewApp) -> impl Future<Output = PResult<AppInfo>> + Send;
@@ -201,6 +223,40 @@ impl Api {
 }
 
 impl Platform for Api {
+    async fn list_addons(&self) -> PResult<Vec<AddonInfo>> {
+        let all = clevercloud_sdk::v2::addon::list(&self.client, &self.owner).await.map_err(|e| e.to_string())?;
+        Ok(all.into_iter().map(|a| AddonInfo { id: a.id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug }).collect())
+    }
+
+    async fn create_addon(&self, addon: &NewAddon) -> PResult<AddonInfo> {
+        // L'id du plan vient de la liste des fournisseurs (relue, jamais
+        // codée). `v2::plan::list` du SDK échoue sur un champ null de cette
+        // route (à corriger dans le SDK) : lecture en JSON libre.
+        let providers: Vec<J> = self.client.get(&format!("{}/v2/products/addonproviders", self.base())).await.map_err(|e| Self::e("products/addonproviders", e))?;
+        let provider = providers.iter().find(|p| p["id"] == addon.provider.as_str()).ok_or_else(|| format!("fournisseur `{}` inconnu", addon.provider))?;
+        let plan_id = provider["plans"].as_array().and_then(|ps| ps.iter().find(|p| p["slug"] == addon.plan.as_str())).and_then(|p| p["id"].as_str()).ok_or_else(|| format!("plan `{}` inconnu pour {}", addon.plan, addon.provider))?;
+        let opts = clevercloud_sdk::v2::addon::CreateOpts {
+            name: addon.name.clone(),
+            region: addon.region.clone(),
+            provider_id: addon.provider.clone(),
+            plan: plan_id.to_string(),
+            options: clevercloud_sdk::v2::addon::Opts { version: addon.version.clone(), encryption: None, services: None },
+        };
+        let a = clevercloud_sdk::v2::addon::create(&self.client, &self.owner, &opts).await.map_err(|e| e.to_string())?;
+        Ok(AddonInfo { id: a.id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug })
+    }
+
+    async fn linked_addons(&self, app: &str) -> PResult<Vec<String>> {
+        let v: Vec<J> = self.client.get(&format!("{}/addons", self.app_path(app))).await.map_err(|e| Self::e("addons liés", e))?;
+        Ok(v.into_iter().filter_map(|a| a["id"].as_str().map(str::to_string)).collect())
+    }
+
+    async fn link_addon(&self, app: &str, addon: &str) -> PResult<()> {
+        // Corps : l'id de l'addon, en chaîne JSON (clever-client `linkAddon`).
+        self.send(reqwest::Method::POST, &format!("{}/addons", self.app_path(app)), Some(&J::String(addon.to_string()))).await?;
+        Ok(())
+    }
+
     async fn list_apps(&self) -> PResult<Vec<AppInfo>> {
         self.client.get(&format!("{}/applications", self.owner_path())).await.map_err(|e| Self::e("applications", e))
     }

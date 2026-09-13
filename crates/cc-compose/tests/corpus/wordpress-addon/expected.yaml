@@ -1,0 +1,43 @@
+name: wordpress-addon
+services:
+  db:
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_ROOT_PASSWORD: somewordpress
+      MYSQL_USER: wordpress
+    expose:
+      - "3306"
+      - "33060"
+    image: mariadb:10.6.4-focal
+    networks:
+      default: null
+    restart: always
+    volumes:
+      - type: volume
+        source: db_data
+        target: /var/lib/mysql
+        volume: {}
+    x-clever:
+      version: "8.4"
+  wordpress:
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_USER: wordpress
+    image: wordpress:latest
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "80"
+        protocol: tcp
+    restart: always
+networks:
+  default:
+    name: wordpress-addon_default
+volumes:
+  db_data:
+    name: wordpress-addon_db_data

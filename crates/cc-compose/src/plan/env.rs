@@ -12,6 +12,15 @@ use crate::diagnostic::{Diagnostic, Diagnostics};
 
 type Memberships = IndexMap<String, Vec<(String, Vec<String>)>>;
 
+/// Services substitués par un addon : nom → fournisseur.
+pub type Addons = IndexMap<String, &'static str>;
+
+/// Ce qu'un nom d'hôte désigne.
+enum Target {
+    Member(String, String),
+    Addon(String, &'static str),
+}
+
 /// Le membre (`member/<service>@<réseau>`) que `consumer` atteint sous
 /// `alias`, s'ils partagent un réseau.
 fn resolve_alias(alias: &str, consumer: &str, consumer_service: &Service, memberships: &Memberships) -> Option<(String, String)> {
@@ -43,7 +52,7 @@ fn key_names_a_host(key: &str) -> bool {
     ["HOST", "SERVER", "ADDR", "ENDPOINT", "HOSTNAME"].iter().any(|h| k.contains(h))
 }
 
-pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, p: &Path, diags: &mut Diagnostics, referenced: &mut std::collections::BTreeSet<String>) -> Template {
+pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, addons: &Addons, p: &Path, diags: &mut Diagnostics, referenced: &mut std::collections::BTreeSet<String>) -> Template {
     let mut segments: Vec<Segment> = Vec::new();
     let mut literal = String::new();
     let mut rest = value;
@@ -56,14 +65,35 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
             let hostport = authority.rsplit('@').next().unwrap_or(authority);
             let host = hostport.split(':').next().unwrap_or(hostport);
             let userinfo_len = authority.len() - hostport.len();
-            if let Some((service, net)) = lookup(host, consumer, consumer_service, project, memberships, p, diags) {
-                referenced.insert(service.clone());
-                literal.push_str(before);
-                literal.push_str(&authority[..userinfo_len]);
-                segments.push(Segment::Literal(std::mem::take(&mut literal)));
-                segments.push(member_ref(&service, &net));
-                rest = &after[userinfo_len + host.len()..];
-                continue;
+            match lookup(host, consumer, consumer_service, project, memberships, addons, p, diags) {
+                Some(Target::Member(service, net)) => {
+                    referenced.insert(service.clone());
+                    literal.push_str(before);
+                    literal.push_str(&authority[..userinfo_len]);
+                    segments.push(Segment::Literal(std::mem::take(&mut literal)));
+                    segments.push(member_ref(&service, &net));
+                    rest = &after[userinfo_len + host.len()..];
+                    continue;
+                }
+                Some(Target::Addon(service, provider)) => {
+                    // URL entière reconstruite depuis l'addon (§6.2, cas 1).
+                    referenced.insert(service.clone());
+                    let url_end = pos + 3 + after.len();
+                    let url_start = literal.rfind(|c: char| c.is_whitespace() || c == ',' || c == ';').map(|i| i + 1).unwrap_or(0);
+                    let prefix_in_literal = literal[url_start..].to_string();
+                    let full = format!("{prefix_in_literal}{}", &rest[..url_end]);
+                    literal.truncate(url_start);
+                    if let Some(t) = super::addons::rebuild_url(&full, &service, provider) {
+                        if !literal.is_empty() {
+                            segments.push(Segment::Literal(std::mem::take(&mut literal)));
+                        }
+                        segments.extend(t.0);
+                        rest = &rest[url_end..];
+                        continue;
+                    }
+                    literal.push_str(&prefix_in_literal);
+                }
+                None => {}
             }
             literal.push_str(before);
             literal.push_str(authority);
@@ -78,12 +108,33 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
         let followed_by_port = rest[token_end..].starts_with(':') && rest[token_end + 1..].starts_with(|c: char| c.is_ascii_digit());
         let whole = literal.is_empty() && token_end == rest.len() && key_names_a_host(key);
         if !token.is_empty() && boundary_before && (whole || followed_by_port) {
-            if let Some((service, net)) = lookup(token, consumer, consumer_service, project, memberships, p, diags) {
-                referenced.insert(service.clone());
-                segments.push(Segment::Literal(std::mem::take(&mut literal)));
-                segments.push(member_ref(&service, &net));
-                rest = &rest[token_end..];
-                continue;
+            match lookup(token, consumer, consumer_service, project, memberships, addons, p, diags) {
+                Some(Target::Member(service, net)) => {
+                    referenced.insert(service.clone());
+                    segments.push(Segment::Literal(std::mem::take(&mut literal)));
+                    segments.push(member_ref(&service, &net));
+                    rest = &rest[token_end..];
+                    continue;
+                }
+                Some(Target::Addon(service, provider)) => {
+                    referenced.insert(service.clone());
+                    segments.push(Segment::Literal(std::mem::take(&mut literal)));
+                    if let Some(h) = super::addons::seg(&service, provider, super::addons::Role::Host) {
+                        segments.push(h);
+                    }
+                    rest = &rest[token_end..];
+                    // `host:port` : le port devient celui de l'addon.
+                    if followed_by_port {
+                        let port_end = rest[1..].find(|c: char| !c.is_ascii_digit()).map(|i| i + 1).unwrap_or(rest.len());
+                        if let Some(pt) = super::addons::seg(&service, provider, super::addons::Role::Port) {
+                            segments.push(Segment::Literal(":".into()));
+                            segments.push(pt);
+                            rest = &rest[port_end..];
+                        }
+                    }
+                    continue;
+                }
+                None => {}
             }
         }
         if token.is_empty() {
@@ -106,12 +157,15 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
     Template(segments)
 }
 
-fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, p: &Path, diags: &mut Diagnostics) -> Option<(String, String)> {
+fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, addons: &Addons, p: &Path, diags: &mut Diagnostics) -> Option<Target> {
     if host == consumer {
         return None;
     }
-    if let Some(found) = resolve_alias(host, consumer, consumer_service, memberships) {
-        return Some(found);
+    if let Some(provider) = addons.get(host) {
+        return Some(Target::Addon(host.to_string(), provider));
+    }
+    if let Some((service, net)) = resolve_alias(host, consumer, consumer_service, memberships) {
+        return Some(Target::Member(service, net));
     }
     // Un nom de service que le consommateur n'atteint par aucun réseau.
     if project.services.contains_key(host) {
@@ -125,12 +179,12 @@ fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Proj
 /// atteint par un réseau commun, triés. Restreindre aux références rend le
 /// graphe des ressources acyclique, donc l'export Terraform applicable en
 /// une passe (summary.md, phase 0 question 2).
-pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Memberships, referenced: &std::collections::BTreeSet<String>) -> Template {
+pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Memberships, referenced: &std::collections::BTreeSet<String>, addons: &Addons) -> Template {
     let mut entries: Vec<(String, String, String)> = Vec::new();
     for net in consumer_service.networks.keys() {
         if let Some(members) = memberships.get(net) {
             for (service, aliases) in members {
-                if service == consumer || !referenced.contains(service) {
+                if service == consumer || !referenced.contains(service) || addons.contains_key(service) {
                     continue;
                 }
                 for a in aliases {

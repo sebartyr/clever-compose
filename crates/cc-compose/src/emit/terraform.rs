@@ -36,6 +36,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
     );
     let mut networkgroups = Map::new();
     let mut dockers = Map::new();
+    let mut addon_resources: Map<String, J> = Map::new(); // type de ressource -> { nom -> corps }
 
     for r in &plan.resources {
         match r {
@@ -105,10 +106,39 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 if !deps.is_empty() {
                     res.insert("depends_on".into(), J::Array(deps));
                 }
+                // Addons liés : `dependencies` (ids d'addons), ce qui injecte
+                // leurs variables dans l'application.
+                let addon_deps: Vec<J> = app
+                    .depends_on
+                    .iter()
+                    .filter_map(|d| d.0.strip_prefix("addon/"))
+                    .filter_map(|svc| {
+                        let provider = plan.resources.iter().find_map(|r| match r {
+                            Resource::Addon(a) if a.service == svc => Some(a.provider.clone()),
+                            _ => None,
+                        })?;
+                        let resource = addon_resource_type(&provider)?;
+                        Some(json!(format!("${{{resource}.{}.id}}", ident(svc))))
+                    })
+                    .collect();
+                if !addon_deps.is_empty() {
+                    check_attrs(&schema, "clevercloud_docker", &["dependencies"], diags);
+                    res.insert("dependencies".into(), J::Array(addon_deps));
+                }
                 dockers.insert(ident(&app.service), J::Object(res));
             }
             Resource::Addon(a) => {
-                diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : émission Terraform des addons prévue en phase 5", a.name)));
+                let Some(resource) = addon_resource_type(&a.provider) else {
+                    diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : pas de ressource Terraform pour `{}` dans le provider 2.1.0", a.name, a.provider)));
+                    continue;
+                };
+                let has_version = schema["provider_schemas"]["registry.terraform.io/clevercloud/clevercloud"]["resource_schemas"][resource]["block"]["attributes"].get("version").is_some();
+                check_attrs(&schema, resource, &["name", "plan", "region"], diags);
+                let mut body = json!({ "name": a.name, "plan": a.plan, "region": a.region });
+                if let (Some(v), true) = (&a.version, has_version) {
+                    body["version"] = json!(v);
+                }
+                addon_resources.entry(resource.to_string()).or_insert_with(|| J::Object(Map::new())).as_object_mut().unwrap().insert(ident(&a.service), body);
             }
             Resource::Membership(_) | Resource::Redirection(_) | Resource::Domain(_) => {}
         }
@@ -117,6 +147,9 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
     let mut resources = Map::new();
     if !networkgroups.is_empty() {
         resources.insert("clevercloud_networkgroup".into(), J::Object(networkgroups));
+    }
+    for (k, v) in addon_resources {
+        resources.insert(k, v);
     }
     if !dockers.is_empty() {
         resources.insert("clevercloud_docker".into(), J::Object(dockers));
@@ -171,6 +204,18 @@ pub fn pathdiff(target: &FsPath, base: &FsPath) -> String {
     let mut parts: Vec<String> = vec!["..".into(); b.len() - common];
     parts.extend(t[common..].iter().map(|c| c.as_os_str().to_string_lossy().to_string()));
     parts.join("/")
+}
+
+/// Ressource Terraform d'un fournisseur d'addon.
+fn addon_resource_type(provider: &str) -> Option<&'static str> {
+    Some(match provider {
+        "postgresql-addon" => "clevercloud_postgresql",
+        "mysql-addon" => "clevercloud_mysql",
+        "redis-addon" => "clevercloud_redis",
+        "mongodb-addon" => "clevercloud_mongodb",
+        "config-provider" => "clevercloud_configprovider",
+        _ => return None,
+    })
 }
 
 fn schema() -> J {

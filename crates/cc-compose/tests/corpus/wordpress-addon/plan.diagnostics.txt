@@ -1,0 +1,1 @@
+compose.yaml:4:12: avertissement [addon-substitution] services.db.image: `db` (mariadb:8.4) devient un addon MySQL plan `dev` (DEV) : 0 €/mois HT, 5 connexions max. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance

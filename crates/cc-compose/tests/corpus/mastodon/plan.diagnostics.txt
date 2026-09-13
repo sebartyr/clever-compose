@@ -1,16 +1,3 @@
 compose.yaml:140:15: avertissement [network-internal-ignored] networks.internal_network.internal: `internal` est ignoré : un network group n'est joignable que de ses membres, et l'accès public passe par les domaines
-compose.yaml:6:5: avertissement [memory-tuning-ignored] services.db: réglages mémoire fins (`mem_reservation`, `memswap_limit`, `shm_size`, `oom_*`) ignorés : seule la flavor compte
-compose.yaml:6:5: avertissement [port-assumed-tcp] services.db: `db` : le port 5432 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
-compose.yaml:12:7: avertissement [healthcheck-ignored] services.db.healthcheck: `db` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
-compose.yaml:14:9: erreur [bind-missing] services.db.volumes[0]: le chemin `./postgres14` monté vers `/var/lib/postgresql/data` n'existe pas sur ce poste
-compose.yaml:19:5: avertissement [port-assumed-tcp] services.redis: `redis` : le port 6379 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
-compose.yaml:24:7: avertissement [healthcheck-ignored] services.redis.healthcheck: `redis` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
-compose.yaml:26:9: erreur [bind-missing] services.redis.volumes[0]: le chemin `./redis` monté vers `/data` n'existe pas sur ce poste
-compose.yaml:105:5: avertissement [port-assumed-http] services.sidekiq: `sidekiq` : le port 3000 est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas
-compose.yaml:118:7: avertissement [healthcheck-ignored] services.sidekiq.healthcheck: `sidekiq` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
-compose.yaml:116:9: erreur [bind-missing] services.sidekiq.volumes[0]: le chemin `./public/system` monté vers `/mastodon/public/system` n'existe pas sur ce poste
-compose.yaml:95:7: avertissement [healthcheck-ignored] services.streaming.healthcheck: `streaming` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
-compose.yaml:97:9: avertissement [port-host-ip-ignored] services.streaming.ports[0]: l'adresse d'écoute d'un port publié est ignorée
-compose.yaml:71:7: avertissement [healthcheck-ignored] services.web.healthcheck: `web` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
-compose.yaml:73:9: avertissement [port-host-ip-ignored] services.web.ports[0]: l'adresse d'écoute d'un port publié est ignorée
-compose.yaml:79:9: erreur [bind-missing] services.web.volumes[0]: le chemin `./public/system` monté vers `/mastodon/public/system` n'existe pas sur ce poste
+compose.yaml:7:12: avertissement [addon-substitution] services.db.image: `db` (postgres:14) devient un addon PostgreSQL plan `dev` (DEV) : 0 €/mois HT, 5 connexions max. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance
+compose.yaml:20:12: erreur [addon-version-unavailable] services.redis.image: `redis` : version 7 indisponible pour Redis (versions : 8.10.1) ; `x-clever.version` pour en choisir une

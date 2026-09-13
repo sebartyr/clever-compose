@@ -14,6 +14,21 @@
       ]
     },
     {
+      "resource": "addon",
+      "id": "addon/db",
+      "service": "db",
+      "name": "gitea-db",
+      "provider": "postgresql-addon",
+      "plan": "dev",
+      "region": "par",
+      "version": "17",
+      "tags": [
+        "compose-project=gitea",
+        "compose-service=db",
+        "compose-spec=9aa14d857c9c7c91984add8639f6f607"
+      ]
+    },
+    {
       "resource": "app",
       "id": "app/gitea",
       "service": "gitea",
@@ -60,16 +75,10 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
+          "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "db="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/db@default"
-              }
+              "literal": "DB_HOST,DB_NAME,DB_USER,DB_PASSWD"
             }
           ]
         },
@@ -78,12 +87,20 @@
           "value": [
             {
               "ref": {
-                "ref": "member_fqdn",
-                "member": "member/db@default"
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_HOST"
               }
             },
             {
-              "literal": ":5432"
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PORT"
+              }
             }
           ]
         },
@@ -91,7 +108,11 @@
           "key": "DB_NAME",
           "value": [
             {
-              "literal": "gitea"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
             }
           ]
         },
@@ -99,7 +120,11 @@
           "key": "DB_PASSWD",
           "value": [
             {
-              "literal": "gitea"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
             }
           ]
         },
@@ -115,92 +140,22 @@
           "key": "DB_USER",
           "value": [
             {
-              "literal": "gitea"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
             }
           ]
         }
       ],
-      "depends_on": [],
+      "depends_on": [
+        "addon/db"
+      ],
       "health_check_path": null,
       "tags": [
         "compose-project=gitea",
         "compose-service=gitea",
-        "compose-spec=9aa14d857c9c7c91984add8639f6f607"
-      ]
-    },
-    {
-      "resource": "app",
-      "id": "app/db",
-      "service": "db",
-      "name": "gitea-db",
-      "kind": "service",
-      "region": "par",
-      "scaling": {
-        "flavor": "XS",
-        "min_instances": 1,
-        "max_instances": 1
-      },
-      "source": {
-        "type": "synthetic",
-        "image": "postgres:alpine",
-        "private_registry": false,
-        "files": []
-      },
-      "image": {
-        "entrypoint": [
-          "docker-entrypoint.sh"
-        ],
-        "cmd": [
-          "postgres"
-        ],
-        "user": null,
-        "workdir": "/",
-        "exposed_ports": [
-          5432
-        ]
-      },
-      "shim": {
-        "argv": [
-          "docker-entrypoint.sh",
-          "postgres"
-        ],
-        "workdir": "/",
-        "port": {
-          "mode": "health",
-          "ready_port": 5432
-        }
-      },
-      "env": [
-        {
-          "key": "POSTGRES_DB",
-          "value": [
-            {
-              "literal": "gitea"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_PASSWORD",
-          "value": [
-            {
-              "literal": "gitea"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_USER",
-          "value": [
-            {
-              "literal": "gitea"
-            }
-          ]
-        }
-      ],
-      "depends_on": [],
-      "health_check_path": null,
-      "tags": [
-        "compose-project=gitea",
-        "compose-service=db",
         "compose-spec=9aa14d857c9c7c91984add8639f6f607"
       ]
     },
@@ -211,15 +166,6 @@
       "group": "ng/default",
       "aliases": [
         "gitea"
-      ]
-    },
-    {
-      "resource": "membership",
-      "id": "member/db@default",
-      "member": "app/db",
-      "group": "ng/default",
-      "aliases": [
-        "db"
       ]
     }
   ]

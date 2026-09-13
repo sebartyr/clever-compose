@@ -6,6 +6,7 @@
 //! traduite, soit ignorée avec un avertissement, soit refusée avec une
 //! erreur, jamais approximée (CLAUDE.md §13).
 
+pub mod addons;
 pub mod cli;
 pub mod env;
 pub mod flavors;
@@ -102,9 +103,35 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         }
     }
 
-    // Réseaux et appartenances.
+    // Substitution par les addons (§6) : image reconnue, pas de `build:`,
+    // pas d'éphémère demandé.
+    let mut addons: env::Addons = IndexMap::new();
+    let mut addon_infos: IndexMap<String, (addons::Recognized, addons::Declared)> = IndexMap::new();
+    for (name, s) in &project.services {
+        let p = Path::root().child("services").child(name);
+        let x = XClever::service(s, &p, &mut Diagnostics::default());
+        // `--allow-ephemeral` ne concerne que les volumes des services non
+        // substituables ; seul `x-clever.ephemeral: true` garde une base en
+        // conteneur.
+        if s.build.is_some() {
+            continue;
+        }
+        let Some(rec) = s.image.as_deref().and_then(addons::recognize) else { continue };
+        if x.ephemeral == Some(true) {
+            diags.push(Diagnostic::warning("addon-declined", format!("`{name}` ({}) reste un conteneur éphémère (`x-clever.ephemeral: true`) ; un addon `{}` managé est possible", rec.kind, rec.provider)).with_path(&p.child("image")));
+            continue;
+        }
+        let declared = addons::declared(&rec, s);
+        addons.insert(name.clone(), rec.provider);
+        addon_infos.insert(name.clone(), (rec, declared));
+    }
+
+    // Réseaux et appartenances (les addons sont hors network group, §6.4).
     let mut memberships: IndexMap<String, Vec<(String, Vec<String>)>> = IndexMap::new(); // réseau -> [(service, alias)]
     for (name, s) in &project.services {
+        if addons.contains_key(name) {
+            continue;
+        }
         for (net, cfg) in &s.networks {
             let mut aliases = vec![name.clone()];
             if let Some(c) = cfg {
@@ -122,13 +149,88 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         }));
     }
 
+    let catalog = addons::catalog();
+    let mut addon_plans: IndexMap<String, addons::PlanInfo> = IndexMap::new();
+    for (name, (rec, declared)) in &addon_infos {
+        let s = &project.services[name];
+        let p = Path::root().child("services").child(name);
+        let x = XClever::service(s, &p, &mut Diagnostics::default());
+        let region = x.region.clone().or_else(|| project_x.region.clone()).unwrap_or_else(|| "par".into());
+        let Some(provider) = catalog.providers.get(rec.provider) else {
+            diags.push(Diagnostic::error("addon-provider-unknown", format!("fournisseur `{}` absent du catalogue embarqué", rec.provider)).with_path(&p));
+            continue;
+        };
+        let plan = match addons::choose_plan(provider, &region, x.plan.as_deref()) {
+            Ok(pl) => pl.clone(),
+            Err(e) => {
+                diags.push(Diagnostic::error("addon-plan", e).with_path(&p.child("x-clever").child("plan")));
+                continue;
+            }
+        };
+        // Version : celle de x-clever, sinon celle du tag ; jamais un
+        // rabattement silencieux (§6.1).
+        let version = match (x.version.clone(), rec.version.clone()) {
+            (Some(v), _) => Some(v),
+            (None, Some(v)) if rec.kind == "mariadb" => {
+                diags.push(Diagnostic::error("addon-version-unavailable", format!("`{name}` : MariaDB {v} n'existe pas comme addon ; le fournisseur est MySQL (versions : {}). Choisissez une version avec `x-clever.version`, ou gardez le conteneur avec `x-clever.ephemeral: true`", provider.versions.join(", "))).with_path(&p.child("image")));
+                continue;
+            }
+            (None, Some(v)) => Some(v),
+            (None, None) => provider.default_version.clone(),
+        };
+        if let Some(v) = &version {
+            if !provider.versions.is_empty() && !provider.versions.iter().any(|av| av == v) {
+                diags.push(Diagnostic::error("addon-version-unavailable", format!("`{name}` : version {v} indisponible pour {} (versions : {}) ; `x-clever.version` pour en choisir une", provider.name, provider.versions.join(", "))).with_path(&p.child("image")));
+                continue;
+            }
+        }
+        // Coût annoncé (§6) : la substitution est facturée.
+        diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
+        // Falaises sémantiques (§6.4).
+        if let Some(cmd) = &s.command {
+            if !cmd.is_empty() {
+                diags.push(Diagnostic::error("addon-tuning-args", format!("`{name}` : `command: {}` n'a pas d'équivalent sur un addon managé (pas d'arguments de réglage) ; retirez-la ou gardez un conteneur", cmd.join(" "))).with_path(&p.child("command")));
+            }
+        }
+        for k in s.environment.keys() {
+            if k.contains("MULTIPLE_DATABASES") {
+                diags.push(Diagnostic::error("addon-multiple-databases", format!("`{name}` : `{k}` demande plusieurs bases dans une instance ; un addon n'en sert qu'une. Déclarez un service par base")).with_path(&p.child("environment").child(k)));
+            }
+        }
+        for (i, v) in s.volumes.iter().enumerate() {
+            if v.target.starts_with("/docker-entrypoint-initdb.d") {
+                diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : les scripts d'initialisation montés sur `{}` ne s'exécutent pas sur un addon ; l'exécution par une tâche (phase 5c) n'est pas encore disponible", v.target)).with_path(&p.child("volumes").index(i)));
+            }
+        }
+        if declared.root_password.is_some() && declared.user.is_none() {
+            diags.push(Diagnostic::warning("addon-no-superuser", format!("`{name}` : seul un mot de passe root est déclaré ; l'addon fournit un utilisateur sans superuser (pas de `CREATE EXTENSION` non autorisée, pas de création de base au démarrage)")).with_path(&p));
+        }
+        addon_plans.insert(name.clone(), plan.clone());
+        resources.push(Resource::Addon(Addon {
+            id: ResourceId(format!("addon/{name}")),
+            service: name.clone(),
+            name: format!("{}-{name}", project.name),
+            provider: rec.provider.to_string(),
+            plan: plan.slug.clone(),
+            region,
+            version,
+            tags: tags(name),
+        }));
+    }
+    if diags.has_errors() {
+        return None;
+    }
+
     let mut ok = true;
     let mut apps: Vec<App> = Vec::new();
     for (name, s) in &project.services {
+        if addons.contains_key(name) {
+            continue;
+        }
         let p = Path::root().child("services").child(name);
         let x = XClever::service(s, &p, diags);
         let is_task = tasks.contains(name) || x.task == Some(true);
-        match plan_service(project, name, s, &p, &x, &project_x, is_task, ctx, &memberships, diags) {
+        match plan_service(project, name, s, &p, &x, &project_x, is_task, ctx, &memberships, &addons, &addon_infos, &addon_plans, diags) {
             Some((app, redirections)) => {
                 let mut app = app;
                 app.tags = tags(name);
@@ -162,8 +264,9 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
     // Ordre topologique des applications selon depends_on.
     let order = topo_order(&apps, diags)?;
     for name in &order {
-        let app = apps.iter().find(|a| a.service == *name).unwrap().clone();
-        resources.push(Resource::App(app));
+        if let Some(app) = apps.iter().find(|a| a.service == *name) {
+            resources.push(Resource::App(app.clone()));
+        }
     }
     for (net, members) in &memberships {
         for (service, aliases) in members {
@@ -189,6 +292,9 @@ fn plan_service(
     is_task: bool,
     ctx: &Context<'_>,
     memberships: &IndexMap<String, Vec<(String, Vec<String>)>>,
+    addons: &env::Addons,
+    addon_infos: &IndexMap<String, (addons::Recognized, addons::Declared)>,
+    addon_plans: &IndexMap<String, addons::PlanInfo>,
     diags: &mut Diagnostics,
 ) -> Option<(App, Vec<Redirection>)> {
     policy::service(name, s, p, diags);
@@ -302,7 +408,36 @@ fn plan_service(
             diags.push(Diagnostic::warning("environment-unset", format!("`{k}` est déclarée sans valeur et absente de l'environnement : ignorée")).with_path(&ep));
             continue;
         };
-        env.push(EnvVar { key: k.clone(), value: env::rewrite(k, v, name, s, project, memberships, &ep, diags, &mut referenced) });
+        let mut t = env::rewrite(k, v, name, s, project, memberships, addons, &ep, diags, &mut referenced);
+        // Variables discrètes : corrélation par égalité de valeur avec ce que
+        // déclare le service substitué (§6.2, cas 2), la clé levant les
+        // ambiguïtés.
+        if let Some(lit) = t.as_literal() {
+            if let Some((addon_name, role)) = correlate(k, &lit, addon_infos) {
+                let provider = addon_infos[&addon_name].0.provider;
+                if let Some(seg) = addons::seg(&addon_name, provider, role) {
+                    t = Template(vec![seg]);
+                    referenced.insert(addon_name);
+                }
+            }
+        }
+        env.push(EnvVar { key: k.clone(), value: t });
+    }
+    // Variables à expanser par le shim au démarrage (références d'addon).
+    let expand: Vec<String> = env.iter().filter(|e| e.value.0.iter().any(|seg| matches!(seg, Segment::Ref(Reference::AddonEnv { .. })))).map(|e| e.key.clone()).collect();
+    if !expand.is_empty() {
+        env.push(EnvVar { key: "CC_COMPOSE_EXPAND".into(), value: Template::literal(expand.join(",")) });
+    }
+    // Avertissement connexions (§6.4) : instances × pool contre la limite du plan.
+    for (addon_name, plan) in addon_plans {
+        if referenced.contains(addon_name) {
+            if let Some(max) = addons::max_connections(plan) {
+                let replicas = s.deploy.as_ref().and_then(|d| d.replicas).or(s.scale).unwrap_or(1).max(1) as u32;
+                if replicas > 1 && replicas * 10 > max {
+                    diags.push(Diagnostic::warning("addon-connections", format!("`{name}` : {replicas} instances contre {max} connexions max sur le plan `{}` de `{addon_name}` ; un pool par instance dépasse vite la limite", plan.slug)).with_path(&p.child("deploy")));
+                }
+            }
+        }
     }
     // Secrets : une variable par secret, le fichier écrit par le shim.
     let mut secrets: Vec<SecretBinding> = Vec::new();
@@ -344,7 +479,7 @@ fn plan_service(
         shim_secrets.push(cc_compose_model::shim::SecretFile { env: env_name.clone(), target: target.clone(), mode, uid, gid });
         secrets.push(SecretBinding { name: sm.source.clone(), source, env: env_name, target, mode, uid, gid });
     }
-    let dns_map = env::dns_map(name, s, memberships, &referenced);
+    let dns_map = env::dns_map(name, s, memberships, &referenced, addons);
     if !dns_map.0.is_empty() {
         env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map.clone() });
     }
@@ -366,8 +501,20 @@ fn plan_service(
     let region = x.region.clone().or_else(|| px.region.clone()).unwrap_or_else(|| "par".into());
 
     let mut depends_on: Vec<ResourceId> = Vec::new();
+    // Les addons référencés sont des dépendances (liés avant le déploiement).
+    for a in &referenced {
+        if addons.contains_key(a) {
+            depends_on.push(ResourceId(format!("addon/{a}")));
+        }
+    }
     for (dep, d) in &s.depends_on {
         let dp = p.child("depends_on").child(dep);
+        if addons.contains_key(dep) {
+            if !depends_on.iter().any(|x| x.0 == format!("addon/{dep}")) {
+                depends_on.push(ResourceId(format!("addon/{dep}")));
+            }
+            continue;
+        }
         if !project.services.contains_key(dep) {
             diags.push(Diagnostic::error("depends-on-unknown", format!("`{name}` dépend de `{dep}`, qui n'existe pas")).with_path(&dp));
             continue;
@@ -449,6 +596,53 @@ fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &P
         out.push(Redirection { id: ResourceId(format!("redir/{name}/{}/{}", pt.protocol, pt.target)), app: ResourceId(format!("app/{name}")), namespace: namespace.clone(), protocol, target_port: pt.target });
     }
     (out, tcp, udp)
+}
+
+/// Corrélation par valeur : la valeur d'une variable du consommateur égale
+/// un identifiant déclaré par un service substitué. Rôle levé par la clé
+/// (`PASS`, `USER`, `DB`/`DATABASE`/`NAME`, `HOST`, `PORT`), sinon par
+/// unicité de la correspondance ; ambigu → rien, avertissement dans le
+/// journal du plan.
+fn correlate(key: &str, value: &str, infos: &IndexMap<String, (addons::Recognized, addons::Declared)>) -> Option<(String, addons::Role)> {
+    use addons::Role;
+    let k = key.to_ascii_uppercase();
+    let mut matches: Vec<(String, Role)> = Vec::new();
+    for (name, (rec, d)) in infos {
+        if d.password.as_deref() == Some(value) {
+            matches.push((name.clone(), Role::Password));
+        }
+        if d.root_password.as_deref() == Some(value) && d.password.as_deref() != Some(value) {
+            matches.push((name.clone(), Role::Password));
+        }
+        if d.user.as_deref() == Some(value) {
+            matches.push((name.clone(), Role::User));
+        }
+        if d.database.as_deref() == Some(value) {
+            matches.push((name.clone(), Role::Database));
+        }
+        if value == rec.port.to_string() && k.contains("PORT") {
+            matches.push((name.clone(), Role::Port));
+        }
+    }
+    if matches.is_empty() {
+        return None;
+    }
+    let hinted = |role: Role| matches.iter().find(|(_, r)| *r == role).cloned();
+    if k.contains("PASS") {
+        return hinted(Role::Password);
+    }
+    if k.contains("USER") || k.contains("LOGIN") {
+        return hinted(Role::User);
+    }
+    if k.contains("DATABASE") || k.contains("DBNAME") || k.contains("DB_NAME") || k.ends_with("_DB") || k.contains("_NAME") || k == "DB" {
+        return hinted(Role::Database);
+    }
+    if k.contains("PORT") {
+        return hinted(Role::Port);
+    }
+    let mut roles: Vec<Role> = matches.iter().map(|(_, r)| *r).collect();
+    roles.dedup();
+    if roles.len() == 1 { matches.into_iter().next() } else { None }
 }
 
 /// Ports connus comme non HTTP, pour deviner le mode du port plateforme
@@ -537,7 +731,8 @@ fn topo_order(apps: &[App], diags: &mut Diagnostics) -> Option<Vec<String>> {
         stack.push(name.to_string());
         if let Some(app) = apps.iter().find(|a| a.service == name) {
             for dep in &app.depends_on {
-                let dep_name = dep.0.trim_start_matches("app/");
+                // Les addons ne sont pas ordonnés ici : créés avant les apps.
+                let Some(dep_name) = dep.0.strip_prefix("app/") else { continue };
                 visit(dep_name, apps, state, order, stack)?;
             }
         }

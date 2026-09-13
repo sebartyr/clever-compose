@@ -14,6 +14,21 @@
       ]
     },
     {
+      "resource": "addon",
+      "id": "addon/db",
+      "service": "db",
+      "name": "nextcloud-db",
+      "provider": "postgresql-addon",
+      "plan": "dev",
+      "region": "par",
+      "version": "17",
+      "tags": [
+        "compose-project=nextcloud",
+        "compose-service=db",
+        "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
+      ]
+    },
+    {
       "resource": "app",
       "id": "app/nc",
       "service": "nc",
@@ -57,16 +72,10 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
+          "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "db="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/db@default"
-              }
+              "literal": "POSTGRES_HOST,POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
             }
           ]
         },
@@ -74,7 +83,11 @@
           "key": "POSTGRES_DB",
           "value": [
             {
-              "literal": "nextcloud"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
             }
           ]
         },
@@ -83,8 +96,9 @@
           "value": [
             {
               "ref": {
-                "ref": "member_fqdn",
-                "member": "member/db@default"
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_HOST"
               }
             }
           ]
@@ -93,7 +107,11 @@
           "key": "POSTGRES_PASSWORD",
           "value": [
             {
-              "literal": "nextcloud"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
             }
           ]
         },
@@ -101,92 +119,22 @@
           "key": "POSTGRES_USER",
           "value": [
             {
-              "literal": "nextcloud"
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
             }
           ]
         }
       ],
-      "depends_on": [],
+      "depends_on": [
+        "addon/db"
+      ],
       "health_check_path": null,
       "tags": [
         "compose-project=nextcloud",
         "compose-service=nc",
-        "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
-      ]
-    },
-    {
-      "resource": "app",
-      "id": "app/db",
-      "service": "db",
-      "name": "nextcloud-db",
-      "kind": "service",
-      "region": "par",
-      "scaling": {
-        "flavor": "XS",
-        "min_instances": 1,
-        "max_instances": 1
-      },
-      "source": {
-        "type": "synthetic",
-        "image": "postgres:alpine",
-        "private_registry": false,
-        "files": []
-      },
-      "image": {
-        "entrypoint": [
-          "docker-entrypoint.sh"
-        ],
-        "cmd": [
-          "postgres"
-        ],
-        "user": null,
-        "workdir": "/",
-        "exposed_ports": [
-          5432
-        ]
-      },
-      "shim": {
-        "argv": [
-          "docker-entrypoint.sh",
-          "postgres"
-        ],
-        "workdir": "/",
-        "port": {
-          "mode": "health",
-          "ready_port": 5432
-        }
-      },
-      "env": [
-        {
-          "key": "POSTGRES_DB",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_PASSWORD",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_USER",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        }
-      ],
-      "depends_on": [],
-      "health_check_path": null,
-      "tags": [
-        "compose-project=nextcloud",
-        "compose-service=db",
         "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
       ]
     },
@@ -197,15 +145,6 @@
       "group": "ng/default",
       "aliases": [
         "nc"
-      ]
-    },
-    {
-      "resource": "membership",
-      "id": "member/db@default",
-      "member": "app/db",
-      "group": "ng/default",
-      "aliases": [
-        "db"
       ]
     }
   ]

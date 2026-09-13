@@ -2,7 +2,7 @@ compose.yaml:41:5: avertissement [port-assumed-http] services.api: `api` : le po
 compose.yaml:51:14: erreur [unsupported-key] services.api.cap_add: `cap_add` n'a pas d'équivalent sur Clever Cloud : aucune capacité supplémentaire n'est accordée
 compose.yaml:53:7: erreur [unsupported-key] services.api.sysctls: `sysctls` n'a pas d'équivalent sur Clever Cloud : pas de réglage noyau
 compose.yaml:50:12: avertissement [tmpfs-ignored] services.api.tmpfs: `tmpfs` est ignoré : le système de fichiers du conteneur est déjà éphémère
-compose.override.yaml:53:5: avertissement [port-assumed-tcp] services.db: `db` : le port 5432 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
+compose.override.yaml:53:12: avertissement [addon-substitution] services.db.image: `db` (postgres:16) devient un addon PostgreSQL plan `dev` (DEV) : 0 €/mois HT, 5 connexions max. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance
 compose.yaml:31:7: avertissement [key-ignored] services.web.dns: `dns` est ignoré : le résolveur est celui de la VM, le shim y ajoute les noms de services
 compose.yaml:15:9: avertissement [environment-unset] services.web.environment.EMPTY: `EMPTY` est déclarée sans valeur et absente de l'environnement : ignorée
 compose.yaml:38:7: avertissement [key-ignored] services.web.extra_hosts: `extra_hosts` est ignoré : pas d'écriture de /etc/hosts (CLAUDE.md §7)

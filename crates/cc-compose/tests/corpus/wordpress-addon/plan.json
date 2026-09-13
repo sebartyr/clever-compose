@@ -1,0 +1,151 @@
+{
+  "project": "wordpress-addon",
+  "spec_hash": "a964eb627f2fac67e8cbb8509eb6ad4c",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "wordpress-addon-default",
+      "tags": [
+        "compose-project=wordpress-addon",
+        "compose-network=default",
+        "compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/db",
+      "service": "db",
+      "name": "wordpress-addon-db",
+      "provider": "mysql-addon",
+      "plan": "dev",
+      "region": "par",
+      "version": "8.4",
+      "tags": [
+        "compose-project=wordpress-addon",
+        "compose-service=db",
+        "compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/wordpress",
+      "service": "wordpress",
+      "name": "wordpress-addon-wordpress",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "wordpress:latest",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "apache2-foreground"
+        ],
+        "user": null,
+        "workdir": "/var/www/html",
+        "exposed_ports": [
+          80
+        ]
+      },
+      "shim": {
+        "argv": [
+          "docker-entrypoint.sh",
+          "apache2-foreground"
+        ],
+        "workdir": "/var/www/html",
+        "port": {
+          "mode": "forward",
+          "target_port": 80
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "WORDPRESS_DB_HOST,WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME"
+            }
+          ]
+        },
+        {
+          "key": "WORDPRESS_DB_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "MYSQL_ADDON_HOST"
+              }
+            }
+          ]
+        },
+        {
+          "key": "WORDPRESS_DB_NAME",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "MYSQL_ADDON_DB"
+              }
+            }
+          ]
+        },
+        {
+          "key": "WORDPRESS_DB_PASSWORD",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "MYSQL_ADDON_PASSWORD"
+              }
+            }
+          ]
+        },
+        {
+          "key": "WORDPRESS_DB_USER",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "MYSQL_ADDON_USER"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/db"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=wordpress-addon",
+        "compose-service=wordpress",
+        "compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/wordpress@default",
+      "member": "app/wordpress",
+      "group": "ng/default",
+      "aliases": [
+        "wordpress"
+      ]
+    }
+  ]
+}

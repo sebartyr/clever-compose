@@ -34,6 +34,14 @@
         ]
       }
     },
+    "clevercloud_postgresql": {
+      "db": {
+        "name": "gitea-db",
+        "plan": "dev",
+        "region": "par",
+        "version": "17"
+      }
+    },
     "clevercloud_docker": {
       "gitea": {
         "name": "gitea-gitea",
@@ -43,12 +51,12 @@
         "min_instance_count": 1,
         "max_instance_count": 1,
         "environment": {
-          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:5432",
-          "DB_NAME": "gitea",
-          "DB_PASSWD": "gitea",
+          "CC_COMPOSE_EXPAND": "DB_HOST,DB_NAME,DB_USER,DB_PASSWD",
+          "DB_HOST": "$${POSTGRESQL_ADDON_HOST}:$${POSTGRESQL_ADDON_PORT}",
+          "DB_NAME": "$${POSTGRESQL_ADDON_DB}",
+          "DB_PASSWD": "$${POSTGRESQL_ADDON_PASSWORD}",
           "DB_TYPE": "postgres",
-          "DB_USER": "gitea"
+          "DB_USER": "$${POSTGRESQL_ADDON_USER}"
         },
         "networkgroups": [
           {
@@ -59,30 +67,10 @@
         "deployment": {
           "repository": "${var.repository}",
           "commit": "refs/heads/clever-compose/gitea"
-        }
-      },
-      "db": {
-        "name": "gitea-db",
-        "region": "par",
-        "smallest_flavor": "XS",
-        "biggest_flavor": "XS",
-        "min_instance_count": 1,
-        "max_instance_count": 1,
-        "environment": {
-          "POSTGRES_DB": "gitea",
-          "POSTGRES_PASSWORD": "gitea",
-          "POSTGRES_USER": "gitea"
         },
-        "networkgroups": [
-          {
-            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
-            "fqdn": "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-          }
-        ],
-        "deployment": {
-          "repository": "${var.repository}",
-          "commit": "refs/heads/clever-compose/db"
-        }
+        "dependencies": [
+          "${clevercloud_postgresql.db.id}"
+        ]
       }
     }
   }

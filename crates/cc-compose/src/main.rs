@@ -10,7 +10,7 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose plan   [mêmes options] [--images FIXTURE.json] [--allow-ephemeral]");
     eprintln!("        clever-compose images --project-directory DIR");
     eprintln!("        clever-compose export [terraform|script|all] -o DIR [options de plan]");
-    eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [options de plan]");
+    eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
@@ -68,6 +68,7 @@ fn up(args: &[String]) -> ExitCode {
     let mut org: Option<String> = std::env::var("CC_ORG").ok();
     let mut dry_run = false;
     let mut no_wait = false;
+    let mut confirm_addons = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -77,6 +78,7 @@ fn up(args: &[String]) -> ExitCode {
             }
             "--dry-run" => dry_run = true,
             "--no-wait" => no_wait = true,
+            "--yes" | "-y" => confirm_addons = true,
             other => rest.push(other.to_string()),
         }
         i += 1;
@@ -128,7 +130,7 @@ fn up(args: &[String]) -> ExitCode {
     let api = cc_compose::exec::platform::Api::new(org, creds);
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
-    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait }, &mut log));
+    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons }, &mut log));
     match result {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {

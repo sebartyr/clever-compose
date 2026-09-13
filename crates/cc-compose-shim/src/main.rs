@@ -9,6 +9,7 @@
 //! récupérer les zombies, propager le code de sortie (sémantique tini).
 
 mod child;
+mod expand;
 mod relay;
 mod secrets;
 
@@ -57,7 +58,8 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     // port réel joignable, pour que le succès du déploiement vu par la
     // plateforme reflète la disponibilité réelle du service.
     let consumed = secrets::materialize(&config.secrets)?;
-    let child = child::spawn(&config, &consumed)?;
+    let expanded = expand::expand_all();
+    let child = child::spawn(&config, &consumed, &expanded)?;
 
     tokio::spawn(relay::serve(config.port.clone()));
     if let Some(tcp) = config.tcp.clone() {

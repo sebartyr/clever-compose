@@ -7,7 +7,7 @@ use std::time::Duration;
 use cc_compose_model::plan::*;
 
 use super::git;
-use super::platform::{EnvVar as PEnv, NewApp, Platform};
+use super::platform::{EnvVar as PEnv, NewAddon, NewApp, Platform};
 use crate::plan::sources;
 
 pub struct Options<'a> {
@@ -16,19 +16,52 @@ pub struct Options<'a> {
     pub dry_run: bool,
     /// Ne pas attendre la fin des déploiements.
     pub no_wait: bool,
+    /// La substitution par des addons est facturée : elle se confirme.
+    pub confirm_addons: bool,
 }
 
 /// Journal des actions, lisible par l'utilisateur.
 pub type Log = Box<dyn FnMut(&str) + Send>;
 
 pub struct State {
-    pub app_ids: BTreeMap<String, String>, // service -> app id
-    pub ng_ids: BTreeMap<String, String>,  // réseau -> ng id
+    pub app_ids: BTreeMap<String, String>,   // service -> app id
+    pub ng_ids: BTreeMap<String, String>,    // réseau -> ng id
+    pub addon_ids: BTreeMap<String, String>, // service -> addon id
 }
 
 pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log: &mut Log) -> Result<State, String> {
     let project_tag = format!("compose-project={}", plan.project);
-    let mut state = State { app_ids: BTreeMap::new(), ng_ids: BTreeMap::new() };
+    let mut state = State { app_ids: BTreeMap::new(), ng_ids: BTreeMap::new(), addon_ids: BTreeMap::new() };
+
+    // 0. Addons managés, par nom ; création confirmée (facturée).
+    let addons: Vec<&Addon> = plan.resources.iter().filter_map(|r| if let Resource::Addon(a) = r { Some(a) } else { None }).collect();
+    if !addons.is_empty() {
+        let existing = platform.list_addons().await?;
+        for a in &addons {
+            match existing.iter().find(|x| x.name == a.name) {
+                Some(x) => {
+                    if x.provider != a.provider {
+                        return Err(format!("l'addon `{}` ({}) existe avec le fournisseur {}, le plan demande {}", a.name, x.id, x.provider, a.provider));
+                    }
+                    if x.plan_slug != a.plan {
+                        log(&format!("addon {} : existe ({}) avec le plan `{}`, le plan demandé `{}` n'est pas appliqué (changement de plan manuel)", a.name, x.id, x.plan_slug, a.plan));
+                    } else {
+                        log(&format!("addon {} : existe ({})", a.name, x.id));
+                    }
+                    state.addon_ids.insert(a.service.clone(), x.id.clone());
+                }
+                None if opts.dry_run => log(&format!("addon {} : à créer ({} plan {}{})", a.name, a.provider, a.plan, a.version.as_ref().map(|v| format!(" version {v}")).unwrap_or_default())),
+                None if !opts.confirm_addons => {
+                    return Err(format!("l'addon `{}` ({} plan `{}`) serait créé et facturé : relancez avec `--yes` pour confirmer (coût dans la sortie de `plan`)", a.name, a.provider, a.plan));
+                }
+                None => {
+                    let created = platform.create_addon(&NewAddon { name: a.name.clone(), provider: a.provider.clone(), plan: a.plan.clone(), region: a.region.clone(), version: a.version.clone() }).await?;
+                    log(&format!("addon {} : créé ({})", a.name, created.id));
+                    state.addon_ids.insert(a.service.clone(), created.id);
+                }
+            }
+        }
+    }
 
     // 1. Network groups, par label.
     let existing_ngs = platform.list_ngs().await?;
@@ -98,6 +131,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         return Ok(state);
     }
 
+    let mut needs_restart_for_link: Vec<String> = Vec::new();
     // 3. Liaisons (à chaud : pas de redémarrage, phase 0).
     let ngs = platform.list_ngs().await?;
     for r in &plan.resources {
@@ -110,6 +144,26 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         } else {
             platform.link_member(ng_id, app_id).await?;
             log(&format!("membre {service}@{net} : lié"));
+        }
+    }
+
+    // 3b. Liaisons aux addons (injection des variables d'addon).
+    for app in &apps {
+        let app_id = &state.app_ids[&app.service];
+        let wanted: Vec<&str> = app.depends_on.iter().filter_map(|d| d.0.strip_prefix("addon/")).collect();
+        if wanted.is_empty() {
+            continue;
+        }
+        let linked = platform.linked_addons(app_id).await?;
+        for service in wanted {
+            let Some(addon_id) = state.addon_ids.get(service) else { continue };
+            if linked.contains(addon_id) {
+                log(&format!("application {} : addon {service} déjà lié", app.name));
+            } else {
+                platform.link_addon(app_id, addon_id).await?;
+                log(&format!("application {} : addon {service} lié", app.name));
+                needs_restart_for_link.push(app.service.clone());
+            }
         }
     }
 
@@ -192,7 +246,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
             true
         };
         let _ = std::fs::remove_dir_all(&work);
-        let restart = needs_restart.get(&app.service).copied().unwrap_or(false);
+        let restart = needs_restart.get(&app.service).copied().unwrap_or(false) || needs_restart_for_link.contains(&app.service);
         let never_deployed = info.state == "SHOULD_BE_DOWN" && platform.last_deployment(app_id).await?.is_none();
         if !pushed && (restart || never_deployed) {
             platform.redeploy(app_id).await?;

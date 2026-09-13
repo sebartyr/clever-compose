@@ -33,6 +33,9 @@ pub struct XClever {
     pub private: Option<bool>,
     /// Namespace des redirections TCP/UDP (`default` par défaut).
     pub tcp_namespace: Option<String>,
+    /// Version de l'addon (`16`, `8.0`) si le tag ne la donne pas ou pour
+    /// la forcer.
+    pub version: Option<String>,
 }
 
 impl XClever {

@@ -31,7 +31,10 @@ up` sur un compose à deux services (`ccp3`, Test SBRUNAT) déployé, puis
 redéployé sans changement avec les deux push sautés. **Phase 4 terminée le
 13/09/2026** : WordPress (`ccwp`, Test SBRUNAT) fonctionne sans modification
 du fichier source (`--allow-ephemeral` en option), MariaDB jointe par le
-FQDN du membre. **Phase 5 (addons) à ouvrir.**
+FQDN du membre. **Phase 5 : 5a, 5b et 5d faites le 13/09/2026** (WordPress
+`ccwpa` sur un addon MySQL `dev`, identifiants jamais dans la configuration,
+expansés par le shim) ; **5c (scripts d'init, `seed`) reste à faire**,
+diagnostiquée comme erreur en attendant.
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
@@ -71,6 +74,70 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 | 5 | Résolution `cc-ng.cloud` en `--net host`, `resolv.conf` modifiable ? | **répondue** | Oui, via le résolveur de la VM (`nameserver 10.2.0.1`, puis `1.1.1.1`, `search .`). Zone privée, pas résolvable depuis l'extérieur. `resolv.conf` est un bind mount : **réécrivable en place, pas remplaçable** (`rm` refusé). |
 | 6 | Workers sans port : critère de succès du déploiement | **répondue** | Le déployeur fait un **GET HTTP sur 8080** et accepte tout code 200 à 500. Sans écoute : échec après 4 min. Réponse non HTTP : plantage du déployeur, échec. Chaque conteneur doit répondre en HTTP sur 8080, worker compris. |
 | 7 | Expansion des variables entre elles par la plateforme | **répondue** | **Non.** `P0_REF=ref=${P0_PASSWORD}/end` arrive littéralement dans le conteneur. L'expansion par le shim (§6.2) est nécessaire. |
+
+---
+
+## Phase 5 : substitution par les addons
+
+*Sortie 5a/5b/5d :* atteinte le 13/09/2026. Aucune substitution silencieuse :
+chaque substitution est un avertissement `addon-substitution` avec plan,
+prix mensuel et limite de connexions, et `up` exige `--yes` avant de créer
+un addon. Version indisponible ou image construite : jamais substituées.
+Les consommateurs du corpus (WordPress) se connectent sans intervention.
+
+*Décidé :*
+
+- **Catalogue embarqué** (`data/addon-providers.json`, provenance dans
+  `data/PROVENANCE.md`) : plans avec id, slug, prix, zones, features (`Max
+  connection limit`), versions dédiées et version par défaut, pour
+  `postgresql-addon` (13 à 18, défaut 17 au 13/09), `mysql-addon` (5.7,
+  8.0, 8.4, 9.7), `redis-addon`, `mongodb-addon`, `es-addon`,
+  `cellar-addon`, `config-provider`.
+- **Reconnaissance** (`plan/addons.rs`) : image → fournisseur **et**
+  dialecte (officiel ou Bitnami), avec variantes (`postgis`, `pgvector`,
+  `timescale`, `valkey`, `docker.elastic.co/...`). Version depuis le tag
+  (majeure pour PostgreSQL, Redis, ES ; `majeure.mineure` pour MySQL,
+  MongoDB). **MariaDB** : le fournisseur est MySQL, la version demandée
+  n'existe pas → erreur qui exige `x-clever.version` (choix explicite) ou
+  `x-clever.ephemeral: true`. `--allow-ephemeral` ne concerne que les
+  volumes des services non substituables ; seul `x-clever.ephemeral` garde
+  une base en conteneur.
+- **Plan** : le moins cher servi dans la région (`dev` gratuit pour
+  PostgreSQL et MySQL), `x-clever.plan` pour choisir.
+- **Câblage** (5b) : URL entière reconstruite depuis les variables de
+  l'addon (`redis://default:${REDIS_PASSWORD}@…` pour Redis, §6.2 cas 3) ;
+  hôte réécrit en `${X_ADDON_HOST}` (`host:port` → `${HOST}:${PORT}`) ;
+  variables discrètes corrélées par **égalité de valeur** avec les
+  identifiants déclarés, la clé levant les ambiguïtés (`PASS`, `USER`,
+  `DB`/`DATABASE`/`NAME`, `PORT`), rien si ambigu ; `CC_COMPOSE_EXPAND`
+  liste les variables que le shim expanse au démarrage (question 7 de la
+  phase 0). Les consommateurs dépendent de `addon/<service>` ; l'addon est
+  hors network group (§6.4) et absent de la table DNS.
+- **Falaises** (5d), chacune nommée : `addon-tuning-args` (erreur),
+  `addon-multiple-databases` (erreur), `addon-init-scripts` (erreur tant
+  que 5c n'existe pas), `addon-no-superuser` (avertissement),
+  `addon-connections` (avertissement, instances × 10 contre la limite du
+  plan).
+- **Exécuteur** : addon retrouvé par nom, créé via le SDK
+  (`v2::addon::create`, id de plan relu sur `/v2/products/addonproviders`
+  en JSON libre car `v2::plan::list` du SDK échoue à désérialiser cette
+  route : bug à remonter), liaison `POST …/applications/{app}/addons` (corps
+  : l'id en chaîne JSON), redémarrage si une liaison est nouvelle.
+- **Émetteurs** : Terraform `clevercloud_{postgresql,mysql,redis,mongodb}`
+  et `dependencies` sur l'application (validé) ; script `clever addon
+  create` + `clever service link-addon`.
+
+*Questions ouvertes restantes :*
+
+- **5c** : tâche d'exécution des scripts `/docker-entrypoint-initdb.d` avec
+  table témoin, et `clever-compose seed`.
+- Latence du proxy / hôte direct (§6.4) : non proposé.
+- Noms des variables injectées pour Redis (`REDIS_HOST`, `REDIS_PORT`,
+  `REDIS_PASSWORD`, `REDIS_URL`), MongoDB et Elasticsearch : à confirmer sur
+  un addon réel (seul MySQL a été exercé).
+- SDK Rust : PR #81 (mai 2025, approuvée, en conflit) apporte les network
+  groups ; à rebaser plutôt qu'à refaire. Bug de désérialisation de
+  `v2::plan::list`.
 
 ---
 
