@@ -13,7 +13,7 @@ fn usage() -> ExitCode {
     eprintln!("          --branches écrit les branches clever-compose/<service> dans le dépôt git du projet");
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
-    eprintln!("        clever-compose down --org ORG [--dry-run] [--yes] [options de plan]   (--yes supprime aussi les addons)");
+    eprintln!("        clever-compose down --org ORG [-p PROJET] [--dry-run] [--yes]          (sans plan ; --yes supprime aussi les addons)");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
@@ -25,11 +25,7 @@ fn main() -> ExitCode {
         Some("plan") => config(&args[1..], true),
         Some("export") => export(&args[1..]),
         Some("up") => up(&args[1..], None),
-        Some("down") => {
-            let mut rest: Vec<String> = vec!["--down".into()];
-            rest.extend(args[1..].iter().cloned());
-            up(&rest, None)
-        }
+        Some("down") => down(&args[1..]),
         Some("seed") => {
             // clever-compose seed --service SVC --file DUMP [options de up]
             let mut rest: Vec<String> = Vec::new();
@@ -104,11 +100,9 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let mut dry_run = false;
     let mut no_wait = false;
     let mut confirm_addons = false;
-    let mut is_down = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--down" => is_down = true,
             "--org" | "-o" => {
                 i += 1;
                 org = args.get(i).cloned();
@@ -177,18 +171,67 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let api = cc_compose::exec::platform::Api::new(org, creds);
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
-    if is_down {
-        return match rt.block_on(cc_compose::exec::reconcile::down(&plan, &api, dry_run, confirm_addons, &mut log)) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("erreur : {e}");
-                ExitCode::from(1)
-            }
-        };
-    }
     let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons }, &mut log));
     match result {
         Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// `down` ne recalcule pas de plan : le nom du projet suffit, l'état est
+/// relu depuis l'API. Le nom vient de `-p`, de `COMPOSE_PROJECT_NAME`, du
+/// compose s'il se charge encore, sinon du répertoire du projet.
+fn down(args: &[String]) -> ExitCode {
+    let mut rest: Vec<String> = Vec::new();
+    let mut org: Option<String> = std::env::var("CC_ORG").ok();
+    let mut dry_run = false;
+    let mut confirm_addons = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--org" | "-o" => {
+                i += 1;
+                org = args.get(i).cloned();
+            }
+            "--dry-run" => dry_run = true,
+            "--yes" | "-y" => confirm_addons = true,
+            other => rest.push(other.to_string()),
+        }
+        i += 1;
+    }
+    let Some(org) = org else {
+        eprintln!("clever-compose down : --org ORG (ou CC_ORG) est requis");
+        return ExitCode::from(2);
+    };
+    let Some((opts, _, _)) = parse_plan_args(&rest) else { return usage() };
+    let creds = match cc_compose::exec::platform::credentials_from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let project = match opts.project_name.clone().or_else(|| std::env::var("COMPOSE_PROJECT_NAME").ok().filter(|n| !n.is_empty())) {
+        Some(n) => n,
+        None => {
+            let mut diags = diagnostic::Diagnostics::default();
+            match cc_compose::compose::project::load(&opts, &mut diags) {
+                Some(p) => p.name,
+                None => {
+                    let dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
+                    cc_compose::compose::project::normalize_project_name(dir.file_name().and_then(|s| s.to_str()).unwrap_or("default"))
+                }
+            }
+        }
+    };
+    let api = cc_compose::exec::platform::Api::new(org, creds);
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
+    match rt.block_on(cc_compose::exec::reconcile::down(&project, &api, dry_run, confirm_addons, &mut log)) {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("erreur : {e}");
             ExitCode::from(1)

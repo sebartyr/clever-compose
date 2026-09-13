@@ -27,7 +27,7 @@ export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--project-directory DIR] [-f FILE]... [-p NAME] [--profile P]
 clever-compose up     [mêmes options] [--dry-run] [--no-wait] [--yes] [--allow-ephemeral]
-clever-compose down   [mêmes options] [--dry-run] [--yes]
+clever-compose down   [-p PROJET] [--dry-run] [--yes]   (sans plan : par nom de projet et tags)
 clever-compose seed   --service db --file dump.sql [mêmes options que up]
 clever-compose export [terraform|script|all] -o DIR [--branches] [mêmes options que plan]
 clever-compose config [mêmes options] --format json   # l'équivalent de `docker compose config`

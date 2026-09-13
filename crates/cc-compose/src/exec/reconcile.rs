@@ -397,14 +397,22 @@ async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, lo
 
 /// `down` : supprime ce que le plan décrit et que la plateforme porte avec
 /// le tag du projet ; les addons (données) seulement avec `confirm`.
-pub async fn down<P: Platform>(plan: &Plan, platform: &P, dry_run: bool, confirm: bool, log: &mut Log) -> Result<(), String> {
-    let project_tag = format!("compose-project={}", plan.project);
+/// Fournisseurs d'addons que l'outil sait créer : seuls ceux-là sont
+/// candidats à la suppression (les addons n'ont pas de tags).
+const ADDON_PROVIDERS: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon", "mongodb-addon", "es-addon"];
+
+/// Supprime tout ce que `up` a créé pour `project`, sans recalculer de plan :
+/// l'état est celui de l'API (CLAUDE.md §7, « pas de fichier d'état local »).
+/// Applications et network groups par préfixe de nom et tag
+/// `compose-project=<projet>` ; addons par préfixe de nom et fournisseur
+/// connu, supprimés seulement avec `confirm`.
+pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confirm: bool, log: &mut Log) -> Result<(), String> {
+    let project_tag = format!("compose-project={project}");
+    let prefix = format!("{project}-");
     let existing_apps = platform.list_apps().await?;
-    // Toutes les applications du projet, y compris les tâches d'init/seed
-    // absentes du plan courant : par tag.
     let mut to_delete: Vec<(String, String)> = Vec::new();
     for x in &existing_apps {
-        if !x.name.starts_with(&format!("{}-", plan.project)) {
+        if !x.name.starts_with(&prefix) {
             continue;
         }
         let tags = platform.get_tags(&x.id).await?;
@@ -420,31 +428,32 @@ pub async fn down<P: Platform>(plan: &Plan, platform: &P, dry_run: bool, confirm
             log(&format!("application {name} ({id}) : supprimée"));
         }
     }
-    let addons: Vec<&Addon> = plan.resources.iter().filter_map(|r| if let Resource::Addon(a) = r { Some(a) } else { None }).collect();
-    if !addons.is_empty() {
-        let existing = platform.list_addons().await?;
-        for a in &addons {
-            let Some(x) = existing.iter().find(|x| x.name == a.name && x.provider == a.provider) else { continue };
-            if dry_run {
-                log(&format!("addon {} ({}) : à supprimer (données perdues)", a.name, x.id));
-            } else if !confirm {
-                log(&format!("addon {} ({}) : conservé (données) ; `--yes` pour le supprimer", a.name, x.id));
-            } else {
-                platform.delete_addon(&x.id).await?;
-                log(&format!("addon {} ({}) : supprimé", a.name, x.id));
-            }
+    for x in platform.list_addons().await? {
+        if !x.name.starts_with(&prefix) || !ADDON_PROVIDERS.contains(&x.provider.as_str()) {
+            continue;
+        }
+        if dry_run {
+            log(&format!("addon {} ({}) : à supprimer (données perdues)", x.name, x.id));
+        } else if !confirm {
+            log(&format!("addon {} ({}) : conservé (données) ; `--yes` pour le supprimer", x.name, x.id));
+        } else {
+            platform.delete_addon(&x.id).await?;
+            log(&format!("addon {} ({}) : supprimé", x.name, x.id));
         }
     }
-    let ngs = platform.list_ngs().await?;
-    for r in &plan.resources {
-        let Resource::NetworkGroup(ng) = r else { continue };
-        let Some(x) = ngs.iter().find(|x| x.label == ng.name) else { continue };
+    for x in platform.list_ngs().await? {
+        if !x.label.starts_with(&prefix) || !x.tags.iter().any(|t| t == &project_tag) {
+            continue;
+        }
         if dry_run {
-            log(&format!("network group {} ({}) : à supprimer", ng.name, x.id));
+            log(&format!("network group {} ({}) : à supprimer", x.label, x.id));
         } else {
             platform.delete_ng(&x.id).await?;
-            log(&format!("network group {} ({}) : supprimé", ng.name, x.id));
+            log(&format!("network group {} ({}) : supprimé", x.label, x.id));
         }
+    }
+    if to_delete.is_empty() {
+        log(&format!("aucune application taguée `{project_tag}` : rien à faire ?"));
     }
     Ok(())
 }

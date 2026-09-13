@@ -161,10 +161,17 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - **Gitea vérifié en réel** (`ccgitea`, PostgreSQL 17 `dev`) :
   `DB_HOST=db:5432` → `${POSTGRESQL_ADDON_HOST}:${POSTGRESQL_ADDON_PORT}`,
   `/api/healthz` en `pass`.
-- Projets vivants dans Test SBRUNAT au 13/09/2026, à nettoyer avec `down
-  --yes` : `ccp3`, `ccwp`, `ccwpa`, `ccinit`, `ccnginx`, `ccgitea`,
-  `ccredis`, `ccnginxtf` (via `terraform destroy` dans le scratchpad, plus
-  le dépôt GitHub `sebartyr/cc-compose-tftest`), `cc-phase0-*` et `p0`.
+- Ménage fait le 13/09/2026 : l'organisation Test SBRUNAT est vide (apps,
+  addons, network groups, `ccnginxtf` via `terraform destroy`, phase 0).
+  Reste au propriétaire : supprimer le dépôt GitHub jetable
+  `sebartyr/cc-compose-tftest` (le token `gh` n'a pas le scope `delete_repo`).
+- Au passage, `down` recalculait un plan et échouait dès qu'un diagnostic
+  bloquait (option `--allow-ephemeral` oubliée, chemin relatif) : il ne
+  supprimait alors rien. Réécrit sans plan : nom de projet (`-p`,
+  `COMPOSE_PROJECT_NAME`, compose s'il se charge, sinon répertoire) ; apps et
+  network groups par préfixe `<projet>-` **et** tag `compose-project=`,
+  addons par préfixe et fournisseur connu (pas de tags sur les addons),
+  supprimés seulement avec `--yes`. Conforme au « pas d'état local » de §7.
 - Latence du proxy / hôte direct (§6.4) : **décision du propriétaire
   (13/09/2026) : on ne propose pas l'hôte direct.** Un addon se joint soit par
   son hôte public (variables injectées par le lien), soit via le network group

@@ -60,6 +60,8 @@ pub struct NgInfo {
     pub id: String,
     pub label: String,
     #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
     pub members: Vec<NgMember>,
 }
 
