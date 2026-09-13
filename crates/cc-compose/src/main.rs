@@ -10,6 +10,8 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose plan   [mêmes options] [--images FIXTURE.json] [--allow-ephemeral]");
     eprintln!("        clever-compose images --project-directory DIR");
     eprintln!("        clever-compose export [terraform|script|all] -o DIR [options de plan]");
+    eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [options de plan]");
+    eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
 
@@ -19,6 +21,7 @@ fn main() -> ExitCode {
         Some("config") => config(&args[1..], false),
         Some("plan") => config(&args[1..], true),
         Some("export") => export(&args[1..]),
+        Some("up") => up(&args[1..]),
         Some("images") => images(&args[1..]),
         _ => usage(),
     }
@@ -57,6 +60,81 @@ fn images(args: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         _ => ExitCode::from(1),
+    }
+}
+
+fn up(args: &[String]) -> ExitCode {
+    let mut rest: Vec<String> = Vec::new();
+    let mut org: Option<String> = std::env::var("CC_ORG").ok();
+    let mut dry_run = false;
+    let mut no_wait = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--org" | "-o" => {
+                i += 1;
+                org = args.get(i).cloned();
+            }
+            "--dry-run" => dry_run = true,
+            "--no-wait" => no_wait = true,
+            other => rest.push(other.to_string()),
+        }
+        i += 1;
+    }
+    let Some(org) = org else {
+        eprintln!("clever-compose up : --org ORG (ou CC_ORG) est requis");
+        return ExitCode::from(2);
+    };
+    let (opts, images, allow_ephemeral) = match parse_plan_args(&rest) {
+        Some(x) => x,
+        None => return usage(),
+    };
+    let creds = match cc_compose::exec::platform::credentials_from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let resolver: Box<dyn cc_compose::plan::images::ImageResolver> = match images {
+        Some(path) => match cc_compose::plan::cli::fixture_from_file(&path) {
+            Ok(f) => Box::new(f),
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::from(1);
+            }
+        },
+        None => match cc_compose::plan::registry::Registry::new() {
+            Ok(r) => Box::new(r),
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::from(1);
+            }
+        },
+    };
+    let mut diags = diagnostic::Diagnostics::default();
+    let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
+    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral };
+    let plan = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
+    for line in diags.render_all() {
+        eprintln!("{line}");
+    }
+    let Some(plan) = plan else {
+        return ExitCode::from(1);
+    };
+    if diags.has_errors() {
+        return ExitCode::from(1);
+    }
+    let api = cc_compose::exec::platform::Api::new(org, creds);
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
+    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait }, &mut log));
+    match result {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            ExitCode::from(1)
+        }
     }
 }
 
