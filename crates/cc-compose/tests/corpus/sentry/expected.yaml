@@ -1,0 +1,3656 @@
+name: sentry
+services:
+  attachments-consumer:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-attachments
+      - --consumer-group
+      - ingest-consumer
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  clickhouse:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: altinity/clickhouse-server:25.8.28.10001.altinitystable
+    environment:
+      MAX_MEMORY_USAGE_RATIO: "0.3"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - HTTP_PROXY='' http_proxy='' wget -nv -t1 --spider 'http://localhost:8123/'
+          || exit 1
+      timeout: 10s
+      interval: 10s
+      retries: 30
+    image: clickhouse-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - type: volume
+        source: sentry-clickhouse
+        target: /var/lib/clickhouse
+        volume: {}
+      - type: volume
+        source: sentry-clickhouse-log
+        target: /var/log/clickhouse-server
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse/config.xml
+        target: /etc/clickhouse-server/config.d/sentry.xml
+        read_only: true
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse/default-password.xml
+        target: /etc/clickhouse-server/users.d/default-password.xml
+        read_only: true
+  events-consumer:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-events
+      - --consumer-group
+      - ingest-consumer
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  generic-metrics-consumer:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-generic-metrics
+      - --consumer-group
+      - generic-metrics-consumer
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  ingest-feedback-events:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-feedback-events
+      - --consumer-group
+      - ingest-feedback
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  ingest-monitors:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-monitors
+      - --consumer-group
+      - ingest-monitors
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  ingest-occurrences:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-occurrences
+      - --consumer-group
+      - ingest-occurrences
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  kafka:
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      CONFLUENT_SUPPORT_METRICS_ENABLE: "false"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:29092,INTERNAL://kafka:9093,EXTERNAL://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1001@127.0.0.1:29093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,INTERNAL://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+      KAFKA_LOG_RETENTION_HOURS: "3"
+      KAFKA_LOG4J_LOGGERS: kafka.cluster=WARN,kafka.controller=WARN,kafka.coordinator=WARN,kafka.log=WARN,kafka.server=WARN,state.change.logger=WARN
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_MAX_REQUEST_SIZE: "50000000"
+      KAFKA_MESSAGE_MAX_BYTES: "50000000"
+      KAFKA_NODE_ID: "1001"
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: "1"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_TOOLS_LOG4J_LOGLEVEL: WARN
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nc -z localhost 9092
+      timeout: 10s
+      interval: 10s
+      retries: 30
+      start_period: 10s
+    image: confluentinc/cp-kafka:7.6.13
+    networks:
+      default: null
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    volumes:
+      - type: volume
+        source: sentry-kafka
+        target: /var/lib/kafka/data
+        volume: {}
+      - type: volume
+        source: sentry-kafka-log
+        target: /var/lib/kafka/log
+        volume: {}
+      - type: volume
+        source: sentry-secrets
+        target: /etc/kafka/secrets
+        volume: {}
+  launchpad-taskworker:
+    profiles:
+      - feature-complete
+    command:
+      - worker
+      - --verbose
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      taskbroker:
+        condition: service_started
+        required: true
+      web:
+        condition: service_healthy
+        required: true
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LAUNCHPAD_ENV: self-hosted
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      LAUNCHPAD_WORKER_CONCURRENCY: "4"
+      LAUNCHPAD_WORKER_HEALTH_CHECK_FILE_PATH: /tmp/health.txt
+      LAUNCHPAD_WORKER_RPC_HOST: taskbroker:50051
+      SENTRY_BASE_URL: http://web:9000
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/launchpad:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  memcached:
+    command:
+      - -I
+      - 1M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - echo stats | nc 127.0.0.1 11211
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: memcached:1.6.45-alpine
+    networks:
+      default: null
+    restart: unless-stopped
+  metrics-consumer:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-metrics
+      - --consumer-group
+      - metrics-consumer
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  monitors-clock-tasks:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - monitors-clock-tasks
+      - --consumer-group
+      - monitors-clock-tasks
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  monitors-clock-tick:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - monitors-clock-tick
+      - --consumer-group
+      - monitors-clock-tick
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  nginx:
+    depends_on:
+      relay:
+        condition: service_started
+        restart: true
+        required: true
+      web:
+        condition: service_healthy
+        restart: true
+        required: true
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/curl
+        - http://localhost
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: nginx:1.31.5-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9000"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+      - type: volume
+        source: sentry-nginx-cache
+        target: /var/cache/nginx
+        volume: {}
+      - type: volume
+        source: sentry-nginx-www
+        target: /var/www
+        volume: {}
+  pgbouncer:
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+    environment:
+      ADMIN_USERS: postgres,sentry
+      AUTH_TYPE: trust
+      DB_HOST: postgres
+      DB_NAME: postgres
+      DB_USER: postgres
+      MAX_CLIENT_CONN: "10000"
+      POOL_MODE: transaction
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - psql -U postgres -p 5432 -h 127.0.0.1 -tA -c "select 1;" -d postgres >/dev/null
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: edoburu/pgbouncer:v1.25.2-p0
+    networks:
+      default: null
+    restart: unless-stopped
+  post-process-forwarder-errors:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - post-process-forwarder-errors
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --consumer-group
+      - post-process-forwarder
+      - --synchronize-commit-log-topic=snuba-commit-log
+      - --synchronize-commit-group=snuba-consumers
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  post-process-forwarder-issue-platform:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - post-process-forwarder-issue-platform
+      - --consumer-group
+      - post-process-forwarder
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --synchronize-commit-log-topic=snuba-generic-events-commit-log
+      - --synchronize-commit-group
+      - generic_events_group
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  post-process-forwarder-transactions:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - post-process-forwarder-transactions
+      - --consumer-group
+      - post-process-forwarder
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --synchronize-commit-log-topic=snuba-transactions-commit-log
+      - --synchronize-commit-group
+      - transactions_group
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  postgres:
+    command:
+      - postgres
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: postgres:14.24-bookworm
+    networks:
+      default: null
+    restart: unless-stopped
+    shm_size: "268435456"
+    volumes:
+      - type: volume
+        source: sentry-postgres
+        target: /var/lib/postgresql/data
+        volume: {}
+  process-spans:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - process-spans
+      - --consumer-group
+      - process-spans
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  redis:
+    command:
+      - valkey-server
+      - /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - valkey-cli ping | grep PONG
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: valkey/valkey:8.1.10-alpine
+    networks:
+      default: null
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 10032
+        hard: 10032
+    volumes:
+      - type: volume
+        source: sentry-redis
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/redis.conf
+        target: /usr/local/etc/redis/redis.conf
+        read_only: true
+  relay:
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      web:
+        condition: service_healthy
+        required: true
+    environment:
+      RELAY_STATSD_ADDR: 127.0.0.1:8125
+    image: ghcr.io/getsentry/relay:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/relay
+        target: /work/.relay
+        read_only: true
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+  seaweedfs:
+    command:
+      - mini
+      - -dir=/data
+      - -filer.defaultReplicaPlacement=000
+      - -metricsPort=9091
+      - -volume.dir.idx=/data/idx
+      - -volume.index=leveldbLarge
+      - -volume.preStopSeconds=8
+      - -volume.readMode=redirect
+      - -ip.bind=0.0.0.0
+      - -webdav=false
+    entrypoint:
+      - weed
+    environment:
+      AWS_ACCESS_KEY_ID: sentry
+      AWS_SECRET_ACCESS_KEY: sentry
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - http_proxy='' wget -q -O- http://seaweedfs:9340/healthz http://seaweedfs:9333/cluster/healthz
+          http://seaweedfs:8333/healthz || exit 1
+      timeout: 20s
+      interval: 30s
+      retries: 5
+      start_period: 1m0s
+    image: chrislusf/seaweedfs:4.40_large_disk@sha256:d07aa1dae03c687e0737b86130ded1b18474211a09e85d737fbe5508b8805139
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-seaweedfs
+        target: /data
+        volume: {}
+  sentry-cleanup:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/cron
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: sentry-self-hosted-local
+    command:
+      - 0 0 * * * gosu sentry sentry cleanup --days 90
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    image: sentry-cleanup-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  smtp:
+    environment:
+      MAILNAME: ""
+      SES_PASSWORD: null
+      SES_REGION: null
+      SES_USER: null
+    image: registry.gitlab.com/egos-tech/smtp
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-smtp
+        target: /var/spool/exim4
+        volume: {}
+      - type: volume
+        source: sentry-smtp-log
+        target: /var/log/exim4
+        volume: {}
+  snuba-api:
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - /usr/src/snuba/api_healthcheck.py
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/snuba/api_healthcheck.py
+        target: /usr/src/snuba/api_healthcheck.py
+        read_only: true
+        bind: {}
+  snuba-eap-items-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - eap_items
+      - --consumer-group
+      - eap_items_group
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "1000"
+      - --no-strict-offset-reset
+      - --use-rust-processor
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-errors-consumer:
+    command:
+      - rust-consumer
+      - --storage
+      - errors
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-generic-metrics-counters-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - generic_metrics_counters_raw
+      - --consumer-group
+      - snuba-gen-metrics-counters-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-group-attributes-consumer:
+    command:
+      - rust-consumer
+      - --storage
+      - group_attributes
+      - --consumer-group
+      - snuba-group-attributes-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-issue-occurrence-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - search_issues
+      - --consumer-group
+      - generic_events_group
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-metrics-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - metrics_raw
+      - --consumer-group
+      - snuba-metrics-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-outcomes-accepted-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - accepted-outcomes-consumer
+      - --storage
+      - eap_items
+      - --consumer-group
+      - accepted_outcomes
+      - --auto-offset-reset=earliest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --accepted-outcomes-topic
+      - outcomes-billing
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-outcomes-billing-consumer:
+    command:
+      - rust-consumer
+      - --storage
+      - outcomes_raw
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=earliest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --raw-events-topic
+      - outcomes-billing
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-outcomes-consumer:
+    command:
+      - rust-consumer
+      - --storage
+      - outcomes_raw
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=earliest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-profiling-functions-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - functions_raw
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "1000"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-profiling-profile-chunks-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - profile_chunks
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "1000"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-profiling-profiles-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - profiles
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "1000"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-replacer:
+    command:
+      - replacer
+      - --storage
+      - errors
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-replays-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - replays
+      - --consumer-group
+      - snuba-consumers
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-subscription-consumer-eap-items:
+    command:
+      - subscriptions-scheduler-executor
+      - --dataset
+      - events_analytics_platform
+      - --entity
+      - eap_items
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --consumer-group=snuba-eap-items-subscriptions-consumers
+      - --followed-consumer-group=eap_items_group
+      - --schedule-ttl=60
+      - --stale-threshold-seconds=900
+      - --health-check-file
+      - /tmp/health.txt
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-subscription-consumer-events:
+    command:
+      - subscriptions-scheduler-executor
+      - --dataset
+      - events
+      - --entity
+      - events
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --consumer-group=snuba-events-subscriptions-consumers
+      - --followed-consumer-group=snuba-consumers
+      - --schedule-ttl=60
+      - --stale-threshold-seconds=900
+      - --health-check-file
+      - /tmp/health.txt
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-subscription-consumer-generic-metrics-counters:
+    profiles:
+      - feature-complete
+    command:
+      - subscriptions-scheduler-executor
+      - --dataset
+      - generic_metrics
+      - --entity=generic_metrics_counters
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --consumer-group=snuba-generic-metrics-counters-subscriptions-schedulers
+      - --followed-consumer-group=snuba-gen-metrics-counters-consumers
+      - --schedule-ttl=60
+      - --stale-threshold-seconds=900
+      - --health-check-file
+      - /tmp/health.txt
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-subscription-consumer-metrics:
+    profiles:
+      - feature-complete
+    command:
+      - subscriptions-scheduler-executor
+      - --dataset
+      - metrics
+      - --entity
+      - metrics_sets
+      - --entity
+      - metrics_counters
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --consumer-group=snuba-metrics-subscriptions-consumers
+      - --followed-consumer-group=snuba-metrics-consumers
+      - --schedule-ttl=60
+      - --stale-threshold-seconds=900
+      - --health-check-file
+      - /tmp/health.txt
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-subscription-consumer-transactions:
+    profiles:
+      - feature-complete
+    command:
+      - subscriptions-scheduler-executor
+      - --dataset
+      - transactions
+      - --entity
+      - transactions
+      - --auto-offset-reset=latest
+      - --no-strict-offset-reset
+      - --consumer-group=snuba-transactions-subscriptions-consumers
+      - --followed-consumer-group=transactions_group
+      - --schedule-ttl=60
+      - --stale-threshold-seconds=900
+      - --health-check-file
+      - /tmp/health.txt
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  snuba-transactions-consumer:
+    profiles:
+      - feature-complete
+    command:
+      - rust-consumer
+      - --storage
+      - transactions
+      - --consumer-group
+      - transactions_group
+      - --auto-offset-reset=latest
+      - --max-batch-time-ms
+      - "750"
+      - --no-strict-offset-reset
+      - --health-check-file
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: true
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SNUBA_SETTINGS: self_hosted
+      SNUBA_STATSD_ADDR: ""
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: ghcr.io/getsentry/snuba:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  symbolicator:
+    command:
+      - run
+      - -c
+      - /etc/symbolicator/config.yml
+    environment:
+      SYMBOLICATOR_STATSD_ADDR: 127.0.0.1:8125
+    healthcheck:
+      test:
+        - CMD
+        - /bin/symbolicator
+        - healthcheck
+        - -c
+        - /etc/symbolicator/config.yml
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: ghcr.io/getsentry/symbolicator:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-symbolicator
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/symbolicator
+        target: /etc/symbolicator
+        read_only: true
+  symbolicator-cleanup:
+    command:
+      - cleanup
+      - -c
+      - /etc/symbolicator/config.yml
+      - --repeat
+      - 1h
+    environment:
+      SYMBOLICATOR_STATSD_ADDR: 127.0.0.1:8125
+    image: ghcr.io/getsentry/symbolicator:nightly
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-symbolicator
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/symbolicator
+        target: /etc/symbolicator
+        read_only: true
+  taskbroker:
+    command:
+      - /opt/taskbroker
+      - -c
+      - /etc/taskbroker/config.yml
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+    environment:
+      TASKBROKER_DB_PATH: /opt/sqlite/taskbroker-activations.sqlite
+      TASKBROKER_KAFKA_CLUSTERS__DEFAULT__ADDRESS: kafka:9092
+      TASKBROKER_STATSD_ADDR: 127.0.0.1:8125
+    image: ghcr.io/getsentry/taskbroker:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-taskbroker
+        target: /opt/sqlite
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/taskbroker
+        target: /etc/taskbroker
+        read_only: true
+  taskscheduler:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - taskworker-scheduler
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  taskworker:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - taskworker
+      - --concurrency=4
+      - --rpc-host=taskbroker:50051
+      - --health-check-file-path=/tmp/health.txt
+      - --max-child-task-count=10000
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  transactions-consumer:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - ingest-transactions
+      - --consumer-group
+      - ingest-consumer
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  uptime-checker:
+    profiles:
+      - feature-complete
+    command:
+      - run
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      UPTIME_CHECKER_ALLOW_INTERNAL_IPS: "false"
+      UPTIME_CHECKER_FAILURE_RETRIES: "1"
+      UPTIME_CHECKER_REDIS_HOST: redis://redis:6379
+      UPTIME_CHECKER_RESULTS_KAFKA_CLUSTER: kafka:9092
+      UPTIME_CHECKER_STATSD_ADDR: 127.0.0.1:8125
+    image: ghcr.io/getsentry/uptime-checker:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+  uptime-results:
+    profiles:
+      - feature-complete
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - consumer
+      - uptime-results
+      - --consumer-group
+      - uptime-results
+      - --auto-offset-reset=earliest
+      - --no-strict-offset-reset
+      - --healthcheck-file-path
+      - /tmp/health.txt
+      - --max-poll-interval-ms
+      - "300000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import os, sys
+          try:
+              os.remove('/tmp/health.txt')
+          except FileNotFoundError:
+              print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+              sys.exit(1)
+      timeout: 10s
+      interval: 1m0s
+      retries: 3
+      start_period: 10m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+  vroom:
+    profiles:
+      - feature-complete
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+    environment:
+      AWS_ACCESS_KEY: sentry
+      AWS_SECRET_KEY: sentry
+      SENTRY_BUCKET_PROFILES: s3://profiles?region=us-east-1&endpoint=seaweedfs:8333&s3ForcePathStyle=true&disableSSL=true
+      SENTRY_KAFKA_BROKERS_OCCURRENCES: kafka:9092
+      SENTRY_KAFKA_BROKERS_PROFILING: kafka:9092
+      SENTRY_SNUBA_HOST: http://snuba-api:1218
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8085 && echo -e "GET /health HTTP/1.1\r\nhost:
+          127.0.0.1\r\n\r\n" >&3 && grep OK -s -m 1 <&3'
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 10s
+    image: ghcr.io/getsentry/vroom:nightly
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: sentry-vroom
+        target: /var/vroom/sentry-profiles
+        volume: {}
+  web:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      dockerfile: Dockerfile
+      args:
+        SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
+    command:
+      - run
+      - web
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      memcached:
+        condition: service_started
+        required: true
+      pgbouncer:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      seaweedfs:
+        condition: service_started
+        required: true
+      smtp:
+        condition: service_started
+        required: true
+      snuba-api:
+        condition: service_started
+        required: true
+      symbolicator:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /etc/sentry/entrypoint.sh
+    environment:
+      COMPOSE_PROFILES: feature-complete
+      DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+      LAUNCHPAD_RPC_SHARED_SECRET: supersecret
+      PYTHONUSERBASE: /data/custom-packages
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SENTRY_CONF: /etc/sentry
+      SENTRY_EVENT_RETENTION_DAYS: "90"
+      SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+      SENTRY_MAIL_HOST: null
+      SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+      SENTRY_STATSD_ADDR: ""
+      SENTRY_SYSTEM_SECRET_KEY: null
+      SNUBA: http://snuba-api:1218
+      VROOM: http://vroom:8085
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e "GET /_health/ HTTP/1.1\r\nhost:
+          127.0.0.1\r\n\r\n" >&3 && grep ok -s -m 1 <&3'
+      timeout: 1m30s
+      interval: 30s
+      retries: 10
+      start_period: 5m0s
+    image: sentry-self-hosted-local
+    networks:
+      default: null
+    pull_policy: never
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
+    volumes:
+      - type: volume
+        source: sentry-data
+        target: /data
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        target: /etc/sentry
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        target: /geoip
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        target: /usr/local/share/ca-certificates
+        read_only: true
+        bind: {}
+networks:
+  default:
+    name: sentry_default
+volumes:
+  sentry-clickhouse:
+    name: sentry-clickhouse
+    external: true
+  sentry-clickhouse-log:
+    name: sentry_sentry-clickhouse-log
+  sentry-data:
+    name: sentry-data
+    external: true
+  sentry-kafka:
+    name: sentry-kafka
+    external: true
+  sentry-kafka-log:
+    name: sentry_sentry-kafka-log
+  sentry-nginx-cache:
+    name: sentry_sentry-nginx-cache
+  sentry-nginx-www:
+    name: sentry_sentry-nginx-www
+  sentry-postgres:
+    name: sentry-postgres
+    external: true
+  sentry-redis:
+    name: sentry-redis
+    external: true
+  sentry-seaweedfs:
+    name: sentry-seaweedfs
+    external: true
+  sentry-secrets:
+    name: sentry_sentry-secrets
+  sentry-smtp:
+    name: sentry_sentry-smtp
+  sentry-smtp-log:
+    name: sentry_sentry-smtp-log
+  sentry-symbolicator:
+    name: sentry_sentry-symbolicator
+  sentry-taskbroker:
+    name: sentry_sentry-taskbroker
+  sentry-vroom:
+    name: sentry_sentry-vroom
+x-depends_on-default:
+  condition: service_started
+x-depends_on-healthy:
+  condition: service_healthy
+x-file-healthcheck:
+  interval: 60s
+  retries: "3"
+  start_period: 600s
+  test:
+    - CMD
+    - python3
+    - -c
+    - |
+      import os, sys
+      try:
+          os.remove('/tmp/health.txt')
+      except FileNotFoundError:
+          print('consumer heartbeat file missing: /tmp/health.txt', file=sys.stderr)
+          sys.exit(1)
+  timeout: 10s
+x-force-no-proxy:
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  http_proxy: ""
+  https_proxy: ""
+x-healthcheck-defaults:
+  interval: 30s
+  retries: "10"
+  start_period: 10s
+  timeout: 1m30s
+x-pull-policy:
+  pull_policy: never
+x-restart-policy:
+  restart: unless-stopped
+x-sentry-defaults:
+  build:
+    args:
+      - SENTRY_IMAGE
+    context: ./sentry
+  command:
+    - run
+    - web
+  depends_on:
+    kafka:
+      condition: service_healthy
+    memcached:
+      condition: service_started
+    pgbouncer:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    seaweedfs:
+      condition: service_started
+    smtp:
+      condition: service_started
+    snuba-api:
+      condition: service_started
+    symbolicator:
+      condition: service_started
+  entrypoint: /etc/sentry/entrypoint.sh
+  environment:
+    COMPOSE_PROFILES: null
+    DEFAULT_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: /etc/ssl/certs/ca-certificates.crt
+    LAUNCHPAD_RPC_SHARED_SECRET: null
+    PYTHONUSERBASE: /data/custom-packages
+    REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    SENTRY_CONF: /etc/sentry
+    SENTRY_EVENT_RETENTION_DAYS: null
+    SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+    SENTRY_MAIL_HOST: null
+    SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: null
+    SENTRY_STATSD_ADDR: ""
+    SENTRY_SYSTEM_SECRET_KEY: null
+    SNUBA: http://snuba-api:1218
+    VROOM: http://vroom:8085
+  image: sentry-self-hosted-local
+  platform: ""
+  pull_policy: never
+  restart: unless-stopped
+  volumes:
+    - sentry-data:/data
+    - ./sentry:/etc/sentry
+    - ./geoip:/geoip:ro
+    - ./certificates:/usr/local/share/ca-certificates:ro
+x-snuba-defaults:
+  depends_on:
+    clickhouse:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  environment:
+    CLICKHOUSE_HOST: clickhouse
+    DEFAULT_BROKERS: kafka:9092
+    REDIS_HOST: redis
+    SENTRY_EVENT_RETENTION_DAYS: null
+    SENTRY_KAFKA_MAX_POLL_INTERVAL_MS: null
+    SNUBA_SETTINGS: self_hosted
+    SNUBA_STATSD_ADDR: ""
+  image: ghcr.io/getsentry/snuba:nightly
+  pull_policy: never
+  restart: unless-stopped

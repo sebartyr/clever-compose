@@ -1,0 +1,128 @@
+name: plausible
+services:
+  plausible:
+    command:
+      - sh
+      - -c
+      - /entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh
+        run
+    depends_on:
+      plausible_db:
+        condition: service_healthy
+        required: true
+      plausible_events_db:
+        condition: service_healthy
+        required: true
+    environment:
+      BASE_URL: ""
+      CLICKHOUSE_DATABASE_URL: null
+      DATABASE_URL: null
+      DISABLE_REGISTRATION: null
+      ENABLE_EMAIL_VERIFICATION: null
+      GEONAMES_SOURCE_FILE: null
+      GOOGLE_CLIENT_ID: null
+      GOOGLE_CLIENT_SECRET: null
+      HTTP_PORT: null
+      HTTPS_PORT: null
+      IP_GEOLOCATION_DB: null
+      MAILER_ADAPTER: null
+      MAILER_EMAIL: null
+      MAILER_NAME: null
+      MAILGUN_API_KEY: null
+      MAILGUN_BASE_URI: null
+      MAILGUN_DOMAIN: null
+      MANDRILL_API_KEY: null
+      MAXMIND_EDITION: null
+      MAXMIND_LICENSE_KEY: null
+      POSTMARK_API_KEY: null
+      SECRET_KEY_BASE: ""
+      SENDGRID_API_KEY: null
+      SMTP_HOST_ADDR: null
+      SMTP_HOST_PORT: null
+      SMTP_HOST_SSL_ENABLED: null
+      SMTP_USER_NAME: null
+      SMTP_USER_PWD: null
+      TMPDIR: /var/lib/plausible/tmp
+      TOTP_VAULT_KEY: null
+    image: ghcr.io/plausible/community-edition:v3.0.1
+    networks:
+      default: null
+    restart: always
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - type: volume
+        source: plausible-data
+        target: /var/lib/plausible
+        volume: {}
+  plausible_db:
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      start_period: 1m0s
+    image: postgres:16-alpine
+    networks:
+      default: null
+    restart: always
+    volumes:
+      - type: volume
+        source: db-data
+        target: /var/lib/postgresql/data
+        volume: {}
+  plausible_events_db:
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --no-verbose --tries=1 -O - http://127.0.0.1:8123/ping || exit 1
+      start_period: 1m0s
+    image: clickhouse/clickhouse-server:24.12-alpine
+    networks:
+      default: null
+    restart: always
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - type: volume
+        source: event-data
+        target: /var/lib/clickhouse
+        volume: {}
+      - type: volume
+        source: event-logs
+        target: /var/log/clickhouse-server
+        volume: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/logs.xml
+        target: /etc/clickhouse-server/config.d/logs.xml
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/ipv4-only.xml
+        target: /etc/clickhouse-server/config.d/ipv4-only.xml
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/low-resources.xml
+        target: /etc/clickhouse-server/config.d/low-resources.xml
+        read_only: true
+        bind: {}
+networks:
+  default:
+    name: plausible_default
+volumes:
+  db-data:
+    name: plausible_db-data
+  event-data:
+    name: plausible_event-data
+  event-logs:
+    name: plausible_event-logs
+  plausible-data:
+    name: plausible_plausible-data

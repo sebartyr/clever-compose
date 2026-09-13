@@ -122,12 +122,14 @@ impl Path {
         &self.0
     }
 
-    /// Correspondance avec un motif où `*` remplace un segment, comme les
-    /// clés de `mergeSpecials` dans compose-go (`services.*.command`).
+    /// Correspondance avec un motif où `*` remplace un segment et `[]` un
+    /// index de liste, comme `tree.Path.Matches` de compose-go
+    /// (`services.*.command`, `services.*.ports.[].target`). `*` accepte
+    /// aussi un index.
     pub fn matches(&self, pattern: &str) -> bool {
         let pat: Vec<&str> = pattern.split('.').collect();
         pat.len() == self.0.len()
-            && pat.iter().zip(&self.0).all(|(p, s)| *p == "*" || *p == s.as_str())
+            && pat.iter().zip(&self.0).all(|(p, s)| *p == "*" || (*p == "[]" && s.starts_with('[')) || *p == s.as_str())
     }
 }
 

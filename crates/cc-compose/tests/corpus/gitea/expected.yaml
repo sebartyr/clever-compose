@@ -1,0 +1,47 @@
+name: gitea
+services:
+  db:
+    environment:
+      POSTGRES_DB: gitea
+      POSTGRES_PASSWORD: gitea
+      POSTGRES_USER: gitea
+    expose:
+      - "5432"
+    image: postgres:alpine
+    networks:
+      default: null
+    restart: always
+    volumes:
+      - type: volume
+        source: db_data
+        target: /var/lib/postgresql/data
+        volume: {}
+  gitea:
+    environment:
+      DB_HOST: db:5432
+      DB_NAME: gitea
+      DB_PASSWD: gitea
+      DB_TYPE: postgres
+      DB_USER: gitea
+    image: gitea/gitea:latest
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "3000"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: volume
+        source: git_data
+        target: /data
+        volume: {}
+networks:
+  default:
+    name: gitea_default
+volumes:
+  db_data:
+    name: gitea_db_data
+  git_data:
+    name: gitea_git_data

@@ -3,10 +3,9 @@
 
 use std::path::{Path as FsPath, PathBuf};
 
-use indexmap::IndexMap;
-
+use super::dotenv::{self, Vars};
 use super::node::{Node, Path, Value};
-use super::{merge, normalize, transform, typed, yaml};
+use super::{envfile, interpolate, merge, normalize, paths, transform, typed, yaml};
 use crate::diagnostic::{Diagnostic, Diagnostics, Files};
 
 /// Noms cherchés dans le répertoire du projet, dans l'ordre de compose-go
@@ -20,6 +19,8 @@ pub struct Options {
     /// Fichiers passés explicitement (`-f`). Vide : découverte.
     pub files: Vec<PathBuf>,
     pub project_name: Option<String>,
+    /// Fichiers d'environnement (`--env-file`). Vide : `.env` du projet.
+    pub env_files: Vec<PathBuf>,
 }
 
 pub struct Project {
@@ -38,6 +39,17 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
         }
     };
 
+    // Environnement d'interpolation : le shell, puis `.env` sans écraser
+    // (compose-go `WithOsEnv` puis `WithDotEnv`).
+    let env = match project_env(opts) {
+        Ok(e) => e,
+        Err(d) => {
+            diags.push(d);
+            return None;
+        }
+    };
+    let lookup = |k: &str| env.get(k).cloned();
+
     let mut files = Files::default();
     let mut docs: Vec<Node> = Vec::new();
     for p in &paths {
@@ -51,7 +63,15 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
             }
         };
         match yaml::load(&source, idx) {
-            Ok(n) => docs.push(n),
+            Ok(n) => {
+                let mut errs = Vec::new();
+                let n = interpolate::interpolate(n, &lookup, &mut errs);
+                if !errs.is_empty() {
+                    diags.items.extend(errs);
+                    return None;
+                }
+                docs.push(n);
+            }
             Err(e) => {
                 diags.push(Diagnostic::error("yaml-invalid", format!("{display} : {e}")));
                 return None;
@@ -100,8 +120,15 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
             return None;
         }
     };
+    let working_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
+    let tree = match paths::resolve(tree, &working_dir) {
+        Ok(t) => t,
+        Err(d) => {
+            diags.push(d);
+            return None;
+        }
+    };
     let name = project_name(opts, first_doc.as_ref()?, diags)?;
-    let env: IndexMap<String, String> = std::env::vars().collect();
     let tree = normalize::normalize(tree, &name, &env);
     let mut tree = match typed::apply(tree) {
         Ok(t) => t,
@@ -110,12 +137,39 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
             return None;
         }
     };
+    let mut errs = Vec::new();
+    envfile::resolve(&mut tree, &env, &mut errs);
+    if !errs.is_empty() {
+        diags.items.extend(errs);
+        return None;
+    }
+    let mut tree = typed::omit_zero(tree);
     let span = tree.span;
     if let Some(m) = tree.as_map_mut() {
         m.shift_remove("name");
         m.shift_insert(0, "name".into(), Node::new(span, Value::Str(name.clone())));
     }
     Some(Project { name, files, tree })
+}
+
+fn project_env(opts: &Options) -> Result<Vars, Diagnostic> {
+    let mut env: Vars = std::env::vars().collect();
+    let files: Vec<PathBuf> = if opts.env_files.is_empty() {
+        let default = opts.project_dir.join(".env");
+        if default.is_file() { vec![default] } else { Vec::new() }
+    } else {
+        opts.env_files.iter().map(|f| opts.project_dir.join(f)).collect()
+    };
+    let mut from_files = Vars::new();
+    for f in files {
+        let content = std::fs::read_to_string(&f).map_err(|e| Diagnostic::error("env-file-unreadable", format!("{} : {e}", f.display())))?;
+        let lookup = |k: &str| env.get(k).cloned();
+        dotenv::parse(&content, &mut from_files, &lookup).map_err(|e| Diagnostic::error("env-file-invalid", format!("{} : {e}", f.display())))?;
+    }
+    for (k, v) in from_files {
+        env.entry(k).or_insert(v);
+    }
+    Ok(env)
 }
 
 fn discover(opts: &Options) -> Result<Vec<PathBuf>, Diagnostic> {

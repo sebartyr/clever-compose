@@ -30,3 +30,6 @@ lto = "fat"
 codegen-units = 1
 opt-level = "z"
 strip = true
+
+[patch.crates-io]
+saphyr-parser = { path = "vendor/saphyr-parser" }

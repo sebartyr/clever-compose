@@ -19,7 +19,7 @@ fn main() -> ExitCode {
 }
 
 fn config(args: &[String]) -> ExitCode {
-    let mut opts = compose::project::Options { project_dir: PathBuf::from("."), files: Vec::new(), project_name: None };
+    let mut opts = compose::project::Options { project_dir: PathBuf::from("."), files: Vec::new(), project_name: None, env_files: Vec::new() };
     let mut format = "yaml".to_string();
     let mut i = 0;
     while i < args.len() {

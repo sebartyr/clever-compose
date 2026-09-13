@@ -42,7 +42,7 @@ fn canonical(v: J) -> J {
 }
 
 fn ours(dir: &Path) -> J {
-    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None };
+    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new() };
     let mut diags = Diagnostics::default();
     let project = load(&opts, &mut diags);
     for d in &diags.items {

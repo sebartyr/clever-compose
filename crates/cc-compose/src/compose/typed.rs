@@ -464,3 +464,86 @@ mod tests {
         assert!(parse_duration("abc").is_none());
     }
 }
+
+/// `omitempty` de la sérialisation Go : dans une structure, un champ à sa
+/// valeur zéro (null, `false`, `0`, `""`, liste vide) disparaît. Les
+/// mappings à valeurs libres (environnement, labels, extensions...) gardent
+/// tout, et une structure vide reste (pointeur non nul côté Go :
+/// `volume: {}`, `healthcheck: {}`).
+pub fn omit_zero(node: Node) -> Node {
+    omit_zero_at(node, &Path::root())
+}
+
+fn is_value_map(p: &Path) -> bool {
+    const VALUE_MAPS: &[&str] = &[
+        "services",
+        "networks",
+        "volumes",
+        "secrets",
+        "configs",
+        "services.*.environment",
+        "services.*.labels",
+        "services.*.annotations",
+        "services.*.sysctls",
+        "services.*.extra_hosts",
+        "services.*.networks",
+        "services.*.depends_on",
+        "services.*.build.args",
+        "services.*.build.labels",
+        "services.*.build.additional_contexts",
+        "services.*.deploy.labels",
+        "services.*.logging.options",
+        "services.*.ulimits",
+        "services.*.volumes.[].volume.labels",
+        "networks.*.labels",
+        "networks.*.driver_opts",
+        "networks.*.ipam.options",
+        "networks.*.ipam.config.[].aux_addresses",
+        "volumes.*.labels",
+        "volumes.*.driver_opts",
+        "secrets.*.labels",
+        "configs.*.labels",
+    ];
+    VALUE_MAPS.iter().any(|pat| p.matches(pat))
+}
+
+fn is_zero(n: &Node) -> bool {
+    match &n.value {
+        Value::Null => true,
+        Value::Bool(b) => !b,
+        Value::Int(i) => *i == 0,
+        Value::Float(f) => *f == 0.0,
+        Value::Str(s) => s.is_empty(),
+        Value::Timestamp(_) => false,
+        Value::Seq(s) => s.is_empty(),
+        Value::Map(_) => false,
+    }
+}
+
+fn omit_zero_at(node: Node, p: &Path) -> Node {
+    match node.value {
+        Value::Map(m) => {
+            let value_map = is_value_map(p);
+            let mut out = IndexMap::with_capacity(m.len());
+            for (k, v) in m {
+                // Les extensions `x-*` sont reproduites telles quelles.
+                if k.starts_with("x-") {
+                    out.insert(k, v);
+                    continue;
+                }
+                if !value_map && is_zero(&v) {
+                    continue;
+                }
+                let cp = p.child(&k);
+                // `OptOut` : booléen dont la valeur zéro est `true`.
+                if cp.matches("services.*.volumes.[].bind.create_host_path") && v.value == Value::Bool(true) {
+                    continue;
+                }
+                out.insert(k, omit_zero_at(v, &cp));
+            }
+            Node { span: node.span, tag: node.tag, value: Value::Map(out) }
+        }
+        Value::Seq(s) => Node { span: node.span, tag: node.tag, value: Value::Seq(s.into_iter().enumerate().map(|(i, v)| omit_zero_at(v, &p.index(i))).collect()) },
+        _ => node,
+    }
+}

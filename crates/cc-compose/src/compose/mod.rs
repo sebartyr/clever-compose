@@ -5,10 +5,15 @@
 //! schéma JSON, `extends`, `include`, canonicalisation, fusion des overrides.
 //! Tout se fait sur l'arbre brut ; le typage vient en dernier.
 
+pub mod dotenv;
+pub mod envfile;
+pub mod interpolate;
 pub mod merge;
 pub mod node;
 pub mod normalize;
+pub mod paths;
 pub mod project;
+pub mod template;
 pub mod transform;
 pub mod typed;
 pub mod yaml;
