@@ -138,3 +138,6 @@ networks:
   external_network:
   internal_network:
     internal: true
+
+x-clever:
+  network_groups: per-network

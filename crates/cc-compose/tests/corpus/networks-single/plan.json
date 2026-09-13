@@ -1,0 +1,144 @@
+{
+  "project": "networks-single",
+  "spec_hash": "3e7dfbe1271c4c6f31717dfd90d45ad1",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "networks-single-default",
+      "tags": [
+        "compose-project=networks-single",
+        "compose-network=default",
+        "compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/web",
+      "service": "web",
+      "name": "networks-single-web",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "nginx:1.27",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "nginx",
+          "-g",
+          "daemon off;"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          80
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/docker-entrypoint.sh",
+          "nginx",
+          "-g",
+          "daemon off;"
+        ],
+        "port": {
+          "mode": "forward",
+          "target_port": 80
+        }
+      },
+      "env": [
+        {
+          "key": "UPSTREAM",
+          "value": [
+            {
+              "literal": "http://api:3000"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=networks-single",
+        "compose-service=web",
+        "compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/api",
+      "service": "api",
+      "name": "networks-single-api",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "busybox:1.36",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [],
+        "cmd": [
+          "sh"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": []
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "-c",
+          "while true; do sleep 30; done"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=networks-single",
+        "compose-service=api",
+        "compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/web@default",
+      "member": "app/web",
+      "group": "ng/default",
+      "aliases": [
+        "web"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/api@default",
+      "member": "app/api",
+      "group": "ng/default",
+      "aliases": [
+        "api"
+      ]
+    }
+  ]
+}

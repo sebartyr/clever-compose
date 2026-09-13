@@ -36,6 +36,11 @@ pub struct XClever {
     /// Version de l'addon (`16`, `8.0`) si le tag ne la donne pas ou pour
     /// la forcer.
     pub version: Option<String>,
+    /// Niveau projet : comment les réseaux Compose deviennent des network
+    /// groups. `per-network` (un groupe par réseau), `single` (un seul
+    /// groupe pour tout le projet), `none` (aucun : les services ne se
+    /// joignent pas entre eux). Exigé dès que le projet a plus d'un réseau.
+    pub network_groups: Option<String>,
 }
 
 impl XClever {
@@ -57,6 +62,12 @@ impl XClever {
 fn parse(v: &serde_json::Value, p: &Path, diags: &mut Diagnostics) -> XClever {
     match serde_json::from_value::<XClever>(v.clone()) {
         Ok(mut x) => {
+            if let Some(ng) = &x.network_groups {
+                if !["per-network", "single", "none"].contains(&ng.as_str()) {
+                    diags.push(Diagnostic::error("x-clever-invalid", format!("`network_groups` vaut `per-network`, `single` ou `none`, pas `{ng}`")).with_path(&p.child("network_groups")));
+                    x.network_groups = None;
+                }
+            }
             if let Some(proto) = &x.protocol {
                 if proto != "http" && proto != "tcp" {
                     diags.push(Diagnostic::error("x-clever-invalid", format!("`protocol` vaut `http` ou `tcp`, pas `{proto}`")).with_path(&p.child("protocol")));

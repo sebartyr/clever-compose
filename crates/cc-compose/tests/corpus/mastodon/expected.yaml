@@ -215,3 +215,5 @@ networks:
   internal_network:
     name: mastodon_internal_network
     internal: true
+x-clever:
+  network_groups: per-network

@@ -1,0 +1,3 @@
+compose.yaml:11:5: avertissement [worker] services.api: `api` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:8:17: avertissement [service-unreachable] services.web.environment.UPSTREAM: `api` est un service du projet mais `web` ne partage aucun réseau avec lui : la valeur est laissée telle quelle
+compose.yaml:2:19: avertissement [network-groups-merged] x-clever.network_groups: `x-clever.network_groups: single` : les réseaux front, back deviennent un seul network group `networks-single-default` ; la segmentation entre eux disparaît

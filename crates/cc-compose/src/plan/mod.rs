@@ -141,6 +141,42 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             memberships.entry(net.clone()).or_default().push((name.clone(), aliases));
         }
     }
+    // Le découpage en network groups est un choix, pas un défaut (décision
+    // du 13/09/2026) : dès que le projet a plusieurs réseaux, il doit être
+    // écrit dans `x-clever.network_groups`.
+    match project_x.network_groups.as_deref() {
+        None if memberships.len() > 1 => {
+            diags.push(Diagnostic::error("network-groups-unspecified", format!("le projet a {} réseaux Compose ({}) : déclarez `x-clever.network_groups` au niveau projet — `per-network` (un network group par réseau, même segmentation qu'en local), `single` (un seul groupe `{}-default`, tous les services se joignent) ou `none` (aucun groupe, les services ne se joignent pas entre eux)", memberships.len(), memberships.keys().cloned().collect::<Vec<_>>().join(", "), project.name)).with_path(&Path::root().child("networks").child(memberships.keys().next().unwrap())));
+            return None;
+        }
+        Some("single") if memberships.len() > 1 => {
+            let nets: Vec<String> = memberships.keys().cloned().collect();
+            let mut merged: Vec<(String, Vec<String>)> = Vec::new();
+            for members in memberships.values() {
+                for (svc, aliases) in members {
+                    match merged.iter_mut().find(|(s, _)| s == svc) {
+                        Some((_, a)) => {
+                            for al in aliases {
+                                if !a.contains(al) {
+                                    a.push(al.clone());
+                                }
+                            }
+                        }
+                        None => merged.push((svc.clone(), aliases.clone())),
+                    }
+                }
+            }
+            memberships = IndexMap::from([("default".to_string(), merged)]);
+            diags.push(Diagnostic::warning("network-groups-merged", format!("`x-clever.network_groups: single` : les réseaux {} deviennent un seul network group `{}-default` ; la segmentation entre eux disparaît", nets.join(", "), project.name)).with_path(&Path::root().child("x-clever").child("network_groups")));
+        }
+        Some("none") => {
+            if !memberships.is_empty() {
+                diags.push(Diagnostic::warning("network-groups-none", "`x-clever.network_groups: none` : aucun network group ; une référence d'un service à un autre est laissée telle quelle (`service-unreachable`)".to_string()).with_path(&Path::root().child("x-clever").child("network_groups")));
+            }
+            memberships.clear();
+        }
+        _ => {}
+    }
     for net in memberships.keys() {
         resources.push(Resource::NetworkGroup(NetworkGroup {
             id: ResourceId(format!("ng/{net}")),

@@ -56,7 +56,13 @@ clever-compose images --project-directory DIR         # fixture d'images pour le
 Au niveau projet ou service : `region`, `flavor`, `min_instances`,
 `max_instances`, `task` (service one-shot), `http_port` (port HTTP réel de
 l'image), `protocol` (`http` ou `tcp`), `domains`, `ephemeral`, `plan` et
-`version` (addon), `tcp_namespace` (`default` ou `cleverapps`).
+`version` (addon), `tcp_namespace` (`default` ou `cleverapps`), `private`
+(addon rattaché au network group).
+
+Au niveau projet seulement : `network_groups`, exigé dès que le compose a
+plusieurs réseaux — `per-network` (un network group par réseau, même
+segmentation qu'en local), `single` (un seul groupe pour le projet) ou
+`none` (aucun : les services ne se joignent pas entre eux).
 
 ## Ce qui est traduit
 
@@ -69,8 +75,8 @@ l'image), `protocol` (`http` ou `tcp`), `domains`, `ephemeral`, `plan` et
 | `depends_on` | ordre de déploiement ; `service_completed_successfully` → Clever Task |
 | `healthcheck` HTTP | `CC_HEALTH_CHECK_PATH` (2xx exigé) |
 | `deploy.replicas`, `resources.limits.memory` | instances, flavor la plus proche |
-| réseaux | un network group par réseau, table DNS `CC_COMPOSE_DNS_MAP` + stub DNS du shim |
-| postgres, mysql/mariadb, redis, mongo, elasticsearch | addon managé, identifiants expansés au démarrage, scripts d'init rejoués par une tâche |
+| réseaux | network groups selon `x-clever.network_groups`, table DNS `CC_COMPOSE_DNS_MAP` + stub DNS du shim |
+| postgres, mysql/mariadb, redis/valkey, mongo, elasticsearch | addon managé, identifiants expansés au démarrage ; scripts d'init rejoués par une tâche (postgres, mysql, mongo), `seed` pour tous |
 | `privileged`, `cap_add`, `devices`, `network_mode`, `sysctls`, volumes nommés… | refus avec diagnostic |
 
 ## Tests

@@ -1,0 +1,66 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.1" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "networks-single-default"
+  tags = ["compose-project=networks-single", "compose-network=default", "compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1"]
+}
+
+resource "clevercloud_docker" "web" {
+  name               = "networks-single-web"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    UPSTREAM = "http://api:3000"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "web.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/web"
+  }
+}
+
+resource "clevercloud_docker" "api" {
+  name               = "networks-single-api"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "api.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/api"
+  }
+}

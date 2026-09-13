@@ -56,3 +56,6 @@ networks:
   back: {}
 volumes:
   logs: {}
+
+x-clever:
+  network_groups: per-network

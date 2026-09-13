@@ -1,0 +1,27 @@
+name: networks-unspecified
+services:
+  api:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    networks:
+      back: null
+  web:
+    environment:
+      UPSTREAM: http://api:3000
+    image: nginx:1.27
+    networks:
+      back: null
+      front: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "8080"
+        protocol: tcp
+networks:
+  back:
+    name: networks-unspecified_back
+  front:
+    name: networks-unspecified_front

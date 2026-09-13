@@ -1,0 +1,16 @@
+x-clever:
+  network_groups: single
+services:
+  web:
+    image: nginx:1.27
+    ports: ["8080:80"]
+    environment:
+      UPSTREAM: http://api:3000
+    networks: [front, back]
+  api:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    networks: [back]
+networks:
+  front: {}
+  back: {}

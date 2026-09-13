@@ -165,6 +165,20 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   addons, network groups, `ccnginxtf` via `terraform destroy`, phase 0).
   Reste au propriétaire : supprimer le dépôt GitHub jetable
   `sebartyr/cc-compose-tftest` (le token `gh` n'a pas le scope `delete_repo`).
+- **Choix réseau explicite (décision du propriétaire, 13/09/2026)** : « laisser
+  le choix pour certains points à alternative, notamment le réseau, et
+  arrêter des choix par défaut », sous forme de diagnostic bloquant + clé
+  `x-clever`. Point retenu : le découpage en network groups.
+  `x-clever.network_groups` au niveau projet, exigé dès que le compose a
+  plus d'un réseau (`network-groups-unspecified`) : `per-network` (un groupe
+  par réseau, comportement précédent), `single` (un seul groupe
+  `<projet>-default`, avertissement `network-groups-merged`), `none` (aucun
+  groupe, les références entre services restent en `service-unreachable`).
+  Un seul réseau : pas de question, `per-network` et `single` sont
+  identiques. Corpus : `networks-unspecified`, `networks-single` ; Mastodon
+  et override-rules déclarent `per-network`. Non retenus pour l'instant :
+  service à service par domaine public plutôt que par NG, protocole exigé
+  au lieu de supposé HTTP, addon hôte public ou NG.
 - `ps` et `logs` ajoutés le 13/09/2026 à la demande du propriétaire, sans
   plan comme `down` (`exec/inspect.rs`) : `ps` liste apps, tâches (état des
   instances ou dernier déploiement, premier domaine), addons et réseaux ;
