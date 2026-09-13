@@ -119,9 +119,39 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 - L'hypothèse implicite qu'un parseur YAML 1.2 strict accepte les fichiers
   réels : Sentry demande la tolérance de libyaml.
 
+- **Plan intermédiaire, proposé le 13/09/2026** dans
+  `crates/cc-compose-model/src/plan.rs`, **à valider** (§13) : ressources
+  `App` (service ou tâche), `Addon`, `NetworkGroup`, `Membership`,
+  `TcpRedirection`, `Domain` ; identifiants symboliques (`app/web`,
+  `member/web@default`) ; valeurs d'environnement en `Template` de segments
+  littéraux et de références (`MemberFqdn`, `AddonEnv`) ; intrinsèque
+  (`ImageIntrinsics`, `ShimConfig`) séparé du topologique (env, membres) ;
+  `resources` dans l'ordre topologique ; empreinte de la spécification sur
+  des chemins relatifs au projet.
+- **Planificateur** (`crates/cc-compose/src/plan/`) : modèle typé du
+  sous-ensemble consommé ; politique clé par clé (`policy.rs`) où chaque clé
+  est traduite, ignorée avec avertissement, ou refusée, avec chemin et
+  position ; `x-clever` (`region`, `flavor`, `min/max_instances`, `task`,
+  `http_port`, `protocol`, `domains`, `ephemeral`, `plan`, `private`) ;
+  flavors lues sur `/v2/products/instances` et embarquées
+  (`data/PROVENANCE.md`) ; configuration des images par fixture (`images.json`)
+  ou par lecture du Dockerfile de l'utilisateur, le lecteur de registre
+  restant à écrire ; réécriture des noms de services dans l'environnement
+  (hôte d'URL, `host:port`, valeur entière seulement si la clé évoque un hôte
+  : `HOST`, `SERVER`, `ADDR`, `ENDPOINT`) ; `CC_COMPOSE_DNS_MAP` ; port
+  plateforme deviné (ports non HTTP connus → répondeur de santé, sinon
+  relais) avec avertissement ; tâches par `service_completed_successfully`
+  ou `x-clever.task` ; volumes nommés refusés sans `--allow-ephemeral`.
+- **Golden files** : `plan.json` et `plan.diagnostics.txt` par cas doté
+  d'une fixture d'images (`CC_REGEN_GOLDEN=1`), sur WordPress et un cas de
+  refus synthétique.
+
 *Questions ouvertes restantes :*
 
-- Le plan intermédiaire (§5) et les diagnostics de refus (§6) : à faire.
+- Validation du plan intermédiaire par le propriétaire du projet.
+- Lecteur de registre (`oci-client`) pour la configuration des images.
+- `secrets` (matérialisation par le shim) et bind mounts de répertoires :
+  refusés pour l'instant.
 - Les messages du validateur de schéma sont en anglais (crate `jsonschema`).
 
 ---
