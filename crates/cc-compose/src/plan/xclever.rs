@@ -31,6 +31,8 @@ pub struct XClever {
     pub plan: Option<String>,
     /// Rattacher l'addon au network group.
     pub private: Option<bool>,
+    /// Namespace des redirections TCP/UDP (`default` par défaut).
+    pub tcp_namespace: Option<String>,
 }
 
 impl XClever {

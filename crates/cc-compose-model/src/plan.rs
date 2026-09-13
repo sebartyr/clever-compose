@@ -48,7 +48,7 @@ pub enum Resource {
     Addon(Addon),
     NetworkGroup(NetworkGroup),
     Membership(Membership),
-    TcpRedirection(TcpRedirection),
+    Redirection(Redirection),
     Domain(Domain),
 }
 
@@ -59,7 +59,7 @@ impl Resource {
             Resource::Addon(r) => &r.id,
             Resource::NetworkGroup(r) => &r.id,
             Resource::Membership(r) => &r.id,
-            Resource::TcpRedirection(r) => &r.id,
+            Resource::Redirection(r) => &r.id,
             Resource::Domain(r) => &r.id,
         }
     }
@@ -242,12 +242,26 @@ pub struct Membership {
     pub aliases: Vec<String>,
 }
 
-/// Redirection TCP (port 4040 exposé sur un port externe).
+/// Redirection TCP ou UDP : la plateforme attribue un port externe (> 5000)
+/// sur un namespace de reverse proxies ; le trafic TCP entre dans le
+/// conteneur par 4040, relayé par le shim vers `target_port`. Le port
+/// attribué est une sortie de la création, jamais une entrée.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TcpRedirection {
+pub struct Redirection {
     pub id: ResourceId,
     pub app: ResourceId,
+    /// `default` (domaine propre) ou `cleverapps` (domaine cleverapps.io).
     pub namespace: String,
+    pub protocol: Protocol,
+    /// Port Compose publié (`ports:`), pour la lisibilité.
+    pub target_port: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    Tcp,
+    Udp,
 }
 
 /// Domaine public d'une application.

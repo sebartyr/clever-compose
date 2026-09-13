@@ -146,9 +146,27 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
   d'une fixture d'images (`CC_REGEN_GOLDEN=1`), sur WordPress et un cas de
   refus synthétique.
 
+- **Redirections TCP/UDP** (13/09/2026, remarque du propriétaire) : un port
+  publié non HTTP devient une ressource `Redirection` (namespace `default`
+  ou `cleverapps` via `x-clever.tcp_namespace`, port externe attribué par la
+  plateforme, donc jamais dans le plan) ; le shim relaie 4040 vers le port
+  réel (`ShimConfig.tcp`). Un seul port TCP relayable par application (une
+  seule entrée 4040) : le deuxième est une erreur. Doc :
+  `content/doc/develop/common-configuration/tcp-redirections.md`. cc-api
+  expose `tcpRedirs` et `udpRedirs`.
+- **SDK Rust** (`~/cc-compose/clevercloud-sdk-rust`, 1.0.1) : couvre
+  `v2` addons, plans, `myself`, et `v4` addon providers, functions,
+  products. Manquent pour l'exécuteur : applications (création, env,
+  déploiements, scaling), network groups, redirections TCP/UDP, domaines.
+  À contribuer par PR au fil de l'eau, derrière un trait (§2).
+
 *Questions ouvertes restantes :*
 
 - Validation du plan intermédiaire par le propriétaire du projet.
+- **UDP** : par quel port le trafic d'une redirection UDP entre-t-il dans le
+  conteneur (équivalent de 4040) ? Non documenté ; le plan porte le
+  protocole, le shim ne relaie pas encore, avertissement
+  `redirection-udp-unverified`.
 - Lecteur de registre (`oci-client`) pour la configuration des images.
 - `secrets` (matérialisation par le shim) et bind mounts de répertoires :
   refusés pour l'instant.

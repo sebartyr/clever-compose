@@ -1,0 +1,4 @@
+{
+  "postgres:16": { "entrypoint": ["docker-entrypoint.sh"], "cmd": ["postgres"], "user": null, "workdir": null, "exposed_ports": [5432] },
+  "gameserver:1": { "entrypoint": ["/server"], "cmd": [], "user": "game", "workdir": "/srv", "exposed_ports": [8080, 27015, 27016] }
+}

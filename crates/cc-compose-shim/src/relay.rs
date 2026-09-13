@@ -8,7 +8,7 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
-use cc_compose_model::shim::{PlatformPort, PLATFORM_HTTP_PORT};
+use cc_compose_model::shim::{PlatformPort, TcpRelay, PLATFORM_HTTP_PORT, PLATFORM_TCP_PORT};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -55,6 +55,32 @@ pub async fn serve(port: PlatformPort) {
                     tokio::spawn(health(inbound));
                 }
             },
+            Err(e) => {
+                eprintln!("cc-shim: accept : {e}");
+                tokio::time::sleep(READY_POLL).await;
+            }
+        }
+    }
+}
+
+/// Redirection TCP : relais brut de 4040 vers le port réel.
+pub async fn serve_tcp(relay: TcpRelay) {
+    let target = local(relay.target_port);
+    let listen = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PLATFORM_TCP_PORT));
+    wait_ready(target).await;
+    let listener = match TcpListener::bind(listen).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("cc-shim: bind {listen} : {e}");
+            return;
+        }
+    };
+    eprintln!("cc-shim: {listen} relayé vers {target} (tcp)");
+    loop {
+        match listener.accept().await {
+            Ok((inbound, _)) => {
+                tokio::spawn(forward(inbound, target));
+            }
             Err(e) => {
                 eprintln!("cc-shim: accept : {e}");
                 tokio::time::sleep(READY_POLL).await;

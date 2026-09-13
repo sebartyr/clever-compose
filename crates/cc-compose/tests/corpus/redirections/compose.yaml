@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: secret
+    x-clever:
+      ephemeral: true
+  game:
+    image: gameserver:1
+    ports:
+      - "8080:8080"
+      - "27015:27015/udp"
+      - "27016:27016"
+    x-clever:
+      tcp_namespace: cleverapps

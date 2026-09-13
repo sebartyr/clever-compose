@@ -1,5 +1,5 @@
-compose.yaml:39:5: erreur [network-external] networks.default: le réseau externe `default` n'a pas d'équivalent : un network group est créé par réseau du projet
-compose.yaml:39:13: avertissement [network-driver-ignored] networks.default.driver: driver `overlay` ignoré : un réseau devient un network group WireGuard
+compose.yaml:46:5: erreur [network-external] networks.default: le réseau externe `default` n'a pas d'équivalent : un network group est créé par réseau du projet
+compose.yaml:46:13: avertissement [network-driver-ignored] networks.default.driver: driver `overlay` ignoré : un réseau devient un network group WireGuard
 compose.yaml:3:5: avertissement [worker] services.bad: `bad` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
 compose.yaml:6:14: erreur [unsupported-key] services.bad.cap_add: `cap_add` n'a pas d'équivalent sur Clever Cloud : aucune capacité supplémentaire n'est accordée
 compose.yaml:12:21: avertissement [key-ignored] services.bad.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
@@ -12,6 +12,8 @@ compose.yaml:13:14: avertissement [key-ignored] services.bad.restart: `restart` 
 compose.yaml:11:7: erreur [unsupported-key] services.bad.sysctls: `sysctls` n'a pas d'équivalent sur Clever Cloud : pas de réglage noyau
 compose.yaml:20:9: erreur [bind-missing] services.bad.volumes[0]: le chemin `/data` monté vers `/data` n'existe pas sur ce poste
 compose.yaml:21:9: erreur [volume-unsupported] services.bad.volumes[1]: le volume `named` monté sur `/var/lib/data` n'a pas d'équivalent : pas de volume persistant sur le runtime Docker ; utilisez un addon managé, ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données
-compose.yaml:24:7: erreur [x-clever-invalid] services.bad.x-clever: extension x-clever invalide : unknown field `bogus`, expected one of `region`, `flavor`, `min_instances`, `max_instances`, `task`, `http_port`, `protocol`, `domain`, `domains`, `ephemeral`, `plan`, `private`
+compose.yaml:24:7: erreur [x-clever-invalid] services.bad.x-clever: extension x-clever invalide : unknown field `bogus`, expected one of `region`, `flavor`, `min_instances`, `max_instances`, `task`, `http_port`, `protocol`, `domain`, `domains`, `ephemeral`, `plan`, `private`, `tcp_namespace`
 compose.yaml:22:16: avertissement [extension-ignored] services.bad.x-unknown: extension `x-unknown` ignorée
+compose.yaml:40:9: avertissement [redirection-tcp] services.twotcp.ports[1]: `twotcp` : le port TCP 9002 publié devient une redirection TCP (port externe attribué par la plateforme), relayée depuis 4040 par le shim
+compose.yaml:41:9: erreur [redirection-tcp-multiple] services.twotcp.ports[2]: `twotcp` : un seul port TCP peut être relayé depuis 4040 ; 9003 ne sera pas exposé publiquement (joignable dans le network group)
 compose.yaml:27:5: avertissement [worker] services.worker: `worker` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080

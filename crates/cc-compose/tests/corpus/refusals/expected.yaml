@@ -42,6 +42,26 @@ services:
     image: busybox:1.36
     networks:
       default: null
+  twotcp:
+    command:
+      - nc
+      - -l
+    image: busybox:1.36
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 9001
+        published: "9001"
+        protocol: tcp
+      - mode: ingress
+        target: 9002
+        published: "9002"
+        protocol: tcp
+      - mode: ingress
+        target: 9003
+        published: "9003"
+        protocol: tcp
   worker:
     command:
       - sleep

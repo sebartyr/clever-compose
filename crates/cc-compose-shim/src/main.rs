@@ -58,6 +58,9 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     let child = child::spawn(&config)?;
 
     tokio::spawn(relay::serve(config.port.clone()));
+    if let Some(tcp) = config.tcp.clone() {
+        tokio::spawn(relay::serve_tcp(tcp));
+    }
 
     child.supervise().await
 }

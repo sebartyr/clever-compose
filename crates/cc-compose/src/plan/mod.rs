@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 use std::path::Path as FsPath;
 
 use cc_compose_model::plan::*;
-use cc_compose_model::shim::{PlatformPort, ShimConfig, PLATFORM_HTTP_PORT};
+use cc_compose_model::shim::{PlatformPort, ShimConfig, TcpRelay, PLATFORM_HTTP_PORT};
 use indexmap::IndexMap;
 
 use crate::compose::model::{Project, Service};
@@ -116,10 +116,11 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         let x = XClever::service(s, &p, diags);
         let is_task = tasks.contains(name) || x.task == Some(true);
         match plan_service(project, name, s, &p, &x, &project_x, is_task, ctx, &memberships, diags) {
-            Some(app) => {
+            Some((app, redirections)) => {
                 let mut app = app;
                 app.tags = tags(name);
                 apps.push(app);
+                resources.extend(redirections.into_iter().map(Resource::Redirection));
             }
             None => ok = false,
         }
@@ -162,7 +163,7 @@ fn plan_service(
     ctx: &Context<'_>,
     memberships: &IndexMap<String, Vec<(String, Vec<String>)>>,
     diags: &mut Diagnostics,
-) -> Option<App> {
+) -> Option<(App, Vec<Redirection>)> {
     policy::service(name, s, p, diags);
 
     // Source et configuration de l'image.
@@ -254,8 +255,10 @@ fn plan_service(
     let user = s.user.clone().or_else(|| intrinsics.user.clone()).filter(|u| !u.is_empty() && u != "root" && u != "0");
     let workdir = s.working_dir.clone().or_else(|| intrinsics.workdir.clone()).filter(|w| !w.is_empty());
 
-    // Port plateforme (phase 0) : 8080 servi par le shim.
+    // Port plateforme (phase 0) : 8080 servi par le shim ; les autres ports
+    // publiés deviennent des redirections TCP/UDP, le TCP entrant par 4040.
     let port = platform_port(name, s, x, &intrinsics, p, is_task, diags);
+    let (redirections, tcp) = redirections(name, s, x, &port, p, diags);
 
     // Variables d'environnement : refus des variables réservées, réécriture
     // des noms de services, table DNS.
@@ -298,7 +301,7 @@ fn plan_service(
         depends_on.push(ResourceId(format!("app/{dep}")));
     }
 
-    Some(App {
+    Some((App {
         id: ResourceId(format!("app/{name}")),
         service: name.to_string(),
         name: format!("{}-{name}", project.name),
@@ -307,12 +310,60 @@ fn plan_service(
         scaling,
         source,
         image: intrinsics,
-        shim: ShimConfig { argv, workdir, user, port },
+        shim: ShimConfig { argv, workdir, user, port, tcp },
         env,
         depends_on,
         health_check_path: None,
         tags: Vec::new(),
-    })
+    }, redirections))
+}
+
+/// Ports publiés qui ne sont pas le port HTTP : une redirection chacun. Le
+/// shim ne relaie 4040 que vers le premier port TCP, faute d'un second port
+/// d'entrée ; l'UDP est modélisé mais son port d'entrée côté conteneur
+/// reste à confirmer (question ouverte, summary.md).
+fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &Path, diags: &mut Diagnostics) -> (Vec<Redirection>, Option<TcpRelay>) {
+    let http_port = match port {
+        PlatformPort::Image => Some(PLATFORM_HTTP_PORT),
+        PlatformPort::Forward { target_port } => Some(*target_port),
+        PlatformPort::Health { .. } => None,
+    };
+    let namespace = x.tcp_namespace.clone().unwrap_or_else(|| "default".into());
+    let mut out = Vec::new();
+    let mut tcp: Option<TcpRelay> = None;
+    let mut seen: Vec<(u16, &str)> = Vec::new();
+    for (i, pt) in s.ports.iter().enumerate() {
+        if pt.published.is_none() || Some(pt.target) == http_port && pt.protocol == "tcp" {
+            continue;
+        }
+        if seen.contains(&(pt.target, pt.protocol.as_str())) {
+            continue;
+        }
+        seen.push((pt.target, &pt.protocol));
+        let pp = p.child("ports").index(i);
+        let protocol = match pt.protocol.as_str() {
+            "udp" => {
+                diags.push(Diagnostic::warning("redirection-udp-unverified", format!("`{name}` : le port UDP {} publié devient une redirection UDP ; le port d'entrée côté conteneur n'est pas encore relayé par le shim (à confirmer)", pt.target)).with_path(&pp));
+                Protocol::Udp
+            }
+            "tcp" => {
+                if tcp.is_none() {
+                    tcp = Some(TcpRelay { target_port: pt.target });
+                    diags.push(Diagnostic::warning("redirection-tcp", format!("`{name}` : le port TCP {} publié devient une redirection TCP (port externe attribué par la plateforme), relayée depuis 4040 par le shim", pt.target)).with_path(&pp));
+                } else {
+                    diags.push(Diagnostic::error("redirection-tcp-multiple", format!("`{name}` : un seul port TCP peut être relayé depuis 4040 ; {} ne sera pas exposé publiquement (joignable dans le network group)", pt.target)).with_path(&pp));
+                    continue;
+                }
+                Protocol::Tcp
+            }
+            other => {
+                diags.push(Diagnostic::error("port-protocol-unsupported", format!("protocole `{other}` non supporté")).with_path(&pp));
+                continue;
+            }
+        };
+        out.push(Redirection { id: ResourceId(format!("redir/{name}/{}/{}", pt.protocol, pt.target)), app: ResourceId(format!("app/{name}")), namespace: namespace.clone(), protocol, target_port: pt.target });
+    }
+    (out, tcp)
 }
 
 /// Ports connus comme non HTTP, pour deviner le mode du port plateforme
@@ -345,11 +396,11 @@ fn platform_port(name: &str, s: &Service, x: &XClever, intr: &ImageIntrinsics, p
         (Some(port), Some("http")) => forward(*port),
         (Some(port), _) => {
             if NON_HTTP_PORTS.contains(port) || s.ports.is_empty() && intr.exposed_ports.iter().any(|e| NON_HTTP_PORTS.contains(e)) {
-                diags.push(Diagnostic::warning("port-assumed-tcp", format!("`{name}` : le port {port} est supposé non HTTP ; il sera joignable dans le network group, et le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` pour l'exposer publiquement")).with_path(p));
+                diags.push(Diagnostic::warning("port-assumed-tcp", format!("`{name}` : le port {port} est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est")).with_path(p));
                 PlatformPort::Health { ready_port: Some(*port) }
             } else {
-                if candidates.len() > 1 {
-                    diags.push(Diagnostic::warning("multiple-ports", format!("`{name}` publie plusieurs ports ({:?}) : seul {port} est exposé publiquement, les autres restent joignables dans le network group", candidates)).with_path(&p.child("ports")));
+                if candidates.len() > 1 && s.ports.is_empty() {
+                    diags.push(Diagnostic::warning("multiple-ports", format!("`{name}` expose plusieurs ports ({:?}) : {port} est pris pour le port HTTP, les autres restent joignables dans le network group", candidates)).with_path(&p.child("expose")));
                 }
                 if s.ports.is_empty() {
                     diags.push(Diagnostic::warning("port-assumed-http", format!("`{name}` : le port {port} est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas")).with_path(p));

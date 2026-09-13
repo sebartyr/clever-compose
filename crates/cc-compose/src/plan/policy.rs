@@ -177,9 +177,6 @@ pub fn service(name: &str, s: &Service, p: &Path, diags: &mut Diagnostics) {
         if pt.host_ip.is_some() {
             diags.push(Diagnostic::warning("port-host-ip-ignored", "l'adresse d'écoute d'un port publié est ignorée").with_path(&p.child("ports").index(i)));
         }
-        if pt.protocol == "udp" {
-            diags.push(Diagnostic::error("port-udp-unsupported", "les ports UDP publiés ne sont pas exposables").with_path(&p.child("ports").index(i)));
-        }
     }
 }
 

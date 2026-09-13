@@ -1,0 +1,203 @@
+{
+  "project": "redirections",
+  "spec_hash": "cdf5f26b02357c05b8a4da821fe3451e",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "redirections-default",
+      "tags": [
+        "compose-project=redirections",
+        "compose-network=default",
+        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+      ]
+    },
+    {
+      "resource": "redirection",
+      "id": "redir/db/tcp/5432",
+      "app": "app/db",
+      "namespace": "default",
+      "protocol": "tcp",
+      "target_port": 5432
+    },
+    {
+      "resource": "redirection",
+      "id": "redir/game/udp/27015",
+      "app": "app/game",
+      "namespace": "cleverapps",
+      "protocol": "udp",
+      "target_port": 27015
+    },
+    {
+      "resource": "redirection",
+      "id": "redir/game/tcp/27016",
+      "app": "app/game",
+      "namespace": "cleverapps",
+      "protocol": "tcp",
+      "target_port": 27016
+    },
+    {
+      "resource": "app",
+      "id": "app/db",
+      "service": "db",
+      "name": "redirections-db",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "postgres:16",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "postgres"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          5432
+        ]
+      },
+      "shim": {
+        "argv": [
+          "docker-entrypoint.sh",
+          "postgres"
+        ],
+        "port": {
+          "mode": "health",
+          "ready_port": 5432
+        },
+        "tcp": {
+          "target_port": 5432
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "game="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/game@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_PASSWORD",
+          "value": [
+            {
+              "literal": "secret"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=redirections",
+        "compose-service=db",
+        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/game",
+      "service": "game",
+      "name": "redirections-game",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "gameserver:1",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/server"
+        ],
+        "cmd": [],
+        "user": "game",
+        "workdir": "/srv",
+        "exposed_ports": [
+          8080,
+          27015,
+          27016
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/server"
+        ],
+        "workdir": "/srv",
+        "user": "game",
+        "port": {
+          "mode": "image"
+        },
+        "tcp": {
+          "target_port": 27016
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=redirections",
+        "compose-service=game",
+        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "app/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/game@default",
+      "member": "app/game",
+      "group": "ng/default",
+      "aliases": [
+        "game"
+      ]
+    }
+  ]
+}

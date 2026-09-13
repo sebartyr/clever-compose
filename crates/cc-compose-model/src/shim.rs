@@ -22,6 +22,10 @@ pub const IDS_PATH: &str = "/etc/cc-shim.ids";
 /// du mode `--net host` (CLAUDE.md §3).
 pub const PLATFORM_HTTP_PORT: u16 = 8080;
 
+/// Port d'entrée du trafic TCP d'une redirection (`CC_DOCKER_EXPOSED_TCP_PORT`,
+/// même interdiction de le changer).
+pub const PLATFORM_TCP_PORT: u16 = 4040;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShimConfig {
@@ -42,6 +46,18 @@ pub struct ShimConfig {
 
     /// Ce que le shim fait du port plateforme, voir [`PlatformPort`].
     pub port: PlatformPort,
+
+    /// Relais TCP brut depuis [`PLATFORM_TCP_PORT`] vers le port réel, pour
+    /// une redirection TCP de la plateforme. Ouvert une fois le port réel
+    /// joignable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tcp: Option<TcpRelay>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TcpRelay {
+    pub target_port: u16,
 }
 
 /// Comportement du shim sur [`PLATFORM_HTTP_PORT`].
