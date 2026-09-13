@@ -83,20 +83,6 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
-          "value": [
-            {
-              "literal": "game="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/game@default"
-              }
-            }
-          ]
-        },
-        {
           "key": "POSTGRES_PASSWORD",
           "value": [
             {
@@ -160,22 +146,7 @@
           "target_port": 27015
         }
       },
-      "env": [
-        {
-          "key": "CC_COMPOSE_DNS_MAP",
-          "value": [
-            {
-              "literal": "db="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/db@default"
-              }
-            }
-          ]
-        }
-      ],
+      "env": [],
       "depends_on": [],
       "health_check_path": null,
       "tags": [

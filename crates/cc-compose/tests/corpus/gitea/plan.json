@@ -57,20 +57,6 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
-          "value": [
-            {
-              "literal": "gitea="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/gitea@default"
-              }
-            }
-          ]
-        },
-        {
           "key": "POSTGRES_DB",
           "value": [
             {

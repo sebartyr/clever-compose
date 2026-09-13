@@ -1,0 +1,1092 @@
+{
+ "format_version": "1.0",
+ "provider_schemas": {
+  "registry.terraform.io/clevercloud/clevercloud": {
+   "provider": {
+    "version": 0,
+    "block": {
+     "attributes": {
+      "consumer_key": {
+       "type": "string",
+       "description": "Clever Cloud OAuth1 consumer key. Allows using a dedicated OAuth consumer.",
+       "description_kind": "markdown",
+       "optional": true
+      },
+      "consumer_secret": {
+       "type": "string",
+       "description": "CleverCloud OAuth1 consumer secret. Allows using a dedicated OAuth consumer.",
+       "description_kind": "markdown",
+       "optional": true,
+       "sensitive": true
+      },
+      "disable_networkgroups": {
+       "type": "bool",
+       "description": "Disable netorkgroups features",
+       "description_kind": "markdown",
+       "optional": true
+      },
+      "endpoint": {
+       "type": "string",
+       "description": "Clever Cloud API endpoint, default to https://api.clever-cloud.com",
+       "description_kind": "markdown",
+       "optional": true
+      },
+      "organisation": {
+       "type": "string",
+       "description": "Clever Cloud organisation, can be either orga_xxx, or user_xxx for personal spaces. This parameter can also be provided via CC_ORGANISATION environment variable.",
+       "description_kind": "markdown",
+       "optional": true,
+       "sensitive": true
+      },
+      "secret": {
+       "type": "string",
+       "description": "Clever Cloud OAuth1 secret, can be took from clever-tools after login. This parameter can also be provided via CC_OAUTH_SECRET environment variable.",
+       "description_kind": "markdown",
+       "optional": true,
+       "sensitive": true
+      },
+      "token": {
+       "type": "string",
+       "description": "Clever Cloud OAuth1 token, can be took from clever-tools after login. This parameter can also be provided via CC_OAUTH_TOKEN environment variable.",
+       "description_kind": "markdown",
+       "optional": true,
+       "sensitive": true
+      }
+     },
+     "description": "CleverCloud provider allow you to interact with CleverCloud platform.\n\n## Dedicated OAuth consumer\n\nIf you want to use a dedicated OAuth consumer and the acording user tokens, \nbe sure the next rights are granted\n\n```\n# EN\nAccess my personal information\nAccess my organizations\nManage my organizations\nManage my organizations's applications\nManage my organizations's add-ons\n\n# FR\nAcc\u00e9der \u00e0 mes informations personnelles\nAcc\u00e9der \u00e0 mes organisations\nG\u00e9rer mes organisations\nG\u00e9rer les applications de mes organisations\nG\u00e9rer les add-ons de mes organisations\n```\n\n## Applications: private repository deployment\n\nTo deploy from a private GitHub repository, you need to generate a Personal Access Token (PAT) that will be used for authentication.\n\n### Creating a GitHub Personal Access Token\n\n1. Navigate to GitHub Settings \u2192 Developer settings \u2192 [Personal access tokens](https://github.com/settings/tokens)\n2. [Create a fine-grained token](https://github.com/settings/personal-access-tokens/new) with read access to repository contents\n3. **Best practice**: Limit the token to only the specific repositories you want to deploy (use \"Only select repositories\" instead of \"All repositories\")\n\n![Example PAT configuration](./pat_example.png)\n\nFor detailed instructions, refer to [GitHub's documentation on creating a fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)\n\n### Using the Token in Terraform\n\nOnce the token is generated, add the `authentication_basic` attribute to the `deployment` block of your application resource:\n\n```hcl\nresource \"clevercloud_nodejs\" \"my_app\" {\n  # ... other configuration ...\n\n  deployment {\n    repository = \"https://github.com/OWNER/REPO.git\"\n    authentication_basic = \"USER:PAT_TOKEN\"\n  }\n}\n```\n\nWhere:\n- `USER` is the GitHub username of the person who created the token\n- `PAT_TOKEN` is the Personal Access Token generated in the previous step",
+     "description_kind": "markdown"
+    }
+   },
+   "resource_schemas": {
+    "clevercloud_configprovider": {
+     "version": 0,
+     "block": {
+      "attributes": {
+       "environment": {
+        "type": [
+         "map",
+         "string"
+        ],
+        "description": "Environment variables injected into the application",
+        "description_kind": "plain",
+        "required": true,
+        "sensitive": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the service",
+        "description_kind": "markdown",
+        "required": true
+       }
+      },
+      "description": "Manage a Configuration Provider.\n\nSee [ConfigProvider product specification](https://www.clever.cloud/developers/doc/addons/config-provider/).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_docker": {
+     "version": 1,
+     "block": {
+      "attributes": {
+       "app_folder": {
+        "type": "string",
+        "description": "Folder in which the application is located (inside the git repository)",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "biggest_flavor": {
+        "type": "string",
+        "description": "Biggest instance flavor, if different from smallest, enable auto-scaling",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "build_flavor": {
+        "type": "string",
+        "description": "Use dedicated instance with given flavor for build phase",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "container_port": {
+        "type": "number",
+        "description": "Set to custom HTTP port if your Docker container runs on custom port",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "container_port_tcp": {
+        "type": "number",
+        "description": "Set to custom TCP port if your Docker container runs on custom port.",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "daemon_socket_mount": {
+        "type": "bool",
+        "description": "Set to true to access the host Docker socket from inside your container",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "dependencies": {
+        "type": [
+         "set",
+         "string"
+        ],
+        "description": "A list of application or add-ons required to run this application.\nCan be either app_xxx or postgres_yyy ID format",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "deploy_url": {
+        "type": "string",
+        "description": "Git URL used to push source code",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "description": {
+        "type": "string",
+        "description": "Application description",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "dockerfile": {
+        "type": "string",
+        "description": "The name of the Dockerfile to build",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "enable_ipv6": {
+        "type": "bool",
+        "description_kind": "plain",
+        "deprecated": true,
+        "optional": true
+       },
+       "environment": {
+        "type": [
+         "map",
+         "string"
+        ],
+        "description": "Environment variables injected into the application.\n\n**Note:** Null values are not allowed. To conditionally include variables, use a for expression:\n```hcl\nenvironment = { for k, v in {\n  VAR1 = \"value\"\n  VAR2 = var.optional_var\n} : k => v if v != null }\n```",
+        "description_kind": "markdown",
+        "optional": true,
+        "sensitive": true
+       },
+       "exposed_environment": {
+        "type": [
+         "map",
+         "string"
+        ],
+        "description": "Environment variables other linked applications will be able to use",
+        "description_kind": "plain",
+        "optional": true,
+        "sensitive": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Unique identifier generated during application creation",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "integrations": {
+        "nested_type": {
+         "attributes": {
+          "clamav": {
+           "nested_type": {
+            "attributes": {
+             "enabled": {
+              "type": "bool",
+              "description": "Enable ClamAV antivirus ([CC_CLAMAV](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#clamav))",
+              "description_kind": "markdown",
+              "optional": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "ClamAV antivirus integration for file scanning",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "newrelic": {
+           "nested_type": {
+            "attributes": {
+             "app_name": {
+              "type": "string",
+              "description": "Application name in New Relic ([NEW_RELIC_APP_NAME](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#new-relic))",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "license_key": {
+              "type": "string",
+              "description": "Your New Relic license key ([NEW_RELIC_LICENSE_KEY](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#new-relic))",
+              "description_kind": "markdown",
+              "required": true,
+              "sensitive": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "New Relic APM integration for application performance monitoring",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "pgpoolii": {
+           "nested_type": {
+            "attributes": {
+             "enabled": {
+              "type": "bool",
+              "description": "Enable PgPool-II connection pooler ([CC_ENABLE_PGPOOL](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#pgpool-ii))",
+              "description_kind": "markdown",
+              "optional": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "PgPool-II configuration. [Learn more](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#pgpool-ii)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "prometheus": {
+           "nested_type": {
+            "attributes": {
+             "password": {
+              "type": "string",
+              "description": "Define the password for the basic auth of the Prometheus endpoint ([CC_METRICS_PROMETHEUS_PASSWORD](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus))",
+              "description_kind": "markdown",
+              "optional": true,
+              "sensitive": true
+             },
+             "path": {
+              "type": "string",
+              "description": "Define the path on which the Prometheus endpoint is available ([CC_METRICS_PROMETHEUS_PATH](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus)). Default: `/metrics`",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "port": {
+              "type": "number",
+              "description": "Define the port on which the Prometheus endpoint is available ([CC_METRICS_PROMETHEUS_PORT](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus)). Default: `9100`",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "response_timeout": {
+              "type": "number",
+              "description": "Define the timeout in seconds to collect the application metrics. This value must be below 60 seconds ([CC_METRICS_PROMETHEUS_RESPONSE_TIMEOUT](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus)). Default: `3`",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "user": {
+              "type": "string",
+              "description": "Define the user for the basic auth of the Prometheus endpoint ([CC_METRICS_PROMETHEUS_USER](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus))",
+              "description_kind": "markdown",
+              "optional": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "Prometheus metrics integration. See [Prometheus docs](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#prometheus)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "redirectionio": {
+           "nested_type": {
+            "attributes": {
+             "backend_port": {
+              "type": "number",
+              "description": "Backend application port ([CC_REDIRECTIONIO_BACKEND_PORT](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#redirectionio))",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "instance_name": {
+              "type": "string",
+              "description": "Custom instance name for the Redirection.io agent ([CC_REDIRECTIONIO_INSTANCE_NAME](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#redirectionio))",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "project_key": {
+              "type": "string",
+              "description": "Your Redirection.io project key ([CC_REDIRECTIONIO_PROJECT_KEY](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#redirectionio))",
+              "description_kind": "markdown",
+              "required": true,
+              "sensitive": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "Redirection.io integration for URL redirection and traffic management. See [Redirection.io docs](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#redirectionio)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "varnish": {
+           "nested_type": {
+            "attributes": {
+             "config_file": {
+              "type": "string",
+              "description": "Path to the Varnish configuration file, relative to your application root ([CC_VARNISH_FILE](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#varnish)). Default: `/clevercloud/varnish.vcl`",
+              "description_kind": "markdown",
+              "optional": true
+             },
+             "storage_size": {
+              "type": "string",
+              "description": "Configure the size of the Varnish cache ([CC_VARNISH_STORAGE_SIZE](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#varnish)). Default: `1G`",
+              "description_kind": "markdown",
+              "optional": true
+             }
+            },
+            "nesting_mode": "single"
+           },
+           "description": "Varnish cache integration for HTTP acceleration. See [Varnish docs](https://www.clever.cloud/developers/doc/reference/reference-environment-variables#varnish)",
+           "description_kind": "markdown",
+           "optional": true
+          }
+         },
+         "nesting_mode": "single"
+        },
+        "description": "Third-party integrations configuration",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "ipv6_cidr": {
+        "type": "string",
+        "description": "Activate the support of IPv6 with an IPv6 subnet int the docker daemon",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "max_instance_count": {
+        "type": "number",
+        "description": "Maximum instance count, if different from min value, enable auto-scaling",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "min_instance_count": {
+        "type": "number",
+        "description": "Minimum instance count",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Application name",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "networkgroups": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "domain name which will resolve to application instances inside the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "networkgroup_id": {
+           "type": "string",
+           "description": "ID of the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of networkgroups the application must be part of",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "redirect_https": {
+        "type": "bool",
+        "description": "Redirect client from plain to TLS port",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "redirection": {
+        "nested_type": {
+         "attributes": {
+          "namespace": {
+           "type": "string",
+           "description": "Namespace in which the TCP redirection is open (usually `default` or `cleverapps`)",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "port": {
+           "type": "number",
+           "description": "External port allocated by Clever Cloud for this redirection",
+           "description_kind": "markdown",
+           "computed": true
+          }
+         },
+         "nesting_mode": "single"
+        },
+        "description": "Expose the application local port 4040 on an external TCP port ([TCP redirections](https://www.clever.cloud/developers/doc/administrate/tcp-redirections/))",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "region": {
+        "type": "string",
+        "description": "Geographical region where the database will be deployed",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "registry_password": {
+        "type": "string",
+        "description": "The password of your username",
+        "description_kind": "markdown",
+        "optional": true,
+        "sensitive": true
+       },
+       "registry_url": {
+        "type": "string",
+        "description": "The server of your private registry (optional).\tDocker\u2019s public registry",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "registry_user": {
+        "type": "string",
+        "description": "The username to login to a private registry",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "smallest_flavor": {
+        "type": "string",
+        "description": "Smallest instance flavor",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "sticky_sessions": {
+        "type": "bool",
+        "description": "Enable sticky sessions, use it when your client sessions are instances scoped",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "vhosts": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "Fully qualified domain name",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "path_begin": {
+           "type": "string",
+           "description": "Any HTTP request starting with this path will be sent to this application",
+           "description_kind": "markdown",
+           "optional": true,
+           "computed": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of virtual hosts",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       }
+      },
+      "block_types": {
+       "deployment": {
+        "nesting_mode": "single",
+        "block": {
+         "attributes": {
+          "authentication_basic": {
+           "type": "string",
+           "description": "user ans password ':' separated, (PersonalAccessToken in Github case)",
+           "description_kind": "markdown",
+           "optional": true,
+           "sensitive": true
+          },
+          "commit": {
+           "type": "string",
+           "description": "Support multiple syntax like `refs/heads/[BRANCH]`, `github_hook` or `[COMMIT]`, when using the special value `github_hook`, we will link the application to the Github repository",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "repository": {
+           "type": "string",
+           "description": "The repository URL to deploy, can be 'https://...', 'file://...'",
+           "description_kind": "markdown",
+           "optional": true
+          }
+         },
+         "description_kind": "plain"
+        }
+       },
+       "hooks": {
+        "nesting_mode": "single",
+        "block": {
+         "attributes": {
+          "post_build": {
+           "type": "string",
+           "description": "[CC_POST_BUILD_HOOK](https://www.clever.cloud/developers/doc/develop/build-hooks/#post-build)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "pre_build": {
+           "type": "string",
+           "description": "[CC_PRE_BUILD_HOOK](https://www.clever.cloud/developers/doc/develop/build-hooks/#pre-build)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "pre_run": {
+           "type": "string",
+           "description": "[CC_PRE_RUN_HOOK](https://www.clever.cloud/developers/doc/develop/build-hooks/#pre-run)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "run_failed": {
+           "type": "string",
+           "description": "[CC_RUN_FAILED_HOOK](https://www.clever.cloud/developers/doc/develop/build-hooks/#run-successfail)",
+           "description_kind": "markdown",
+           "optional": true
+          },
+          "run_succeed": {
+           "type": "string",
+           "description": "[CC_RUN_SUCCEEDED_HOOK](https://www.clever.cloud/developers/doc/develop/build-hooks/#run-successfail)",
+           "description_kind": "markdown",
+           "optional": true
+          }
+         },
+         "description_kind": "plain"
+        }
+       }
+      },
+      "description": "Manage [Docker](https://www.docker.com/) applications.\n\nSee [Docker product specification](https://www.clever.cloud/developers/doc/applications/docker).\n\n**Note**: For deploying from private GitHub repositories, see the [private repository deployment guide](https://registry.terraform.io/providers/CleverCloud/clevercloud/latest/docs#applications-private-repository-deployment).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_mongodb": {
+     "version": 0,
+     "block": {
+      "attributes": {
+       "creation_date": {
+        "type": "number",
+        "description": "Date of database creation",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "database": {
+        "type": "string",
+        "description": "Database name",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "direct_host_only": {
+        "type": "bool",
+        "description": "Connect directly to the database host, bypassing the reverse proxy. Lower latency but no automatic failover on migration.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "encryption": {
+        "type": "bool",
+        "description": "Encrypt the hard drive at rest",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "host": {
+        "type": "string",
+        "description": "Database host, used to connect to",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the service",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "networkgroups": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "domain name which will resolve to addon instances inside the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "networkgroup_id": {
+           "type": "string",
+           "description": "ID of the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of networkgroups the addon must be part of",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "password": {
+        "type": "string",
+        "description": "Login password",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "plan": {
+        "type": "string",
+        "description": "Database size and spec (must be lowercase)",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "port": {
+        "type": "number",
+        "description": "Database port",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "region": {
+        "type": "string",
+        "description": "Geographical region where the data will be stored",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "uri": {
+        "type": "string",
+        "description": "Database connection string",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "user": {
+        "type": "string",
+        "description": "Login username",
+        "description_kind": "markdown",
+        "computed": true
+       }
+      },
+      "description": "Manage [MongoDB](https://www.mongodb.com/) product.\n\nSee [product specification](https://www.clever.cloud/developers/doc/addons/mongodb/).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_mysql": {
+     "version": 0,
+     "block": {
+      "attributes": {
+       "backup": {
+        "type": "bool",
+        "description": "Enable or disable backups for this MySQL add-on. Since backups are included in the add-on price, disabling it has no impact on your billing.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "creation_date": {
+        "type": "number",
+        "description": "Date of database creation",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "database": {
+        "type": "string",
+        "description": "Database name on the MySQL server",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "direct_host_only": {
+        "type": "bool",
+        "description": "Connect directly to the database host, bypassing the reverse proxy. Lower latency but no automatic failover on migration.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "encryption": {
+        "type": "bool",
+        "description": "Encrypt the hard drive at rest",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "host": {
+        "type": "string",
+        "description": "Database host, used to connect to",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the service",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "networkgroups": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "domain name which will resolve to addon instances inside the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "networkgroup_id": {
+           "type": "string",
+           "description": "ID of the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of networkgroups the addon must be part of",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "password": {
+        "type": "string",
+        "description": "Login password",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "plan": {
+        "type": "string",
+        "description": "Database size and spec (must be lowercase)",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "port": {
+        "type": "number",
+        "description": "Database port",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "read_only_users": {
+        "nested_type": {
+         "attributes": {
+          "password": {
+           "type": "string",
+           "description": "Password for read-only user",
+           "description_kind": "markdown",
+           "required": true,
+           "sensitive": true
+          },
+          "user": {
+           "type": "string",
+           "description": "Username for read-only access",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "list"
+        },
+        "description": "MySQL users with read-only access",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "region": {
+        "type": "string",
+        "description": "Geographical region where the data will be stored",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "skip_log_bin": {
+        "type": "bool",
+        "description": "Disable binary logging. Saves disk space but prevents point-in-time recovery and replication.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "uri": {
+        "type": "string",
+        "description": "Database connection string",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "user": {
+        "type": "string",
+        "description": "Login username",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "version": {
+        "type": "string",
+        "description": "MySQL version",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       }
+      },
+      "description": "Manage [Mysql](https://www.mysql.org/) product.\n\nSee [product specification](https://www.clever.cloud/developers/doc/addons/mysql/).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_networkgroup": {
+     "version": 0,
+     "block": {
+      "attributes": {
+       "description": {
+        "type": "string",
+        "description": "Description of the network group",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the network group",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "network": {
+        "type": "string",
+        "description": "Network CIDR of the network group",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "tags": {
+        "type": [
+         "set",
+         "string"
+        ],
+        "description": "Tags of the network group",
+        "description_kind": "markdown",
+        "optional": true
+       }
+      },
+      "description": "Manage any [Network Group](https://www.clever.cloud/developers/doc/develop/network-groups/).\n\nSee [Network Groups product specification](https://www.clever.cloud/developers/doc/develop/network-groups/).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_postgresql": {
+     "version": 1,
+     "block": {
+      "attributes": {
+       "backup": {
+        "type": "bool",
+        "description": "Enable or disable backups for this PostgreSQL add-on. Since backups are included in the add-on price, disabling it has no impact on your billing.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "creation_date": {
+        "type": "number",
+        "description": "Date of database creation",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "database": {
+        "type": "string",
+        "description": "Database name on the PostgreSQL server",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "direct_host_only": {
+        "type": "bool",
+        "description": "Connect directly to the database host, bypassing the reverse proxy. Lower latency but no automatic failover on migration.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "encryption": {
+        "type": "bool",
+        "description": "Encrypt the hard drive at rest",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "host": {
+        "type": "string",
+        "description": "Database host, used to connect to",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "locale": {
+        "type": "string",
+        "description": "Database locale for collation and character classification. Must be in format 'language_COUNTRY' (e.g., 'en_GB', 'fr_FR'). Only available on dedicated plans. If not specified, defaults to 'en_GB'.",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the service",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "networkgroups": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "domain name which will resolve to addon instances inside the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "networkgroup_id": {
+           "type": "string",
+           "description": "ID of the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of networkgroups the addon must be part of",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "password": {
+        "type": "string",
+        "description": "Login password",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "plan": {
+        "type": "string",
+        "description": "Database size and spec (must be lowercase)",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "port": {
+        "type": "number",
+        "description": "Database port",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "region": {
+        "type": "string",
+        "description": "Geographical region where the data will be stored",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "uri": {
+        "type": "string",
+        "description": "Database connection string",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       },
+       "user": {
+        "type": "string",
+        "description": "Login username",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "version": {
+        "type": "string",
+        "description": "PostgreSQL version",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       }
+      },
+      "description": "Manage [PostgreSQL](https://www.postgresql.org/) product.\n\nSee [product specification](https://www.clever.cloud/developers/doc/addons/postgresql/).\n",
+      "description_kind": "markdown"
+     }
+    },
+    "clevercloud_redis": {
+     "version": 0,
+     "block": {
+      "attributes": {
+       "creation_date": {
+        "type": "number",
+        "description": "Date of database creation",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "host": {
+        "type": "string",
+        "description": "Database host, used to connect to",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "id": {
+        "type": "string",
+        "description": "Generated unique identifier",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "name": {
+        "type": "string",
+        "description": "Name of the service",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "networkgroups": {
+        "nested_type": {
+         "attributes": {
+          "fqdn": {
+           "type": "string",
+           "description": "domain name which will resolve to addon instances inside the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          },
+          "networkgroup_id": {
+           "type": "string",
+           "description": "ID of the networkgroup",
+           "description_kind": "markdown",
+           "required": true
+          }
+         },
+         "nesting_mode": "set"
+        },
+        "description": "List of networkgroups the addon must be part of",
+        "description_kind": "markdown",
+        "optional": true
+       },
+       "plan": {
+        "type": "string",
+        "description": "Database size and spec (must be lowercase)",
+        "description_kind": "markdown",
+        "required": true
+       },
+       "port": {
+        "type": "number",
+        "description": "Database port",
+        "description_kind": "markdown",
+        "computed": true
+       },
+       "region": {
+        "type": "string",
+        "description": "Geographical region where the data will be stored",
+        "description_kind": "markdown",
+        "optional": true,
+        "computed": true
+       },
+       "token": {
+        "type": "string",
+        "description": "Token to authenticate",
+        "description_kind": "markdown",
+        "computed": true,
+        "sensitive": true
+       }
+      },
+      "description": "Manage [Redis](https://redis.io/) product.\n\nSee [Redis product specification](https://www.clever.cloud/developers/doc/addons/redis/).\n",
+      "description_kind": "markdown"
+     }
+    }
+   }
+  }
+ }
+}

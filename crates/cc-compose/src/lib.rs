@@ -3,4 +3,5 @@
 
 pub mod compose;
 pub mod diagnostic;
+pub mod emit;
 pub mod plan;

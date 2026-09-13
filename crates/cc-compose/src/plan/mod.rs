@@ -12,6 +12,7 @@ pub mod flavors;
 pub mod images;
 pub mod policy;
 pub mod registry;
+pub mod sources;
 pub mod xclever;
 
 use std::collections::BTreeSet;
@@ -144,6 +145,20 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         return None;
     }
 
+    // Références mutuelles par l'environnement sans `depends_on` : le graphe
+    // des ressources aurait un cycle (export Terraform impossible en une
+    // passe). Signalé, et l'arête sans depends_on est conservée : c'est à
+    // l'utilisateur de fixer le sens.
+    for a in &apps {
+        for dep in &a.depends_on {
+            let other = dep.0.trim_start_matches("app/");
+            if let Some(b) = apps.iter().find(|b| b.service == other) {
+                if b.env.iter().any(|e| e.value.0.iter().any(|seg| matches!(seg, Segment::Ref(Reference::MemberFqdn { member }) if member.0 == format!("member/{}@", a.service) || member.0.starts_with(&format!("member/{}@", a.service))))) && !b.depends_on.contains(&a.id) {
+                    diags.push(Diagnostic::warning("mutual-reference", format!("`{}` dépend de `{}` qui référence `{}` dans son environnement : références mutuelles, l'export Terraform aura un cycle ; retirez une des deux références ou déclarez le sens par `depends_on`", a.service, other, a.service)).with_path(&Path::root().child("services").child(other).child("environment")));
+                }
+            }
+        }
+    }
     // Ordre topologique des applications selon depends_on.
     let order = topo_order(&apps, diags)?;
     for name in &order {
@@ -274,7 +289,8 @@ fn plan_service(
     let (redirections, tcp, udp) = redirections(name, s, x, &port, p, diags);
 
     // Variables d'environnement : refus des variables réservées, réécriture
-    // des noms de services, table DNS.
+    // des noms de services, table DNS limitée aux services référencés.
+    let mut referenced: BTreeSet<String> = s.depends_on.keys().cloned().collect();
     let mut env: Vec<EnvVar> = Vec::new();
     for (k, v) in &s.environment {
         let ep = p.child("environment").child(k);
@@ -286,7 +302,7 @@ fn plan_service(
             diags.push(Diagnostic::warning("environment-unset", format!("`{k}` est déclarée sans valeur et absente de l'environnement : ignorée")).with_path(&ep));
             continue;
         };
-        env.push(EnvVar { key: k.clone(), value: env::rewrite(k, v, name, s, project, memberships, &ep, diags) });
+        env.push(EnvVar { key: k.clone(), value: env::rewrite(k, v, name, s, project, memberships, &ep, diags, &mut referenced) });
     }
     // Secrets : une variable par secret, le fichier écrit par le shim.
     let mut secrets: Vec<SecretBinding> = Vec::new();
@@ -328,7 +344,7 @@ fn plan_service(
         shim_secrets.push(cc_compose_model::shim::SecretFile { env: env_name.clone(), target: target.clone(), mode, uid, gid });
         secrets.push(SecretBinding { name: sm.source.clone(), source, env: env_name, target, mode, uid, gid });
     }
-    let dns_map = env::dns_map(name, s, memberships);
+    let dns_map = env::dns_map(name, s, memberships, &referenced);
     if !dns_map.0.is_empty() {
         env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map.clone() });
     }

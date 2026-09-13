@@ -43,7 +43,7 @@ fn key_names_a_host(key: &str) -> bool {
     ["HOST", "SERVER", "ADDR", "ENDPOINT", "HOSTNAME"].iter().any(|h| k.contains(h))
 }
 
-pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, p: &Path, diags: &mut Diagnostics) -> Template {
+pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, p: &Path, diags: &mut Diagnostics, referenced: &mut std::collections::BTreeSet<String>) -> Template {
     let mut segments: Vec<Segment> = Vec::new();
     let mut literal = String::new();
     let mut rest = value;
@@ -57,6 +57,7 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
             let host = hostport.split(':').next().unwrap_or(hostport);
             let userinfo_len = authority.len() - hostport.len();
             if let Some((service, net)) = lookup(host, consumer, consumer_service, project, memberships, p, diags) {
+                referenced.insert(service.clone());
                 literal.push_str(before);
                 literal.push_str(&authority[..userinfo_len]);
                 segments.push(Segment::Literal(std::mem::take(&mut literal)));
@@ -78,6 +79,7 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
         let whole = literal.is_empty() && token_end == rest.len() && key_names_a_host(key);
         if !token.is_empty() && boundary_before && (whole || followed_by_port) {
             if let Some((service, net)) = lookup(token, consumer, consumer_service, project, memberships, p, diags) {
+                referenced.insert(service.clone());
                 segments.push(Segment::Literal(std::mem::take(&mut literal)));
                 segments.push(member_ref(&service, &net));
                 rest = &rest[token_end..];
@@ -118,14 +120,17 @@ fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Proj
     None
 }
 
-/// `CC_COMPOSE_DNS_MAP=alias=<fqdn>,...` : tous les alias joignables depuis
-/// ce service, triés.
-pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Memberships) -> Template {
+/// `CC_COMPOSE_DNS_MAP=alias=<fqdn>,...` : les alias des services que ce
+/// service référence (`depends_on`, hôtes de son environnement) et qu'il
+/// atteint par un réseau commun, triés. Restreindre aux références rend le
+/// graphe des ressources acyclique, donc l'export Terraform applicable en
+/// une passe (summary.md, phase 0 question 2).
+pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Memberships, referenced: &std::collections::BTreeSet<String>) -> Template {
     let mut entries: Vec<(String, String, String)> = Vec::new();
     for net in consumer_service.networks.keys() {
         if let Some(members) = memberships.get(net) {
             for (service, aliases) in members {
-                if service == consumer {
+                if service == consumer || !referenced.contains(service) {
                     continue;
                 }
                 for a in aliases {

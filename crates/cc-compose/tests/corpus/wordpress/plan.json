@@ -56,20 +56,6 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
-          "value": [
-            {
-              "literal": "wordpress="
-            },
-            {
-              "ref": {
-                "ref": "member_fqdn",
-                "member": "member/wordpress@default"
-              }
-            }
-          ]
-        },
-        {
           "key": "MYSQL_DATABASE",
           "value": [
             {
