@@ -45,7 +45,7 @@ fn corpus_exports_match_golden_files() {
         let out_dir = dir.join("export");
         let tf = terraform::emit(&plan, &terraform::Options { out_dir: &out_dir, project_dir: &dir }, &mut diags);
         let tf_text = serde_json::to_string_pretty(&tf).unwrap() + "\n";
-        let sh_text = script::emit(&plan, &mut diags);
+        let sh_text = script::emit(&plan, &script::Options { out_dir: &out_dir, project_dir: &dir }, &mut diags);
         std::fs::create_dir_all(&out_dir).unwrap();
         let tf_path = out_dir.join("main.tf.json");
         let sh_path = out_dir.join("bootstrap.sh");

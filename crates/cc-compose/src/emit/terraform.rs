@@ -164,7 +164,7 @@ fn template(t: &Template, plan: &Plan, app: &App, opts: &Options<'_>, variables:
 }
 
 /// Chemin relatif de `target` depuis `base` (POSIX, sans résolution de liens).
-fn pathdiff(target: &FsPath, base: &FsPath) -> String {
+pub fn pathdiff(target: &FsPath, base: &FsPath) -> String {
     let t: Vec<_> = target.components().collect();
     let b: Vec<_> = base.components().collect();
     let common = t.iter().zip(&b).take_while(|(x, y)| x == y).count();

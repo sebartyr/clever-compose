@@ -17,7 +17,12 @@ fn sq(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-fn template(t: &Template, plan: &Plan, app: &App) -> String {
+pub struct Options<'a> {
+    pub out_dir: &'a std::path::Path,
+    pub project_dir: &'a std::path::Path,
+}
+
+fn template(t: &Template, plan: &Plan, app: &App, project_rel: &str) -> String {
     let mut out = String::new();
     for seg in &t.0 {
         match seg {
@@ -29,7 +34,7 @@ fn template(t: &Template, plan: &Plan, app: &App) -> String {
             // Expansée par le shim au démarrage : littérale.
             Segment::Ref(Reference::AddonEnv { var, .. }) => out.push_str(&sq(&format!("${{{var}}}"))),
             Segment::Ref(Reference::Secret { name }) => match app.secrets.iter().find(|s| &s.name == name).map(|s| &s.source) {
-                Some(SecretSource::File { path }) => out.push_str(&format!("\"$(cat {})\"", sq(path))),
+                Some(SecretSource::File { path }) => out.push_str(&format!("\"$(cat {})\"", sq(&format!("{project_rel}/{}", path.trim_start_matches("./"))))),
                 Some(SecretSource::Environment { var }) => out.push_str(&format!("\"${{{var}:?variable {var} requise pour le secret {name}}}\"")),
                 None => out.push_str(&sq(&format!("<secret {name}>"))),
             },
@@ -41,7 +46,9 @@ fn template(t: &Template, plan: &Plan, app: &App) -> String {
     out
 }
 
-pub fn emit(plan: &Plan, diags: &mut Diagnostics) -> String {
+pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String {
+    let project_rel = super::terraform::pathdiff(opts.project_dir, opts.out_dir);
+    let project_rel = if project_rel.is_empty() { ".".to_string() } else { project_rel };
     let mut s = String::new();
     let _ = writeln!(s, "#!/usr/bin/env bash");
     let _ = writeln!(s, "# Bootstrap généré par clever-compose pour le projet `{}` (spec {}).", plan.project, plan.spec_hash);
@@ -96,7 +103,7 @@ pub fn emit(plan: &Plan, diags: &mut Diagnostics) -> String {
     let _ = writeln!(s, "# Variables d'environnement (les FQDN des membres sont connus dès la création)");
     for a in &apps {
         for e in &a.env {
-            let _ = writeln!(s, "clever env set --app \"$APP_{}\" {} {}", ident(&a.service), sq(&e.key), template(&e.value, plan, a));
+            let _ = writeln!(s, "clever env set --app \"$APP_{}\" {} {}", ident(&a.service), sq(&e.key), template(&e.value, plan, a, &project_rel));
         }
     }
     let _ = writeln!(s);
@@ -131,7 +138,13 @@ pub fn emit(plan: &Plan, diags: &mut Diagnostics) -> String {
 
     let _ = writeln!(s, "# Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)");
     for a in &apps {
-        let _ = writeln!(s, "( cd repos/{} && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m {} || true && clever deploy --app \"$APP_{}\" )", sq(&a.service), sq("clever-compose"), ident(&a.service));
+        let _ = writeln!(s, "(");
+        let _ = writeln!(s, "  cd repos/{}", sq(&a.service));
+        let _ = writeln!(s, "  [ -d .git ] || git init -q -b main");
+        let _ = writeln!(s, "  git add -A");
+        let _ = writeln!(s, "  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'");
+        let _ = writeln!(s, "  clever deploy --app \"$APP_{}\"", ident(&a.service));
+        let _ = writeln!(s, ")");
     }
     s
 }

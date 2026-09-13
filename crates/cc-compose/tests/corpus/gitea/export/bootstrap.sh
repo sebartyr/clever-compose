@@ -39,5 +39,17 @@ clever env set --app "$APP_gitea" 'DB_TYPE' 'postgres'
 clever env set --app "$APP_gitea" 'DB_USER' 'gitea'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
-( cd repos/'db' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_db" )
-( cd repos/'gitea' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_gitea" )
+(
+  cd repos/'db'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_db"
+)
+(
+  cd repos/'gitea'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_gitea"
+)

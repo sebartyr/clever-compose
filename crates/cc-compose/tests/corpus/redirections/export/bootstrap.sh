@@ -36,5 +36,17 @@ clever tcp-redirs add --app "$APP_db" --namespace 'default'
 clever tcp-redirs add --app "$APP_game" --namespace 'cleverapps'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
-( cd repos/'db' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_db" )
-( cd repos/'game' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_game" )
+(
+  cd repos/'db'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_db"
+)
+(
+  cd repos/'game'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_game"
+)

@@ -31,16 +31,24 @@ pub fn spawn(config: &ShimConfig, env_remove: &[String]) -> Result<Child, String
         let raw = std::fs::read_to_string(IDS_PATH)
             .map_err(|e| format!("utilisateur `{user}` : lecture de {IDS_PATH} : {e}"))?;
         let ids = Ids::parse(&raw).map_err(|e| format!("{IDS_PATH} : {e}"))?;
-        // `Command::uid/gid` appellent setuid/setgid après le fork ; les groupes
-        // supplémentaires demandent un pre_exec, et doivent être posés avant
-        // l'abandon de root. Les pre_exec s'exécutent avant uid/gid.
-        cmd.uid(ids.uid).gid(ids.gid);
-        let groups = ids.groups.clone();
-        // SAFETY: setgroups est async-signal-safe ; pas d'allocation.
+        // Abandon des privilèges dans l'enfant, après le fork, dans l'ordre
+        // setgroups, setgid, setuid (`CommandExt::groups` est instable ;
+        // `Command::uid/gid` s'appliqueraient avant `pre_exec`, trop tôt pour
+        // setgroups). Équivalent d'initgroups avec la liste résolue au build :
+        // un uid/gid seul casse les images qui dépendent d'un groupe
+        // secondaire (CLAUDE.md §8).
+        let groups: Vec<libc::gid_t> = ids.groups.iter().map(|g| *g as libc::gid_t).collect();
+        let (uid, gid) = (ids.uid as libc::uid_t, ids.gid as libc::gid_t);
+        // SAFETY: appels async-signal-safe, sans allocation, dans l'enfant.
         unsafe {
             cmd.pre_exec(move || {
-                let gids: Vec<libc::gid_t> = groups.iter().map(|g| *g as libc::gid_t).collect();
-                if libc::setgroups(gids.len() as _, gids.as_ptr()) != 0 {
+                if libc::setgroups(groups.len() as _, groups.as_ptr()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::setgid(gid) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::setuid(uid) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())

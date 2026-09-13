@@ -22,7 +22,11 @@ network group `p0`), à supprimer quand elles ne servent plus.
 **Phase 1 terminée le 13/09/2026** : le corpus (15 cas dont un refus) passe
 le test différentiel, chaque clé refusée produit un diagnostic avec chemin
 et position, le plan sort en golden files. Le plan intermédiaire reste
-soumis à validation ; **phase 2 (émetteurs) ouverte**.
+soumis à validation. **Phase 2 terminée le 13/09/2026** : `terraform
+validate` passe sur les exports du corpus (test `corpus_terraform_validates`,
+terraform 1.16.2 dans `~/.local/bin`), script de bootstrap relu sur
+WordPress, secrets, redirections et un projet `build:` (exécuté en local
+jusqu'au conteneur). **Phase 3 (exécuteur) à ouvrir.**
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
@@ -62,6 +66,59 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 | 5 | Résolution `cc-ng.cloud` en `--net host`, `resolv.conf` modifiable ? | **répondue** | Oui, via le résolveur de la VM (`nameserver 10.2.0.1`, puis `1.1.1.1`, `search .`). Zone privée, pas résolvable depuis l'extérieur. `resolv.conf` est un bind mount : **réécrivable en place, pas remplaçable** (`rm` refusé). |
 | 6 | Workers sans port : critère de succès du déploiement | **répondue** | Le déployeur fait un **GET HTTP sur 8080** et accepte tout code 200 à 500. Sans écoute : échec après 4 min. Réponse non HTTP : plantage du déployeur, échec. Chaque conteneur doit répondre en HTTP sur 8080, worker compris. |
 | 7 | Expansion des variables entre elles par la plateforme | **répondue** | **Non.** `P0_REF=ref=${P0_PASSWORD}/end` arrive littéralement dans le conteneur. L'expansion par le shim (§6.2) est nécessaire. |
+
+---
+
+## Phase 2 : les deux émetteurs
+
+*Sortie :* atteinte le 13/09/2026 (voir État courant).
+
+*Décidé :*
+
+- **Schéma du provider 2.1.0 embarqué** (`data/terraform-provider-schema.json`,
+  sortie de `terraform providers schema -json`, provenance dans
+  `data/PROVENANCE.md`) et relu par l'émetteur, qui vérifie chaque attribut
+  émis contre lui (`terraform-schema` en cas d'écart).
+- **Terraform en JSON natif** (`main.tf.json`, option évoquée au §10) :
+  aucune règle d'échappement HCL, validable par `terraform validate` ; le
+  rendu HCL par templating reste possible plus tard. Variables
+  `organisation`, `repository` (dépôt des branches `clever-compose/<service>`),
+  et une variable sensible par secret d'environnement ; les secrets fichier
+  passent par `file("${path.module}/…")`, jamais en littéral.
+- `networkgroups[].fqdn` requis par le provider et non auto-référençable :
+  alias `<service>.m.${ng.id}.cc-ng.cloud` posé (accepté par l'API, sans
+  effet DNS aujourd'hui, résolvable si axo#3168 aboutit) ; les références
+  d'environnement calculent le nom dérivé depuis les ids des autres
+  ressources. `redirection` est un bloc unique TCP : l'UDP et les tâches
+  (pas d'attribut Clever Task) produisent un avertissement.
+- **Table DNS restreinte aux services référencés** (`depends_on`, hôtes de
+  l'environnement) au lieu de tous les voisins de réseau : c'est ce qui rend
+  le graphe acyclique et l'apply Terraform possible en une passe (réponse
+  définitive à la question 2 de la phase 0). Un nom codé en dur dans une
+  image se déclare par `depends_on` ; référence mutuelle sans `depends_on` →
+  `mutual-reference`.
+- **Script clever-tools** : bash `set -euo pipefail`, `CC_ORG` requis,
+  groupes → apps → liaisons → variables (FQDN calculés
+  `${APP_x}.m.${NG_y}.cc-ng.cloud`) → redirections (`clever tcp-redirs add`,
+  UDP en commentaire faute de commande) → domaines → déploiements depuis
+  `repos/<service>`. Secrets : `$(cat <fichier>)` ou `${VAR:?}`.
+- **Dépôt synthétique** (`plan/sources.rs`, partagé avec l'exécuteur) :
+  `Dockerfile` (`FROM image`) ou `Dockerfile.cc` (Dockerfile de l'utilisateur
+  prolongé, `CC_DOCKERFILE`), `cc-shim.json`, `cc-shim` embarqué par
+  `build.rs` (`CC_SHIM_BIN` / `CC_SHIM_PATH` en développement), fichiers
+  copiés `cc-files/<i>`, résolution de `USER` en uid/gid par une étape `RUN`
+  avec la libc de l'image. Contexte de build copié sans `.git`.
+- Shim : abandon des privilèges entièrement dans `pre_exec` (setgroups,
+  setgid, setuid), parce que `Command::uid/gid` s'appliquent avant les
+  `pre_exec` et `CommandExt::groups` est instable. Vérifié : un service
+  `USER node` tourne en `node` avec ses groupes.
+
+*Questions ouvertes restantes :*
+
+- Rendu HCL lisible par templating depuis le JSON (confort, pas bloquant).
+- `deployment.repository` : Terraform attend que les branches
+  `clever-compose/<service>` soient poussées sur un dépôt de l'utilisateur
+  (§10) ; c'est l'exécuteur ou `export` qui les poussera (phase 3).
 
 ---
 

@@ -39,5 +39,17 @@ clever env set --app "$APP_wordpress" 'WORDPRESS_DB_PASSWORD' 'wordpress'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_USER' 'wordpress'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
-( cd repos/'db' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_db" )
-( cd repos/'wordpress' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_wordpress" )
+(
+  cd repos/'db'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_db"
+)
+(
+  cd repos/'wordpress'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_wordpress"
+)

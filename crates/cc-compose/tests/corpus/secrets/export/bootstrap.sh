@@ -23,8 +23,14 @@ clever ng link "$APP_app" 'secrets-default' -o "$ORG"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_app" 'CC_COMPOSE_SECRET_API_TOKEN' "${API_TOKEN:?variable API_TOKEN requise pour le secret api_token}"
-clever env set --app "$APP_app" 'CC_COMPOSE_SECRET_DB_PASSWORD' "$(cat './db_password.txt')"
+clever env set --app "$APP_app" 'CC_COMPOSE_SECRET_DB_PASSWORD' "$(cat '../db_password.txt')"
 clever env set --app "$APP_app" 'DB_PASSWORD_FILE' '/run/secrets/db_password'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
-( cd repos/'app' && git init -q -b main 2>/dev/null || true && git add -A && git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q -m 'clever-compose' || true && clever deploy --app "$APP_app" )
+(
+  cd repos/'app'
+  [ -d .git ] || git init -q -b main
+  git add -A
+  git -c user.name=clever-compose -c user.email=clever-compose@localhost commit -q --allow-empty -m 'clever-compose'
+  clever deploy --app "$APP_app"
+)
