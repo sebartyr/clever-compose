@@ -263,24 +263,68 @@ pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>,
     let mut files = sources::files(app, project_dir)?;
     if let Source::Context { context, .. } = &app.source {
         let root = project_dir.join(context.trim_start_matches("./"));
-        collect_tree(&root, &root, &mut files)?;
+        let ignore = DockerIgnore::load(&root)?;
+        collect_tree(&root, &root, &ignore, &mut files)?;
     }
     Ok(files)
 }
 
-fn collect_tree(root: &FsPath, dir: &FsPath, out: &mut Vec<sources::File>) -> Result<(), String> {
+/// `.dockerignore` du contexte : motifs glob (`*`, `**`, `?`), `!` pour
+/// réinclure, `#` commentaires ; la dernière règle qui correspond gagne.
+/// Toujours ignoré : `.git`.
+pub struct DockerIgnore {
+    rules: Vec<(globset::GlobMatcher, bool)>,
+}
+
+impl DockerIgnore {
+    pub fn load(root: &FsPath) -> Result<Self, String> {
+        let mut rules = Vec::new();
+        if let Ok(text) = std::fs::read_to_string(root.join(".dockerignore")) {
+            for line in text.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                let (negate, pat) = match line.strip_prefix('!') {
+                    Some(p) => (true, p),
+                    None => (false, line),
+                };
+                let pat = pat.trim_start_matches("./").trim_end_matches('/');
+                for candidate in [pat.to_string(), format!("{pat}/**")] {
+                    let g = globset::GlobBuilder::new(&candidate).literal_separator(true).build().map_err(|e| format!(".dockerignore : `{line}` : {e}"))?;
+                    rules.push((g.compile_matcher(), negate));
+                }
+            }
+        }
+        Ok(DockerIgnore { rules })
+    }
+
+    pub fn ignored(&self, rel: &str) -> bool {
+        if rel == ".git" || rel.starts_with(".git/") {
+            return true;
+        }
+        let mut ignored = false;
+        for (m, negate) in &self.rules {
+            if m.is_match(rel) {
+                ignored = !negate;
+            }
+        }
+        ignored
+    }
+}
+
+fn collect_tree(root: &FsPath, dir: &FsPath, ignore: &DockerIgnore, out: &mut Vec<sources::File>) -> Result<(), String> {
     let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(|e| format!("{} : {e}", dir.display()))?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
     for e in entries {
-        let name = e.file_name();
-        if name == ".git" {
-            continue;
-        }
         let path = e.path();
         let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        if ignore.ignored(&rel) {
+            continue;
+        }
         let ft = e.file_type().map_err(|x| x.to_string())?;
         if ft.is_dir() {
-            collect_tree(root, &path, out)?;
+            collect_tree(root, &path, ignore, out)?;
         } else if ft.is_file() && !out.iter().any(|f| f.path == rel) {
             #[cfg(unix)]
             let executable = {

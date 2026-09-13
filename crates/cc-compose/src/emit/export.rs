@@ -3,7 +3,7 @@
 
 use std::path::Path as FsPath;
 
-use cc_compose_model::plan::{Plan, Resource, Source};
+use cc_compose_model::plan::{Plan, Resource};
 
 use super::{script, terraform};
 use crate::diagnostic::{Diagnostic, Diagnostics};
@@ -60,12 +60,9 @@ pub fn write(plan: &Plan, project_dir: &FsPath, out_dir: &FsPath, what: &What, d
             let Resource::App(app) = r else { continue };
             let dir = out_dir.join("repos").join(&app.service);
             std::fs::create_dir_all(&dir).map_err(|e| io(&dir, e))?;
-            // Contexte de build de l'utilisateur, copié tel quel (sans .git).
-            if let Source::Context { context, .. } = &app.source {
-                let src = project_dir.join(context.trim_start_matches("./"));
-                copy_tree(&src, &dir).map_err(|e| Diagnostic::error("export-io", format!("{} : {e}", src.display())))?;
-            }
-            let files = sources::files(app, project_dir).map_err(|e| Diagnostic::error("export-sources", format!("{} : {e}", app.service)))?;
+            // Même contenu que ce que l'exécuteur pousse (contexte de build
+            // filtré par .dockerignore compris).
+            let files = repo_files(app, project_dir).map_err(|e| Diagnostic::error("export-sources", format!("{} : {e}", app.service)))?;
             for f in files {
                 let p = dir.join(&f.path);
                 if let Some(parent) = p.parent() {
@@ -83,23 +80,6 @@ pub fn write(plan: &Plan, project_dir: &FsPath, out_dir: &FsPath, what: &What, d
     Ok(())
 }
 
-fn copy_tree(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        if name == ".git" {
-            continue;
-        }
-        let target = dst.join(&name);
-        if entry.file_type()?.is_dir() {
-            std::fs::create_dir_all(&target)?;
-            copy_tree(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), &target)?;
-        }
-    }
-    Ok(())
-}
 
 /// Fichiers du dépôt synthétique, contexte de build compris.
 fn repo_files(app: &cc_compose_model::plan::App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
