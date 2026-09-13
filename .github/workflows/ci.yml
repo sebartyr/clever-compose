@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      # Le shim statique musl, embarqué dans la CLI par build.rs.
+      - run: cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl
+      - run: cargo build
+      # Différentiel sur les expected.yaml figés (docker inutile), golden
+      # files du plan et des exports, terraform validate sur les exports.
+      - run: cargo test
+        env:
+          TF_PLUGIN_CACHE_DIR: /tmp/tf-plugins
+      - run: cargo clippy --all-targets -- -D warnings
+        continue-on-error: true
