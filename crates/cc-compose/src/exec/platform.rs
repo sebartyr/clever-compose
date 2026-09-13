@@ -251,9 +251,11 @@ impl Platform for Api {
     }
 
     async fn set_env(&self, app: &str, env: &[EnvVar]) -> PResult<()> {
-        // PUT remplace tout l'environnement : c'est ce que la réconciliation
-        // veut (ce que le plan ne pose plus disparaît).
-        self.send(reqwest::Method::PUT, &format!("{}/env", self.app_path(app)), Some(&json!(env))).await?;
+        // PUT remplace tout l'environnement (objet nom → valeur, alors que le
+        // GET renvoie une liste) : c'est ce que la réconciliation veut, ce que
+        // le plan ne pose plus disparaît.
+        let body: serde_json::Map<String, J> = env.iter().map(|e| (e.name.clone(), J::String(e.value.clone()))).collect();
+        self.send(reqwest::Method::PUT, &format!("{}/env", self.app_path(app)), Some(&J::Object(body))).await?;
         Ok(())
     }
 

@@ -26,7 +26,12 @@ soumis à validation. **Phase 2 terminée le 13/09/2026** : `terraform
 validate` passe sur les exports du corpus (test `corpus_terraform_validates`,
 terraform 1.16.2 dans `~/.local/bin`), script de bootstrap relu sur
 WordPress, secrets, redirections et un projet `build:` (exécuté en local
-jusqu'au conteneur). **Phase 3 (exécuteur) à ouvrir.**
+jusqu'au conteneur). **Phase 3 terminée le 13/09/2026** : `clever-compose
+up` sur un compose à deux services (`ccp3`, Test SBRUNAT) déployé, puis
+redéployé sans changement avec les deux push sautés. **Phase 4 terminée le
+13/09/2026** : WordPress (`ccwp`, Test SBRUNAT) fonctionne sans modification
+du fichier source (`--allow-ephemeral` en option), MariaDB jointe par le
+FQDN du membre. **Phase 5 (addons) à ouvrir.**
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
@@ -66,6 +71,63 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 | 5 | Résolution `cc-ng.cloud` en `--net host`, `resolv.conf` modifiable ? | **répondue** | Oui, via le résolveur de la VM (`nameserver 10.2.0.1`, puis `1.1.1.1`, `search .`). Zone privée, pas résolvable depuis l'extérieur. `resolv.conf` est un bind mount : **réécrivable en place, pas remplaçable** (`rm` refusé). |
 | 6 | Workers sans port : critère de succès du déploiement | **répondue** | Le déployeur fait un **GET HTTP sur 8080** et accepte tout code 200 à 500. Sans écoute : échec après 4 min. Réponse non HTTP : plantage du déployeur, échec. Chaque conteneur doit répondre en HTTP sur 8080, worker compris. |
 | 7 | Expansion des variables entre elles par la plateforme | **répondue** | **Non.** `P0_REF=ref=${P0_PASSWORD}/end` arrive littéralement dans le conteneur. L'expansion par le shim (§6.2) est nécessaire. |
+
+---
+
+## Phase 3 : exécuteur et tags
+
+*Sortie :* atteinte le 13/09/2026 (voir État courant).
+
+*Décidé :*
+
+- **Identifiants propres à l'outil** : `CC_API_TOKEN` (bearer, api-bridge)
+  ou `CLEVER_TOKEN` + `CLEVER_SECRET` (OAuth 1.0, `CLEVER_CONSUMER_KEY/SECRET`
+  optionnels, défauts publics de clever-tools). Jamais de lecture du fichier
+  de clever-tools. Pour les tests, exporter les valeurs du profil dans
+  l'environnement.
+- **`Platform`**, trait de l'exécuteur ; implémentation `Api` sur le client
+  signé du SDK Rust (`Request::execute` pour les réponses sans corps).
+  Routes appelées directement, à contribuer au SDK : `GET/POST
+  /v2/organisations/{o}/applications`, `PUT .../applications/{id}` (scaling),
+  `GET/PUT .../tags`, `GET .../env` (liste) et `PUT .../env` (**objet nom →
+  valeur**, pas la liste : 400 sinon), `GET/PUT .../vhosts/{fqdn}`,
+  `GET/POST .../tcpRedirs` et `udpRedirs`, `POST .../instances`
+  (redéploiement), `GET .../deployments?limit=1` (`id` numérique, `uuid`,
+  `state` WIP/OK/FAIL), `GET /v2/products/instances` (version et variante
+  Docker, relues, jamais codées), `GET/POST /v4/networkgroups/...` (création
+  sans corps de réponse).
+- **Réconciliation sans état** : network group retrouvé par label,
+  application par nom puis confirmée par le tag `compose-project=<projet>`
+  (refus de toucher une application homonyme sans ce tag), scaling comparé,
+  tags posés, liaison si absente, **environnement comparé à l'existant et
+  remplacé seulement s'il change** (ce qui décide du redémarrage),
+  redirections et domaines par présence.
+- **Dépôts synthétiques avec `git2`** (gitoxide n'a pas de push) : commit
+  déterministe (auteur `clever-compose`, date 0, index trié), push HTTPS
+  forcé sur `master` avec `token:secret` en basic (ce que fait clever-tools
+  sur `deployment.httpUrl`) ; `ls-remote` avant : même commit ⇒ push sauté.
+- Déploiements dans l'ordre topologique du plan, attente du succès
+  (`OK`) ou échec (`FAIL`, `CANCELLED`), 30 min max ; redéploiement
+  explicite si seul l'environnement a changé ou si l'application n'a jamais
+  été déployée.
+
+*Questions ouvertes restantes :*
+
+- Le contexte de build est entièrement lu en mémoire ; pas de
+  `.dockerignore`.
+- `down` (suppression par tags) n'existe pas encore.
+
+## Phase 4 : network groups et DNS
+
+*Sortie :* atteinte le 13/09/2026 (voir État courant). WordPress joint
+MariaDB via `WORDPRESS_DB_HOST` réécrit en FQDN de membre ; aucune
+modification du fichier source ; page d'installation servie.
+
+*Décidé :*
+
+- Le stub DNS du shim (§8) reste **non écrit** : aucun cas du corpus
+  n'échoue encore sur un nom codé en dur (règle « que ce soit un test qui le
+  dise »). La table `CC_COMPOSE_DNS_MAP` est posée et prête pour lui.
 
 ---
 
