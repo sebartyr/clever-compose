@@ -1,0 +1,63 @@
+name: refusals
+services:
+  bad:
+    cap_add:
+      - SYS_ADMIN
+    command:
+      - sleep
+      - infinity
+    container_name: fixed
+    devices:
+      - source: /dev/snd
+        target: /dev/snd
+        permissions: rwm
+    environment:
+      CC_DOCKER_EXPOSED_HTTP_PORT: "9000"
+      PLAIN: value
+    image: busybox:1.36
+    logging:
+      driver: json-file
+    network_mode: host
+    privileged: true
+    restart: 'no'
+    sysctls:
+      net.core.somaxconn: "1024"
+    volumes:
+      - type: bind
+        source: /data
+        target: /data
+        bind: {}
+      - type: volume
+        source: named
+        target: /var/lib/data
+        volume: {}
+    x-clever:
+      bogus: true
+      flavor: nope
+    x-unknown: 1
+  migrate:
+    command:
+      - echo
+      - migrated
+    image: busybox:1.36
+    networks:
+      default: null
+  worker:
+    command:
+      - sleep
+      - infinity
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        required: true
+    image: busybox:1.36
+    networks:
+      default: null
+networks:
+  default:
+    name: default
+    driver: overlay
+    external: true
+volumes:
+  named:
+    name: refusals_named

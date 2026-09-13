@@ -64,7 +64,7 @@ fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic,
 
     let config = Config { working_dir: working_dir.clone(), files: paths, env: env.clone() };
     let tree = {
-        let mut loader = Loader::new(&mut files);
+        let mut loader = Loader::new(&mut files, working_dir.clone());
         loader.load_model(&config, &[])
     }
     .map_err(|d| fail(d, &files))?;

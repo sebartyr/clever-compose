@@ -42,12 +42,12 @@ pub fn validate(tree: &Node) -> Result<(), Diagnostic> {
     Err(d)
 }
 
-fn find_span(node: &Node, segments: &[String]) -> Option<super::node::Span> {
+pub fn find_span(node: &Node, segments: &[String]) -> Option<super::node::Span> {
     let mut cur = node;
     for seg in segments {
         cur = match &cur.value {
             super::node::Value::Map(m) => m.get(seg)?,
-            super::node::Value::Seq(s) => s.get(seg.parse::<usize>().ok()?)?,
+            super::node::Value::Seq(s) => s.get(seg.trim_matches(['[', ']']).parse::<usize>().ok()?)?,
             _ => return None,
         };
     }

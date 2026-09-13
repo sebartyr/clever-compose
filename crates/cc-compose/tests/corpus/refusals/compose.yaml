@@ -1,0 +1,40 @@
+services:
+  bad:
+    image: busybox:1.36
+    command: sleep infinity
+    privileged: true
+    cap_add: [SYS_ADMIN]
+    devices:
+      - /dev/snd:/dev/snd
+    network_mode: host
+    sysctls:
+      net.core.somaxconn: 1024
+    container_name: fixed
+    restart: "no"
+    logging:
+      driver: json-file
+    environment:
+      CC_DOCKER_EXPOSED_HTTP_PORT: "9000"
+      PLAIN: value
+    volumes:
+      - /data:/data
+      - named:/var/lib/data
+    x-unknown: 1
+    x-clever:
+      flavor: nope
+      bogus: true
+  worker:
+    image: busybox:1.36
+    command: sleep infinity
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  migrate:
+    image: busybox:1.36
+    command: echo migrated
+volumes:
+  named: {}
+networks:
+  default:
+    driver: overlay
+    external: true

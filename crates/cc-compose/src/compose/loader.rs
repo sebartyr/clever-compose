@@ -24,6 +24,8 @@ pub struct Config {
 
 pub struct Loader<'a> {
     pub files: &'a mut Files,
+    /// Répertoire du projet, pour afficher les fichiers relativement.
+    root: PathBuf,
     /// Bases `extends` déjà chargées, par fichier.
     extends_cache: HashMap<PathBuf, IndexMap<String, Node>>,
 }
@@ -31,8 +33,8 @@ pub struct Loader<'a> {
 type LoadResult<T> = Result<T, Diagnostic>;
 
 impl<'a> Loader<'a> {
-    pub fn new(files: &'a mut Files) -> Self {
-        Loader { files, extends_cache: HashMap::new() }
+    pub fn new(files: &'a mut Files, root: PathBuf) -> Self {
+        Loader { files, root, extends_cache: HashMap::new() }
     }
 
     /// `loadYamlModel` : tous les fichiers de `config`, fusionnés.
@@ -68,7 +70,7 @@ impl<'a> Loader<'a> {
     }
 
     fn read_and_interpolate(&mut self, file: &FsPath, env: &Vars) -> LoadResult<(Node, usize)> {
-        let display = file.display().to_string();
+        let display = file.strip_prefix(&self.root).unwrap_or(file).display().to_string();
         let idx = self.files.add(display.clone());
         let source = std::fs::read_to_string(file).map_err(|e| Diagnostic::error("file-unreadable", format!("{display} : {e}")))?;
         let raw = yaml::load(&source, idx).map_err(|e| Diagnostic::error("yaml-invalid", format!("{display} : {e}")))?;

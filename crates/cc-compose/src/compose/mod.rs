@@ -10,6 +10,7 @@ pub mod envfile;
 pub mod interpolate;
 pub mod loader;
 pub mod merge;
+pub mod model;
 pub mod node;
 pub mod normalize;
 pub mod paths;

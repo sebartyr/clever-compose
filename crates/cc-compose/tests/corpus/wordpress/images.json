@@ -1,0 +1,16 @@
+{
+  "mariadb:10.6.4-focal": {
+    "entrypoint": ["docker-entrypoint.sh"],
+    "cmd": ["mysqld"],
+    "user": null,
+    "workdir": null,
+    "exposed_ports": [3306]
+  },
+  "wordpress:latest": {
+    "entrypoint": ["docker-entrypoint.sh"],
+    "cmd": ["apache2-foreground"],
+    "user": null,
+    "workdir": "/var/www/html",
+    "exposed_ports": [80]
+  }
+}

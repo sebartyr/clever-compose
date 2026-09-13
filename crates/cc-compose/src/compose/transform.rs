@@ -241,17 +241,14 @@ fn device_mapping(node: Node, p: &Path) -> Result<Node, Diagnostic> {
         Value::Str(s) => {
             let parts: Vec<&str> = s.split(':').collect();
             let span = node.span;
-            let mut entries = vec![("source", str_node(span, parts[0]))];
-            match parts.len() {
-                1 => entries.push(("target", str_node(span, parts[0]))),
-                2 => entries.push(("target", str_node(span, parts[1]))),
-                3 => {
-                    entries.push(("target", str_node(span, parts[1])));
-                    entries.push(("permissions", str_node(span, parts[2])));
-                }
-                _ => return Err(Diagnostic::error("device-invalid", format!("{p} : device invalide `{s}`")).at(p, span)),
-            }
-            Ok(map_node(span, entries))
+            let (src, dst, permissions) = match parts.len() {
+                1 => (parts[0], parts[0], "rwm"),
+                2 => (parts[0], parts[1], "rwm"),
+                3 => (parts[0], parts[1], parts[2]),
+                _ => return Err(Diagnostic::error("device-invalid", format!("{p} : device invalide `{s}`, utilisez la syntaxe longue")).at(p, span)),
+            };
+            let dst = if dst.is_empty() { src } else { dst };
+            Ok(map_node(span, vec![("source", str_node(span, src)), ("target", str_node(span, dst)), ("permissions", str_node(span, permissions))]))
         }
         _ => Err(Diagnostic::error("device-invalid", format!("{p} : type invalide pour device")).at(p, node.span)),
     }

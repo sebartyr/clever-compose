@@ -4,4 +4,5 @@
 //! restent frugales. Le plan intermédiaire viendra ici en phase 1 ; si l'arbre
 //! grossit, scinder en `model-core` (ce que le shim lit) et `model-plan`.
 
+pub mod plan;
 pub mod shim;

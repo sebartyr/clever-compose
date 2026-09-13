@@ -1,0 +1,56 @@
+{
+  "type": "docker",
+  "version": "20260818",
+  "maxInstances": 40,
+  "defaultFlavor": "XS",
+  "flavors": [
+    {
+      "name": "nano",
+      "memoryBytes": 536870912,
+      "cpus": 1,
+      "microservice": true
+    },
+    {
+      "name": "XS",
+      "memoryBytes": 1073741824,
+      "cpus": 1,
+      "microservice": false
+    },
+    {
+      "name": "S",
+      "memoryBytes": 2147483648,
+      "cpus": 2,
+      "microservice": false
+    },
+    {
+      "name": "M",
+      "memoryBytes": 4294967296,
+      "cpus": 4,
+      "microservice": false
+    },
+    {
+      "name": "L",
+      "memoryBytes": 8589934592,
+      "cpus": 6,
+      "microservice": false
+    },
+    {
+      "name": "XL",
+      "memoryBytes": 17179869184,
+      "cpus": 8,
+      "microservice": false
+    },
+    {
+      "name": "2XL",
+      "memoryBytes": 25769803776,
+      "cpus": 12,
+      "microservice": false
+    },
+    {
+      "name": "3XL",
+      "memoryBytes": 34359738368,
+      "cpus": 16,
+      "microservice": false
+    }
+  ]
+}

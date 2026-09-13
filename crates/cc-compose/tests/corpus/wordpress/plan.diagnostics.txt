@@ -1,0 +1,2 @@
+compose.yaml:4:5: avertissement [port-assumed-tcp] services.db: `db` : le port 3306 est supposé non HTTP ; il sera joignable dans le network group, et le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` pour l'exposer publiquement
+compose.yaml:9:9: avertissement [volume-ephemeral] services.db.volumes[0]: le volume `db_data` monté sur `/var/lib/mysql` sera éphémère : les données sont perdues à chaque redéploiement
