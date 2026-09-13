@@ -127,6 +127,10 @@ pub enum Source {
         /// dans le plan.
         private_registry: bool,
         files: Vec<CopiedFile>,
+        /// Fichiers écrits par clever-compose lui-même (scripts d'une tâche
+        /// d'initialisation), contenu dans le plan.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        generated: Vec<GeneratedFile>,
     },
     /// Contexte de build de l'utilisateur, poussé tel quel avec le shim
     /// ajouté par une étape finale.
@@ -138,6 +142,15 @@ pub enum Source {
         dockerfile: String,
         files: Vec<CopiedFile>,
     },
+}
+
+/// Fichier généré, figé dans l'image.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GeneratedFile {
+    pub target: String,
+    pub content: String,
+    #[serde(default)]
+    pub executable: bool,
 }
 
 /// Fichier de l'utilisateur figé dans l'image (bind mount d'un fichier).

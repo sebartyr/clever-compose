@@ -1,0 +1,247 @@
+{
+  "project": "init-scripts",
+  "spec_hash": "03540be59232bd165adc912500eccfb6",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "init-scripts-default",
+      "tags": [
+        "compose-project=init-scripts",
+        "compose-network=default",
+        "compose-spec=03540be59232bd165adc912500eccfb6"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/db",
+      "service": "db",
+      "name": "init-scripts-db",
+      "provider": "postgresql-addon",
+      "plan": "dev",
+      "region": "par",
+      "version": "16",
+      "tags": [
+        "compose-project=init-scripts",
+        "compose-service=db",
+        "compose-spec=03540be59232bd165adc912500eccfb6"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/db-init",
+      "service": "db-init",
+      "name": "init-scripts-db-init",
+      "kind": "task",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "postgres:16",
+        "private_registry": false,
+        "files": [
+          {
+            "source": "./initdb/01-schema.sql",
+            "target": "/cc-init/01-schema.sql",
+            "read_only": true
+          },
+          {
+            "source": "./initdb/02-data.sql",
+            "target": "/cc-init/02-data.sql",
+            "read_only": true
+          }
+        ],
+        "generated": [
+          {
+            "target": "/cc-init.sh",
+            "content": "#!/bin/sh\n# Généré par clever-compose : rejoue les scripts d'initialisation contre\n# l'addon, une fois par contenu (table témoin cc_compose_init).\nset -eu\nexport PGPASSWORD=\"$POSTGRESQL_ADDON_PASSWORD\"\nPSQL=\"psql -v ON_ERROR_STOP=1 -h $POSTGRESQL_ADDON_HOST -p $POSTGRESQL_ADDON_PORT -U $POSTGRESQL_ADDON_USER -d $POSTGRESQL_ADDON_DB\"\n$PSQL -qtAc \"CREATE TABLE IF NOT EXISTS cc_compose_init (hash text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())\"\nif [ \"$($PSQL -qtAc \"SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INIT_HASH'\")\" = \"1\" ]; then\n  echo \"cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)\"\n  exit 0\nfi\n# Variables des images officielles, pour les scripts .sh qui les lisent.\nexport POSTGRES_USER=\"$POSTGRESQL_ADDON_USER\" POSTGRES_PASSWORD=\"$POSTGRESQL_ADDON_PASSWORD\" POSTGRES_DB=\"$POSTGRESQL_ADDON_DB\" PGHOST=\"$POSTGRESQL_ADDON_HOST\" PGPORT=\"$POSTGRESQL_ADDON_PORT\" PGUSER=\"$POSTGRESQL_ADDON_USER\" PGDATABASE=\"$POSTGRESQL_ADDON_DB\"\nfor f in /cc-init/*; do\n  case \"$f\" in\n    *.sh)     echo \"cc-compose init : $f\"; sh \"$f\" ;;\n    *.sql)    echo \"cc-compose init : $f\"; $PSQL -f \"$f\" ;;\n    *.sql.gz) echo \"cc-compose init : $f\"; gunzip -c \"$f\" | $PSQL ;;\n    *)        echo \"cc-compose init : $f ignoré\" ;;\n  esac\ndone\n$PSQL -qtAc \"INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')\"\necho \"cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)\"\n",
+            "executable": true
+          }
+        ]
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "postgres"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          5432
+        ]
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "/cc-init.sh"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_INIT_HASH",
+          "value": [
+            {
+              "literal": "58d214e86fa675d00c5603cc537d6ae5"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/db"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=init-scripts",
+        "compose-service=db",
+        "compose-spec=03540be59232bd165adc912500eccfb6"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/api",
+      "service": "api",
+      "name": "init-scripts-api",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "busybox:1.36",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [],
+        "cmd": [
+          "sh"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": []
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "-c",
+          "while true; do sleep 30; done"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "DATABASE_URL,DB_PASSWORD"
+            }
+          ]
+        },
+        {
+          "key": "DATABASE_URL",
+          "value": [
+            {
+              "literal": "postgres://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            },
+            {
+              "literal": "@"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_HOST"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PORT"
+              }
+            },
+            {
+              "literal": "/"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
+            },
+            {
+              "literal": "?sslmode=disable"
+            }
+          ]
+        },
+        {
+          "key": "DB_PASSWORD",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/db",
+        "app/db-init"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=init-scripts",
+        "compose-service=api",
+        "compose-spec=03540be59232bd165adc912500eccfb6"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/api@default",
+      "member": "app/api",
+      "group": "ng/default",
+      "aliases": [
+        "api"
+      ]
+    }
+  ]
+}

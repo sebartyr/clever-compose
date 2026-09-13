@@ -40,6 +40,10 @@ pub const CONTEXT_DOCKERFILE: &str = "Dockerfile.cc";
 /// configuration, l'entrypoint.
 pub fn dockerfile(app: &App, project_dir: &FsPath) -> Result<String, String> {
     let mut out = String::new();
+    let generated: &[cc_compose_model::plan::GeneratedFile] = match &app.source {
+        Source::Synthetic { generated, .. } => generated,
+        _ => &[],
+    };
     let files = match &app.source {
         Source::Synthetic { image, files, .. } => {
             out.push_str("# Généré par clever-compose ; ne pas éditer.\n");
@@ -59,6 +63,9 @@ pub fn dockerfile(app: &App, project_dir: &FsPath) -> Result<String, String> {
     };
     for (i, f) in files.iter().enumerate() {
         out.push_str(&format!("COPY cc-files/{i} {}\n", f.target));
+    }
+    for (i, g) in generated.iter().enumerate() {
+        out.push_str(&format!("COPY cc-generated/{i} {}\n", g.target));
     }
     out.push_str("USER root\n");
     if let Some(user) = &app.shim.user {
@@ -100,6 +107,11 @@ pub fn files(app: &App, project_dir: &FsPath) -> Result<Vec<File>, String> {
         let abs = project_dir.join(f.source.trim_start_matches("./"));
         let content = std::fs::read(&abs).map_err(|e| format!("{} : {e}", abs.display()))?;
         out.push(File { path: format!("cc-files/{i}"), content, executable: false });
+    }
+    if let Source::Synthetic { generated, .. } = &app.source {
+        for (i, g) in generated.iter().enumerate() {
+            out.push(File { path: format!("cc-generated/{i}"), content: g.content.clone().into_bytes(), executable: g.executable });
+        }
     }
     Ok(out)
 }

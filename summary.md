@@ -33,8 +33,10 @@ redéployé sans changement avec les deux push sautés. **Phase 4 terminée le
 du fichier source (`--allow-ephemeral` en option), MariaDB jointe par le
 FQDN du membre. **Phase 5 : 5a, 5b et 5d faites le 13/09/2026** (WordPress
 `ccwpa` sur un addon MySQL `dev`, identifiants jamais dans la configuration,
-expansés par le shim) ; **5c (scripts d'init, `seed`) reste à faire**,
-diagnostiquée comme erreur en attendant.
+expansés par le shim). **5c faite le 13/09/2026** : tâche d'initialisation
+et `seed` vérifiées sur `ccinit` (PostgreSQL 16 `dev`). **Toutes les phases
+du cadrage sont passées ; validation sur cas concrets à faire par le
+propriétaire.**
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
@@ -127,10 +129,24 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   et `dependencies` sur l'application (validé) ; script `clever addon
   create` + `clever service link-addon`.
 
+- **5c, scripts d'initialisation et reprise** (`plan/initdb.rs`) : les
+  fichiers montés sur `/docker-entrypoint-initdb.d` (fichier ou répertoire,
+  `.sql`, `.sql.gz`, `.sh`, ordre alphabétique) deviennent une Clever Task
+  `<service>-init` (image `postgres:<version>` ou `mysql:<version>` pour le
+  client, scripts copiés dans `/cc-init`, script d'exécution généré dans le
+  plan, `Source::Synthetic.generated`). Table témoin `cc_compose_init`
+  (hash du contenu) : rejoué seulement si le contenu change ; les
+  consommateurs dépendent de la tâche. Vérifié : deux scripts appliqués,
+  redéploiement forcé → « déjà appliqués », `up` suivant sans push.
+  `clever-compose seed --service db --file dump.sql` : même tâche
+  (`<service>-seed`) avec le dump, même témoin. Une tâche est un déploiement
+  `OK` quand son processus sort en 0 (rubydeployer `run_app` sans contrôle
+  de santé).
+
 *Questions ouvertes restantes :*
 
-- **5c** : tâche d'exécution des scripts `/docker-entrypoint-initdb.d` avec
-  table témoin, et `clever-compose seed`.
+- Scripts d'initialisation pour Redis, MongoDB, Elasticsearch : non
+  supportés (erreur explicite).
 - Latence du proxy / hôte direct (§6.4) : non proposé.
 - Noms des variables injectées pour Redis (`REDIS_HOST`, `REDIS_PORT`,
   `REDIS_PASSWORD`, `REDIS_URL`), MongoDB et Elasticsearch : à confirmer sur

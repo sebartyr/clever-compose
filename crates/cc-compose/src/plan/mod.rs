@@ -11,6 +11,7 @@ pub mod cli;
 pub mod env;
 pub mod flavors;
 pub mod images;
+pub mod initdb;
 pub mod policy;
 pub mod registry;
 pub mod sources;
@@ -151,6 +152,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
 
     let catalog = addons::catalog();
     let mut addon_plans: IndexMap<String, addons::PlanInfo> = IndexMap::new();
+    let mut init_tasks: Vec<App> = Vec::new();
     for (name, (rec, declared)) in &addon_infos {
         let s = &project.services[name];
         let p = Path::root().child("services").child(name);
@@ -197,10 +199,22 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
                 diags.push(Diagnostic::error("addon-multiple-databases", format!("`{name}` : `{k}` demande plusieurs bases dans une instance ; un addon n'en sert qu'une. Déclarez un service par base")).with_path(&p.child("environment").child(k)));
             }
         }
-        for (i, v) in s.volumes.iter().enumerate() {
-            if v.target.starts_with("/docker-entrypoint-initdb.d") {
-                diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : les scripts d'initialisation montés sur `{}` ne s'exécutent pas sur un addon ; l'exécution par une tâche (phase 5c) n'est pas encore disponible", v.target)).with_path(&p.child("volumes").index(i)));
-            }
+        // Scripts d'initialisation (§6.3) : rejoués par une tâche.
+        let display = |path: &str| ctx.display(path);
+        match initdb::collect(s, ctx.project_dir, &display) {
+            Err(e) => diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : {e}")).with_path(&p.child("volumes"))),
+            Ok(scripts) if scripts.is_empty() => {}
+            Ok(scripts) => match initdb::runner(rec, version.as_deref()) {
+                None => diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : scripts d'initialisation non supportés pour {}", rec.provider)).with_path(&p.child("volumes"))),
+                Some((image, script)) => match (initdb::hash(&scripts, ctx.project_dir), ctx.images.resolve(&image)) {
+                    (Err(e), _) => diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : {e}")).with_path(&p.child("volumes"))),
+                    (_, Err(e)) => diags.push(Diagnostic::error("image-unresolved", format!("{name}-init : image `{image}` : {e}")).with_path(&p.child("volumes"))),
+                    (Ok(h), Ok(intr)) => {
+                        diags.push(Diagnostic::warning("addon-init-task", format!("`{name}` : {} script(s) d'initialisation rejoués contre l'addon par la tâche `{name}-init` (une fois par contenu, table témoin `cc_compose_init`) : {}", scripts.len(), scripts.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", "))).with_path(&p.child("volumes")));
+                        init_tasks.push(initdb::task(&project.name, name, rec, version.as_deref(), &scripts, &h, &region, tags(name), intr, image, script));
+                    }
+                },
+            },
         }
         if declared.root_password.is_some() && declared.user.is_none() {
             diags.push(Diagnostic::warning("addon-no-superuser", format!("`{name}` : seul un mot de passe root est déclaré ; l'addon fournit un utilisateur sans superuser (pas de `CREATE EXTENSION` non autorisée, pas de création de base au démarrage)")).with_path(&p));
@@ -223,6 +237,8 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
 
     let mut ok = true;
     let mut apps: Vec<App> = Vec::new();
+    let init_task_of: IndexMap<String, String> = init_tasks.iter().map(|t| (t.service.trim_end_matches("-init").to_string(), t.service.clone())).collect();
+    apps.extend(init_tasks);
     for (name, s) in &project.services {
         if addons.contains_key(name) {
             continue;
@@ -234,6 +250,9 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             Some((app, redirections)) => {
                 let mut app = app;
                 app.tags = tags(name);
+                // Un consommateur attend la tâche d'initialisation de l'addon.
+                let extra: Vec<ResourceId> = app.depends_on.iter().filter_map(|d| d.0.strip_prefix("addon/")).filter_map(|a| init_task_of.get(a)).map(|t| ResourceId(format!("app/{t}"))).collect();
+                app.depends_on.extend(extra);
                 apps.push(app);
                 resources.extend(redirections.into_iter().map(Resource::Redirection));
             }
@@ -326,7 +345,7 @@ fn plan_service(
                 }
             };
             let private_registry = !images::is_public_registry(image);
-            (Source::Synthetic { image: image.clone(), private_registry, files: Vec::new() }, intr)
+            (Source::Synthetic { image: image.clone(), private_registry, files: Vec::new(), generated: Vec::new() }, intr)
         }
         (None, None) => {
             diags.push(Diagnostic::error("no-image", format!("le service `{name}` n'a ni `image` ni `build`")).with_path(p));
@@ -368,7 +387,7 @@ fn plan_service(
         }
     }
     let source = match source {
-        Source::Synthetic { image, private_registry, .. } => Source::Synthetic { image, private_registry, files },
+        Source::Synthetic { image, private_registry, generated, .. } => Source::Synthetic { image, private_registry, files, generated },
         Source::Context { context, dockerfile, .. } => Source::Context { context, dockerfile, files },
     };
 

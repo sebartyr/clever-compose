@@ -11,6 +11,7 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose images --project-directory DIR");
     eprintln!("        clever-compose export [terraform|script|all] -o DIR [options de plan]");
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
+    eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
@@ -21,7 +22,34 @@ fn main() -> ExitCode {
         Some("config") => config(&args[1..], false),
         Some("plan") => config(&args[1..], true),
         Some("export") => export(&args[1..]),
-        Some("up") => up(&args[1..]),
+        Some("up") => up(&args[1..], None),
+        Some("seed") => {
+            // clever-compose seed --service SVC --file DUMP [options de up]
+            let mut rest: Vec<String> = Vec::new();
+            let (mut service, mut file) = (None, None);
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--service" => {
+                        i += 1;
+                        service = args.get(i).cloned();
+                    }
+                    "--file" => {
+                        i += 1;
+                        file = args.get(i).map(PathBuf::from);
+                    }
+                    other => rest.push(other.to_string()),
+                }
+                i += 1;
+            }
+            match (service, file) {
+                (Some(s), Some(f)) => up(&rest, Some((s, f))),
+                _ => {
+                    eprintln!("clever-compose seed : --service SVC et --file DUMP sont requis");
+                    ExitCode::from(2)
+                }
+            }
+        }
         Some("images") => images(&args[1..]),
         _ => usage(),
     }
@@ -63,7 +91,7 @@ fn images(args: &[String]) -> ExitCode {
     }
 }
 
-fn up(args: &[String]) -> ExitCode {
+fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let mut rest: Vec<String> = Vec::new();
     let mut org: Option<String> = std::env::var("CC_ORG").ok();
     let mut dry_run = false;
@@ -127,6 +155,16 @@ fn up(args: &[String]) -> ExitCode {
     if diags.has_errors() {
         return ExitCode::from(1);
     }
+    let plan = match &seed {
+        None => plan,
+        Some((service, file)) => match cc_compose::plan::initdb::seed_plan(&plan, service, file, &project_dir, resolver.as_ref()) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("seed : {e}");
+                return ExitCode::from(1);
+            }
+        },
+    };
     let api = cc_compose::exec::platform::Api::new(org, creds);
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));

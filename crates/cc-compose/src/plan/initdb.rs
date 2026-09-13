@@ -1,0 +1,188 @@
+//! Scripts d'initialisation et reprise de données (CLAUDE.md §6.3, phase
+//! 5c) : les fichiers montés sur `/docker-entrypoint-initdb.d` d'un service
+//! substitué s'exécutent contre l'addon par une Clever Task, une seule fois
+//! par contenu grâce à une table témoin (`cc_compose_init`, hash des
+//! scripts). Même mécanique pour `seed` avec un dump local.
+
+use std::path::Path as FsPath;
+
+use cc_compose_model::plan::*;
+use cc_compose_model::shim::{PlatformPort, ShimConfig};
+
+use super::addons::Recognized;
+
+/// Un script à rejouer, dans l'ordre alphabétique de l'image officielle.
+#[derive(Debug, Clone)]
+pub struct Script {
+    pub name: String,
+    /// Chemin sur le poste, relatif au projet.
+    pub source: String,
+}
+
+/// Scripts d'un service : fichiers montés (un fichier ou un répertoire)
+/// vers `/docker-entrypoint-initdb.d`, triés par nom.
+pub fn collect(service: &crate::compose::model::Service, _project_dir: &FsPath, display: &dyn Fn(&str) -> String) -> Result<Vec<Script>, String> {
+    let mut scripts: Vec<Script> = Vec::new();
+    for v in &service.volumes {
+        if v.kind != "bind" || !v.target.starts_with("/docker-entrypoint-initdb.d") {
+            continue;
+        }
+        let src = v.source.clone().unwrap_or_default();
+        let meta = std::fs::metadata(&src).map_err(|_| format!("le chemin `{}` monté vers `{}` n'existe pas sur ce poste", display(&src), v.target))?;
+        if meta.is_file() {
+            let name = FsPath::new(&v.target).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| FsPath::new(&src).file_name().unwrap().to_string_lossy().to_string());
+            scripts.push(Script { name, source: display(&src) });
+        } else {
+            let mut entries: Vec<_> = std::fs::read_dir(&src).map_err(|e| format!("{} : {e}", display(&src)))?.filter_map(|e| e.ok()).filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false)).collect();
+            entries.sort_by_key(|e| e.file_name());
+            for e in entries {
+                let name = e.file_name().to_string_lossy().to_string();
+                if !(name.ends_with(".sql") || name.ends_with(".sql.gz") || name.ends_with(".sh")) {
+                    continue;
+                }
+                scripts.push(Script { name, source: display(&e.path().to_string_lossy()) });
+            }
+        }
+    }
+    scripts.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(scripts)
+}
+
+/// Empreinte du contenu des scripts (ce qui décide de rejouer).
+pub fn hash(scripts: &[Script], project_dir: &FsPath) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for s in scripts {
+        let p = project_dir.join(s.source.trim_start_matches("./"));
+        h.update(s.name.as_bytes());
+        h.update([0]);
+        h.update(std::fs::read(&p).map_err(|e| format!("{} : {e}", p.display()))?);
+        h.update([0]);
+    }
+    Ok(h.finalize().iter().take(16).map(|b| format!("{b:02x}")).collect())
+}
+
+/// Image et script d'exécution selon le fournisseur.
+pub fn runner(rec: &Recognized, version: Option<&str>) -> Option<(String, String)> {
+    match rec.provider {
+        "postgresql-addon" => Some((format!("postgres:{}", version.unwrap_or("17")), POSTGRES_RUNNER.to_string())),
+        "mysql-addon" => Some((format!("mysql:{}", version.unwrap_or("8.4")), MYSQL_RUNNER.to_string())),
+        _ => None,
+    }
+}
+
+const POSTGRES_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : rejoue les scripts d'initialisation contre
+# l'addon, une fois par contenu (table témoin cc_compose_init).
+set -eu
+export PGPASSWORD="$POSTGRESQL_ADDON_PASSWORD"
+PSQL="psql -v ON_ERROR_STOP=1 -h $POSTGRESQL_ADDON_HOST -p $POSTGRESQL_ADDON_PORT -U $POSTGRESQL_ADDON_USER -d $POSTGRESQL_ADDON_DB"
+$PSQL -qtAc "CREATE TABLE IF NOT EXISTS cc_compose_init (hash text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+if [ "$($PSQL -qtAc "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INIT_HASH'")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+# Variables des images officielles, pour les scripts .sh qui les lisent.
+export POSTGRES_USER="$POSTGRESQL_ADDON_USER" POSTGRES_PASSWORD="$POSTGRESQL_ADDON_PASSWORD" POSTGRES_DB="$POSTGRESQL_ADDON_DB" PGHOST="$POSTGRESQL_ADDON_HOST" PGPORT="$POSTGRESQL_ADDON_PORT" PGUSER="$POSTGRESQL_ADDON_USER" PGDATABASE="$POSTGRESQL_ADDON_DB"
+for f in /cc-init/*; do
+  case "$f" in
+    *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
+    *.sql)    echo "cc-compose init : $f"; $PSQL -f "$f" ;;
+    *.sql.gz) echo "cc-compose init : $f"; gunzip -c "$f" | $PSQL ;;
+    *)        echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$PSQL -qtAc "INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')"
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
+const MYSQL_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : rejoue les scripts d'initialisation contre
+# l'addon, une fois par contenu (table témoin cc_compose_init).
+set -eu
+export MYSQL_PWD="$MYSQL_ADDON_PASSWORD"
+MYSQL="mysql -h $MYSQL_ADDON_HOST -P $MYSQL_ADDON_PORT -u $MYSQL_ADDON_USER $MYSQL_ADDON_DB"
+$MYSQL -e "CREATE TABLE IF NOT EXISTS cc_compose_init (hash VARCHAR(64) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+if [ "$($MYSQL -N -s -e "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INIT_HASH'")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+export MYSQL_USER="$MYSQL_ADDON_USER" MYSQL_PASSWORD="$MYSQL_ADDON_PASSWORD" MYSQL_DATABASE="$MYSQL_ADDON_DB" MYSQL_HOST="$MYSQL_ADDON_HOST"
+for f in /cc-init/*; do
+  case "$f" in
+    *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
+    *.sql)    echo "cc-compose init : $f"; $MYSQL < "$f" ;;
+    *.sql.gz) echo "cc-compose init : $f"; gunzip -c "$f" | $MYSQL ;;
+    *)        echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$MYSQL -e "INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')"
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
+/// La tâche d'initialisation d'un addon.
+pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str>, scripts: &[Script], hash: &str, region: &str, tags: Vec<String>, intrinsics: ImageIntrinsics, image: String, script: String) -> App {
+    let _ = rec;
+    let name = format!("{service}-init");
+    let vars = match rec.provider {
+        "postgresql-addon" => ["POSTGRESQL_ADDON_HOST", "POSTGRESQL_ADDON_PORT", "POSTGRESQL_ADDON_USER", "POSTGRESQL_ADDON_PASSWORD", "POSTGRESQL_ADDON_DB"],
+        _ => ["MYSQL_ADDON_HOST", "MYSQL_ADDON_PORT", "MYSQL_ADDON_USER", "MYSQL_ADDON_PASSWORD", "MYSQL_ADDON_DB"],
+    };
+    let _ = vars;
+    let files: Vec<CopiedFile> = scripts.iter().map(|s| CopiedFile { source: s.source.clone(), target: format!("/cc-init/{}", s.name), read_only: true }).collect();
+    let _ = version;
+    App {
+        id: ResourceId(format!("app/{name}")),
+        service: name.clone(),
+        name: format!("{project}-{name}"),
+        kind: AppKind::Task,
+        region: region.to_string(),
+        scaling: Scaling { flavor: super::flavors::docker().default_flavor.clone(), min_instances: 1, max_instances: 1 },
+        source: Source::Synthetic { image, private_registry: false, files, generated: vec![GeneratedFile { target: "/cc-init.sh".into(), content: script, executable: true }] },
+        image: intrinsics,
+        shim: ShimConfig { argv: vec!["sh".into(), "/cc-init.sh".into()], workdir: None, user: None, port: PlatformPort::Health { ready_port: None }, tcp: None, udp: None, secrets: Vec::new() },
+        env: vec![EnvVar { key: "CC_COMPOSE_INIT_HASH".into(), value: Template::literal(hash) }],
+        depends_on: vec![ResourceId(format!("addon/{service}"))],
+        health_check_path: None,
+        secrets: Vec::new(),
+        tags,
+    }
+}
+
+/// `clever-compose seed` : un plan réduit à l'addon du service et à une
+/// tâche `<service>-seed` qui charge `dump` (`.sql`, `.sql.gz` ou `.sh`),
+/// avec la même table témoin (un dump inchangé n'est pas rechargé).
+pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath, images: &dyn super::images::ImageResolver) -> Result<Plan, String> {
+    let addon = plan
+        .resources
+        .iter()
+        .find_map(|r| match r {
+            Resource::Addon(a) if a.service == service => Some(a.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| format!("`{service}` n'est pas un service substitué par un addon dans ce plan"))?;
+    let rec = super::addons::recognize(match addon.provider.as_str() {
+        "postgresql-addon" => "postgres",
+        "mysql-addon" => "mysql",
+        other => return Err(format!("seed non supporté pour {other}")),
+    })
+    .ok_or("fournisseur non reconnu")?;
+    let abs = std::fs::canonicalize(dump).map_err(|e| format!("{} : {e}", dump.display()))?;
+    let rel = match abs.strip_prefix(project_dir) {
+        Ok(r) => format!("./{}", r.display()),
+        Err(_) => return Err(format!("le dump {} doit être dans le répertoire du projet {}", abs.display(), project_dir.display())),
+    };
+    let name = abs.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dump.sql".into());
+    if !(name.ends_with(".sql") || name.ends_with(".sql.gz") || name.ends_with(".sh")) {
+        return Err(format!("`{name}` : un dump est un fichier .sql, .sql.gz ou .sh"));
+    }
+    let scripts = vec![Script { name, source: rel }];
+    let h = hash(&scripts, project_dir)?;
+    let (image, script) = runner(&rec, addon.version.as_deref()).ok_or("fournisseur sans image d'exécution")?;
+    let intr = images.resolve(&image)?;
+    let mut task = task(&plan.project, service, &rec, addon.version.as_deref(), &scripts, &h, &addon.region, addon.tags.clone(), intr, image, script);
+    task.service = format!("{service}-seed");
+    task.name = format!("{}-{service}-seed", plan.project);
+    task.id = ResourceId(format!("app/{service}-seed"));
+    Ok(Plan { project: plan.project.clone(), spec_hash: plan.spec_hash.clone(), resources: vec![Resource::Addon(addon), Resource::App(task)] })
+}
