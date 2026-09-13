@@ -55,8 +55,8 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 let mut res = Map::new();
                 res.insert("name".into(), json!(app.name));
                 res.insert("region".into(), json!(app.region));
-                res.insert("smallest_flavor".into(), json!(app.scaling.flavor));
-                res.insert("biggest_flavor".into(), json!(app.scaling.flavor));
+                res.insert("smallest_flavor".into(), json!(app.scaling.min_flavor));
+                res.insert("biggest_flavor".into(), json!(app.scaling.max_flavor));
                 res.insert("min_instance_count".into(), json!(app.scaling.min_instances));
                 res.insert("max_instance_count".into(), json!(app.scaling.max_instances));
                 if let Source::Context { .. } = &app.source {

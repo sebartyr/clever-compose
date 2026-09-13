@@ -1,0 +1,24 @@
+x-clever:
+  region: par
+services:
+  fixed:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.5"
+  auto:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    x-clever:
+      min_flavor: S
+      max_flavor: L
+      min_instances: 1
+      max_instances: 4
+  capped:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    mem_limit: 64g

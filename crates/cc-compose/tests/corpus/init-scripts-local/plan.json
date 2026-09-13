@@ -36,7 +36,8 @@
       "kind": "task",
       "region": "par",
       "scaling": {
-        "flavor": "XS",
+        "min_flavor": "XS",
+        "max_flavor": "XS",
         "min_instances": 1,
         "max_instances": 1
       },
@@ -115,7 +116,8 @@
       "kind": "service",
       "region": "par",
       "scaling": {
-        "flavor": "XS",
+        "min_flavor": "XS",
+        "max_flavor": "XS",
         "min_instances": 1,
         "max_instances": 1
       },

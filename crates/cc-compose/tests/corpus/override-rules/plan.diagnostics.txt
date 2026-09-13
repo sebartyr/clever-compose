@@ -1,5 +1,6 @@
 compose.yaml:41:5: avertissement [port-assumed-http] services.api: `api` : le port 3000 est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas
 compose.yaml:51:14: erreur [unsupported-key] services.api.cap_add: `cap_add` n'a pas d'équivalent sur Clever Cloud : aucune capacité supplémentaire n'est accordée
+compose.yaml:47:17: avertissement [replicas-fixed] services.api.deploy.replicas: `replicas: 2` donne 2 instances fixes, sans autoscaling ; `x-clever.min_instances`/`max_instances` pour laisser la plateforme en ajouter et retirer selon la charge
 compose.yaml:53:7: erreur [unsupported-key] services.api.sysctls: `sysctls` n'a pas d'équivalent sur Clever Cloud : pas de réglage noyau
 compose.yaml:50:12: avertissement [tmpfs-ignored] services.api.tmpfs: `tmpfs` est ignoré : le système de fichiers du conteneur est déjà éphémère
 compose.override.yaml:53:12: avertissement [addon-substitution] services.db.image: `db` (postgres:16) devient un addon PostgreSQL plan `dev` (DEV) : 0 €/mois HT, 5 connexions max. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance

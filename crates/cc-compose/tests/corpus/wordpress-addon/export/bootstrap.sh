@@ -17,7 +17,7 @@ ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "
 
 # Applications, créées sans déploiement
 APP_wordpress="$(clever create -t docker 'wordpress-addon-wordpress' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_wordpress" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_wordpress" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=wordpress-addon
 # tag : compose-service=wordpress
 # tag : compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c

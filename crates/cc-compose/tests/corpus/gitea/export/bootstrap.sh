@@ -17,7 +17,7 @@ ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "
 
 # Applications, créées sans déploiement
 APP_gitea="$(clever create -t docker 'gitea-gitea' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_gitea" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_gitea" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=gitea
 # tag : compose-service=gitea
 # tag : compose-spec=9aa14d857c9c7c91984add8639f6f607

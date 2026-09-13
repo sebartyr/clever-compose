@@ -1,0 +1,3 @@
+compose.yaml:3:5: avertissement [worker] services.bad: `bad` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:6:15: erreur [x-clever-invalid] services.bad.x-clever.flavor: `flavor` et `min_flavor`/`max_flavor` s'excluent
+compose.yaml:8:22: erreur [x-clever-invalid] services.bad.x-clever.min_instances: `min_instances` 3 dépasse `max_instances` 2

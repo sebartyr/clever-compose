@@ -1,0 +1,4 @@
+{
+  "nginx:1.27": { "entrypoint": ["/docker-entrypoint.sh"], "cmd": ["nginx", "-g", "daemon off;"], "user": null, "workdir": null, "exposed_ports": [80] },
+  "busybox:1.36": { "entrypoint": [], "cmd": ["sh"], "user": null, "workdir": null, "exposed_ports": [] }
+}

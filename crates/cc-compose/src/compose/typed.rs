@@ -57,6 +57,12 @@ fn at(node: Node, p: &Path) -> Result<Node, Diagnostic> {
         "services.*.deploy.restart_policy.window",
     ];
 
+    // `NanoCPUs` (compose-go `types/cpus.go`) : chaîne ou nombre, rendu en
+    // flottant.
+    const NANO_CPUS: &[&str] = &["services.*.cpus", "services.*.deploy.resources.limits.cpus", "services.*.deploy.resources.reservations.cpus"];
+    if NANO_CPUS.iter().any(|pat| p.matches(pat)) {
+        return nano_cpus(node, p);
+    }
     if MAPPING_WITH_EQUALS.iter().any(|pat| p.matches(pat)) {
         return mapping_with_equals(node, p);
     }
@@ -356,6 +362,16 @@ pub fn shellwords(line: &str) -> Result<Vec<String>, String> {
         return Err("ligne de commande invalide (guillemet non fermé)".into());
     }
     Ok(args)
+}
+
+fn nano_cpus(node: Node, p: &Path) -> Result<Node, Diagnostic> {
+    let f = match &node.value {
+        Value::Int(i) => *i as f64,
+        Value::Float(f) => *f,
+        Value::Str(s) => s.trim().parse::<f64>().map_err(|_| Diagnostic::error("cpus-invalid", format!("{p} : nombre de CPU invalide `{s}`")).at(p, node.span))?,
+        _ => return Ok(node),
+    };
+    Ok(Node { value: Value::Float(f), ..node })
 }
 
 /// `UnitBytes` : entier, ou taille lisible (`512m`, `1g`), rendu en chaîne

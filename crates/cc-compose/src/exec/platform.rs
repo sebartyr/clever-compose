@@ -7,6 +7,7 @@ use std::future::Future;
 
 use clevercloud_sdk::oauth10a::reqwest;
 use clevercloud_sdk::{Client, Credentials, Request, RestClient};
+use cc_compose_model::plan::Scaling;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as J};
 
@@ -198,9 +199,7 @@ pub struct Redir {
 pub struct NewApp {
     pub name: String,
     pub region: String,
-    pub flavor: String,
-    pub min_instances: u32,
-    pub max_instances: u32,
+    pub scaling: Scaling,
     pub task: bool,
     pub description: String,
 }
@@ -232,7 +231,7 @@ pub trait Platform: Send + Sync {
     fn list_apps(&self) -> impl Future<Output = PResult<Vec<AppInfo>>> + Send;
     fn get_app(&self, app: &str) -> impl Future<Output = PResult<AppInfo>> + Send;
     fn create_app(&self, app: &NewApp) -> impl Future<Output = PResult<AppInfo>> + Send;
-    fn update_scaling(&self, app: &str, flavor: &str, min: u32, max: u32) -> impl Future<Output = PResult<()>> + Send;
+    fn update_scaling(&self, app: &str, scaling: &Scaling) -> impl Future<Output = PResult<()>> + Send;
     fn get_tags(&self, app: &str) -> impl Future<Output = PResult<Vec<String>>> + Send;
     fn set_tags(&self, app: &str, tags: &[String]) -> impl Future<Output = PResult<()>> + Send;
     fn get_env(&self, app: &str) -> impl Future<Output = PResult<Vec<EnvVar>>> + Send;
@@ -388,10 +387,10 @@ impl Platform for Api {
             "instanceType": "docker",
             "instanceVersion": inst["version"],
             "instanceVariant": inst["variant"]["id"],
-            "minFlavor": app.flavor,
-            "maxFlavor": app.flavor,
-            "minInstances": app.min_instances,
-            "maxInstances": app.max_instances,
+            "minFlavor": app.scaling.min_flavor,
+            "maxFlavor": app.scaling.max_flavor,
+            "minInstances": app.scaling.min_instances,
+            "maxInstances": app.scaling.max_instances,
             "zone": app.region,
             "instanceLifetime": if app.task { "TASK" } else { "REGULAR" },
             "shutdownable": false,
@@ -401,8 +400,8 @@ impl Platform for Api {
         self.client.post(&format!("{}/applications", self.owner_path()), &body).await.map_err(|e| Self::e("création d'application", e))
     }
 
-    async fn update_scaling(&self, app: &str, flavor: &str, min: u32, max: u32) -> PResult<()> {
-        let body = json!({ "minFlavor": flavor, "maxFlavor": flavor, "minInstances": min, "maxInstances": max });
+    async fn update_scaling(&self, app: &str, scaling: &Scaling) -> PResult<()> {
+        let body = json!({ "minFlavor": scaling.min_flavor, "maxFlavor": scaling.max_flavor, "minInstances": scaling.min_instances, "maxInstances": scaling.max_instances });
         self.send(reqwest::Method::PUT, &self.app_path(app), Some(&body)).await?;
         Ok(())
     }

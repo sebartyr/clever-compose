@@ -227,6 +227,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
   `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
   candidates donnent `addon-version-ambiguous`.
+- **Scalabilité (13/09/2026, demande du propriétaire)** : le plan porte
+  désormais `min_flavor`/`max_flavor` (évolution de `Scaling`, l'exécuteur
+  envoie `minFlavor`/`maxFlavor`, Terraform `smallest_flavor`/
+  `biggest_flavor`, script `clever scale --min-flavor/--max-flavor`).
+  `x-clever.flavor` reste le raccourci min = max ; `min_flavor`/`max_flavor`
+  activent le scaling vertical, `min_instances`/`max_instances` l'horizontal
+  (vérifié : « Auto scalability: enabled, Scalers: 1 to 2, Sizes: XS to
+  S »). `deploy.resources.limits.cpus` compte désormais dans le choix de
+  flavor (plus petite couvrant mémoire **et** vCPU ; `resources-capped` si
+  aucune ne suffit). `replicas: N` seul donne N instances fixes avec
+  l'avertissement `replicas-fixed` (choix explicite plutôt que défaut
+  silencieux). Erreurs : `flavor` avec `min/max_flavor`, bornes inversées.
+  Au passage, `cpus` est rendu en flottant comme `NanoCPUs` de compose-go
+  (divergence du différentiel corrigée). Corpus : `scaling`,
+  `scaling-invalid`.
 - **Exécution locale des scripts d'init (13/09/2026)**, alternative demandée
   par le propriétaire (« pourquoi ne pas les lancer en local plutôt que
   dans une Clever Task ? » — « c'est bien d'avoir l'alternative, on garde

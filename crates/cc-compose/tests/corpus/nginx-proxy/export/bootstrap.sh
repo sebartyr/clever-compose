@@ -13,12 +13,12 @@ NG_default="$(clever ng get 'nginx-proxy-default' -o "$ORG" -F json | jq -r .id)
 
 # Applications, créées sans déploiement
 APP_app="$(clever create -t docker 'nginx-proxy-app' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_app" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_app" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=nginx-proxy
 # tag : compose-service=app
 # tag : compose-spec=da5189ef58842a94fc072d48ba2e55e6
 APP_front="$(clever create -t docker 'nginx-proxy-front' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_front" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_front" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=nginx-proxy
 # tag : compose-service=front
 # tag : compose-spec=da5189ef58842a94fc072d48ba2e55e6

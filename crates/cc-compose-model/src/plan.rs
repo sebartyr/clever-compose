@@ -131,7 +131,12 @@ pub enum AppKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Scaling {
-    pub flavor: String,
+    /// Flavors minimale et maximale : différentes, la plateforme change la
+    /// taille des instances selon la charge (scaling vertical).
+    pub min_flavor: String,
+    pub max_flavor: String,
+    /// Instances minimales et maximales : différentes, la plateforme en
+    /// ajoute et retire selon la charge (scaling horizontal).
     pub min_instances: u32,
     pub max_instances: u32,
 }

@@ -97,11 +97,11 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                 }
                 log(&format!("application {} : existe ({})", app.name, x.id));
                 let i = &x.instance;
-                if i.min_flavor.name != app.scaling.flavor || i.max_flavor.name != app.scaling.flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances {
+                if i.min_flavor.name != app.scaling.min_flavor || i.max_flavor.name != app.scaling.max_flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances {
                     if opts.dry_run {
-                        log(&format!("  scaling à mettre à jour : {} x{}..{}", app.scaling.flavor, app.scaling.min_instances, app.scaling.max_instances));
+                        log(&format!("  scaling à mettre à jour : {}..{} x{}..{}", app.scaling.min_flavor, app.scaling.max_flavor, app.scaling.min_instances, app.scaling.max_instances));
                     } else {
-                        platform.update_scaling(&x.id, &app.scaling.flavor, app.scaling.min_instances, app.scaling.max_instances).await?;
+                        platform.update_scaling(&x.id, &app.scaling).await?;
                         log("  scaling mis à jour");
                     }
                 }
@@ -116,9 +116,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                     .create_app(&NewApp {
                         name: app.name.clone(),
                         region: app.region.clone(),
-                        flavor: app.scaling.flavor.clone(),
-                        min_instances: app.scaling.min_instances,
-                        max_instances: app.scaling.max_instances,
+                        scaling: app.scaling.clone(),
                         task: app.kind == AppKind::Task,
                         description: format!("clever-compose : service `{}` du projet `{}`", app.service, plan.project),
                     })

@@ -13,12 +13,12 @@ NG_default="$(clever ng get 'networks-single-default' -o "$ORG" -F json | jq -r 
 
 # Applications, créées sans déploiement
 APP_web="$(clever create -t docker 'networks-single-web' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_web" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_web" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=networks-single
 # tag : compose-service=web
 # tag : compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1
 APP_api="$(clever create -t docker 'networks-single-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_api" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=networks-single
 # tag : compose-service=api
 # tag : compose-spec=3e7dfbe1271c4c6f31717dfd90d45ad1

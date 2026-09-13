@@ -13,12 +13,12 @@ NG_default="$(clever ng get 'redirections-default' -o "$ORG" -F json | jq -r .id
 
 # Applications, créées sans déploiement
 APP_db="$(clever create -t docker 'redirections-db' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_db" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_db" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=redirections
 # tag : compose-service=db
 # tag : compose-spec=ab46b6e9e5851eda9d6f09c939d555f5
 APP_game="$(clever create -t docker 'redirections-game' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_game" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_game" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=redirections
 # tag : compose-service=game
 # tag : compose-spec=ab46b6e9e5851eda9d6f09c939d555f5

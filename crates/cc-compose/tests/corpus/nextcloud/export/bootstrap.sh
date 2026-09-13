@@ -17,7 +17,7 @@ ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "
 
 # Applications, créées sans déploiement
 APP_nc="$(clever create -t docker 'nextcloud-nc' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_nc" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_nc" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=nextcloud
 # tag : compose-service=nc
 # tag : compose-spec=a8756149457c4f7cfba9e5a2388e71c4

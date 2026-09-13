@@ -12,8 +12,13 @@ use crate::diagnostic::{Diagnostic, Diagnostics};
 pub struct XClever {
     /// Région plateforme (`par` par défaut).
     pub region: Option<String>,
-    /// Flavor imposée (sinon la plus proche en mémoire des limites).
+    /// Flavor imposée (sinon la plus petite qui couvre `deploy.resources`).
+    /// Raccourci pour `min_flavor` = `max_flavor`.
     pub flavor: Option<String>,
+    /// Scaling vertical : la plateforme change la taille des instances
+    /// entre ces deux flavors selon la charge.
+    pub min_flavor: Option<String>,
+    pub max_flavor: Option<String>,
     pub min_instances: Option<u32>,
     pub max_instances: Option<u32>,
     /// Service one-shot à déployer en Clever Task.

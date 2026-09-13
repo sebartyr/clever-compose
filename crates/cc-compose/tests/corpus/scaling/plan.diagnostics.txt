@@ -1,0 +1,5 @@
+compose.yaml:14:5: avertissement [worker] services.auto: `auto` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:22:5: avertissement [resources-capped] services.capped: ressources demandées (65536 Mio) au-delà de la plus grande flavor (3XL) ; plafonnées
+compose.yaml:22:5: avertissement [worker] services.capped: `capped` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:5:5: avertissement [worker] services.fixed: `fixed` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:8:17: avertissement [replicas-fixed] services.fixed.deploy.replicas: `replicas: 3` donne 3 instances fixes, sans autoscaling ; `x-clever.min_instances`/`max_instances` pour laisser la plateforme en ajouter et retirer selon la charge

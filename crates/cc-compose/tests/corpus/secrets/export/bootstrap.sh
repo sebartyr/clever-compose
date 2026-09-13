@@ -13,7 +13,7 @@ NG_default="$(clever ng get 'secrets-default' -o "$ORG" -F json | jq -r .id)"
 
 # Applications, créées sans déploiement
 APP_app="$(clever create -t docker 'secrets-app' -o "$ORG" -r 'par' -F json | jq -r .id)"
-clever scale --app "$APP_app" --flavor 'XS' --min-instances 1 --max-instances 1
+clever scale --app "$APP_app" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=secrets
 # tag : compose-service=app
 # tag : compose-spec=69b84dbca4ba8bebc96faaaea68b4416

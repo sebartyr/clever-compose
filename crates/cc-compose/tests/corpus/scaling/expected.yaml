@@ -1,0 +1,43 @@
+name: scaling
+services:
+  auto:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    networks:
+      default: null
+    x-clever:
+      max_flavor: L
+      max_instances: 4
+      min_flavor: S
+      min_instances: 1
+  capped:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    mem_limit: "68719476736"
+    networks:
+      default: null
+  fixed:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: 2.5
+          memory: "2147483648"
+    image: busybox:1.36
+    networks:
+      default: null
+networks:
+  default:
+    name: scaling_default
+x-clever:
+  region: par
