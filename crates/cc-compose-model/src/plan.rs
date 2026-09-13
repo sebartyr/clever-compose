@@ -99,6 +99,26 @@ pub struct App {
     pub secrets: Vec<SecretBinding>,
     /// Tags plateforme (`compose-project`, `compose-service`, empreinte).
     pub tags: Vec<String>,
+    /// Où l'exécuteur lance cette application. `Local` n'a de sens que pour
+    /// une tâche d'initialisation ou de reprise : `up` l'exécute depuis le
+    /// poste contre l'addon au lieu de la déployer ; les émetteurs, qui
+    /// n'ont pas de « local », la gardent en tâche plateforme.
+    #[serde(default, skip_serializing_if = "RunWhere::is_platform")]
+    pub run: RunWhere,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RunWhere {
+    #[default]
+    Platform,
+    Local,
+}
+
+impl RunWhere {
+    pub fn is_platform(&self) -> bool {
+        *self == RunWhere::Platform
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

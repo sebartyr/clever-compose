@@ -83,7 +83,10 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
 
     // 2. Applications, retrouvées par nom puis confirmées par leurs tags.
     let existing_apps = platform.list_apps().await?;
-    let apps: Vec<&App> = plan.resources.iter().filter_map(|r| if let Resource::App(a) = r { Some(a) } else { None }).collect();
+    // Les tâches exécutées depuis le poste (`run: local`) ne sont jamais
+    // créées sur la plateforme ; elles prennent leur tour à l'étape 6.
+    let all_apps: Vec<&App> = plan.resources.iter().filter_map(|r| if let Resource::App(a) = r { Some(a) } else { None }).collect();
+    let apps: Vec<&App> = all_apps.iter().copied().filter(|a| a.run == RunWhere::Platform).collect();
     for app in &apps {
         let found = existing_apps.iter().find(|x| x.name == app.name);
         match found {
@@ -228,7 +231,15 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     // 6. Dépôts synthétiques et déploiements, dans l'ordre topologique du
     // plan, en attendant chaque succès (depends_on).
     let creds = platform.git_credentials();
-    for app in &apps {
+    for app in &all_apps {
+        if app.run == RunWhere::Local {
+            if opts.dry_run {
+                log(&format!("tâche {} : à exécuter depuis ce poste", app.name));
+            } else {
+                super::local::run_task(app, &state, platform, opts.project_dir, log).await?;
+            }
+            continue;
+        }
         let app_id = &state.app_ids[&app.service];
         let info = platform.get_app(app_id).await?;
         let files = repo_files(app, opts.project_dir)?;

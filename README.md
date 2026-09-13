@@ -57,7 +57,10 @@ Au niveau projet ou service : `region`, `flavor`, `min_instances`,
 `max_instances`, `task` (service one-shot), `http_port` (port HTTP réel de
 l'image), `protocol` (`http` ou `tcp`), `domains`, `ephemeral`, `plan` et
 `version` (addon), `tcp_namespace` (`default` ou `cleverapps`), `private`
-(addon rattaché au network group).
+(addon rattaché au network group), `init` (`task`, défaut : les scripts
+d'initialisation d'un addon sont rejoués par une Clever Task ; `local` :
+depuis le poste qui lance `up`, avec Docker s'il répond, sinon le client
+`psql`/`mysql`/`mongo`/`redis-cli`/`curl` du poste).
 
 Au niveau projet seulement : `network_groups`, exigé dès que le compose a
 plusieurs réseaux — `per-network` (un network group par réseau, même

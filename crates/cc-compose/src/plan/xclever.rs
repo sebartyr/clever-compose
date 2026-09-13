@@ -36,6 +36,10 @@ pub struct XClever {
     /// Version de l'addon (`16`, `8.0`) si le tag ne la donne pas ou pour
     /// la forcer.
     pub version: Option<String>,
+    /// Service substitué par un addon : où s'exécutent ses scripts
+    /// d'initialisation. `task` (défaut : une Clever Task) ou `local`
+    /// (depuis le poste qui lance `up`).
+    pub init: Option<String>,
     /// Niveau projet : comment les réseaux Compose deviennent des network
     /// groups. `per-network` (un groupe par réseau), `single` (un seul
     /// groupe pour tout le projet), `none` (aucun : les services ne se
@@ -66,6 +70,12 @@ fn parse(v: &serde_json::Value, p: &Path, diags: &mut Diagnostics) -> XClever {
                 if !["per-network", "single", "none"].contains(&ng.as_str()) {
                     diags.push(Diagnostic::error("x-clever-invalid", format!("`network_groups` vaut `per-network`, `single` ou `none`, pas `{ng}`")).with_path(&p.child("network_groups")));
                     x.network_groups = None;
+                }
+            }
+            if let Some(init) = &x.init {
+                if init != "task" && init != "local" {
+                    diags.push(Diagnostic::error("x-clever-invalid", format!("`init` vaut `task` ou `local`, pas `{init}`")).with_path(&p.child("init")));
+                    x.init = None;
                 }
             }
             if let Some(proto) = &x.protocol {

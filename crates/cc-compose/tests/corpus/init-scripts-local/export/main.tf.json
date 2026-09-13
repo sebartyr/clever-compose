@@ -1,0 +1,95 @@
+{
+  "terraform": {
+    "required_providers": {
+      "clevercloud": {
+        "source": "CleverCloud/clevercloud",
+        "version": "~> 2.1"
+      }
+    }
+  },
+  "provider": {
+    "clevercloud": {
+      "organisation": "${var.organisation}"
+    }
+  },
+  "variable": {
+    "organisation": {
+      "type": "string",
+      "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)",
+      "sensitive": true
+    },
+    "repository": {
+      "type": "string",
+      "description": "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)"
+    }
+  },
+  "resource": {
+    "clevercloud_networkgroup": {
+      "default": {
+        "name": "init-scripts-local-default",
+        "tags": [
+          "compose-project=init-scripts-local",
+          "compose-network=default",
+          "compose-spec=48b936df37f9aaeea0835a9517208ffa"
+        ]
+      }
+    },
+    "clevercloud_postgresql": {
+      "db": {
+        "name": "init-scripts-local-db",
+        "plan": "dev",
+        "region": "par",
+        "version": "16"
+      }
+    },
+    "clevercloud_docker": {
+      "db_init": {
+        "name": "init-scripts-local-db-init",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_INIT_HASH": "58d214e86fa675d00c5603cc537d6ae5"
+        },
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/db-init"
+        },
+        "dependencies": [
+          "${clevercloud_postgresql.db.id}"
+        ]
+      },
+      "api": {
+        "name": "init-scripts-local-api",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_EXPAND": "DATABASE_URL,DB_PASSWORD",
+          "DATABASE_URL": "postgres://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@$${POSTGRESQL_ADDON_HOST}:$${POSTGRESQL_ADDON_PORT}/$${POSTGRESQL_ADDON_DB}?sslmode=disable",
+          "DB_PASSWORD": "$${POSTGRESQL_ADDON_PASSWORD}"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "api.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/api"
+        },
+        "depends_on": [
+          "clevercloud_docker.db_init"
+        ],
+        "dependencies": [
+          "${clevercloud_postgresql.db.id}"
+        ]
+      }
+    }
+  }
+}

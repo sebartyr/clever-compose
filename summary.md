@@ -227,6 +227,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
   `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
   candidates donnent `addon-version-ambiguous`.
+- **Exécution locale des scripts d'init (13/09/2026)**, alternative demandée
+  par le propriétaire (« pourquoi ne pas les lancer en local plutôt que
+  dans une Clever Task ? » — « c'est bien d'avoir l'alternative, on garde
+  la task par défaut »). `x-clever.init: local` sur le service substitué,
+  et `seed --local`. Évolution additive du plan : champ `run` sur `App`
+  (`platform`, défaut et absent du JSON, ou `local`) ; la tâche reste dans
+  le plan, donc dans l'export Terraform et le script, qui n'ont pas de
+  « local ». `up` ne la crée pas sur la plateforme et l'exécute à son tour
+  dans l'ordre topologique (`exec/local.rs`) : variables lues sur
+  `/addons/{id}/env` (comme le lien), mêmes fichiers et même runner ; avec
+  Docker si le démon répond (`docker run` de l'image du plan), sinon avec le
+  client du poste (`CC_INIT_DIR`, `TMPDIR`). Vérifié sur PostgreSQL : init
+  via Docker, second `up` arrêté par le témoin, repli `psql` sans Docker,
+  `seed --local` deux fois. Arguments pour la tâche par défaut : joignabilité
+  de l'addon depuis le poste non garantie, client requis, export complet.
 - Alternative notée par le propriétaire (13/09/2026), à explorer plus tard :
   DocumentDB sur PostgreSQL pour remplacer MongoDB (l'addon Mongo est figé
   en 4.0.3).

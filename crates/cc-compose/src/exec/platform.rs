@@ -249,6 +249,8 @@ pub trait Platform: Send + Sync {
     fn redeploy(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
     fn last_deployment(&self, app: &str) -> impl Future<Output = PResult<Option<DeploymentState>>> + Send;
     fn instances(&self, app: &str) -> impl Future<Output = PResult<Vec<InstanceState>>> + Send;
+    /// Variables qu'un addon injecte dans les applications liées.
+    fn addon_env(&self, addon: &str) -> impl Future<Output = PResult<Vec<EnvVar>>> + Send;
     /// Ouvre le flux de logs (SSE, route v4) d'une application ou d'un addon.
     fn logs(&self, target: LogTarget<'_>, query: &LogQuery) -> impl Future<Output = PResult<LogStream>> + Send;
     fn delete_app(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
@@ -481,6 +483,10 @@ impl Platform for Api {
     async fn last_deployment(&self, app: &str) -> PResult<Option<DeploymentState>> {
         let v: Vec<DeploymentState> = self.client.get(&format!("{}/deployments?limit=1", self.app_path(app))).await.map_err(|e| Self::e("deployments", e))?;
         Ok(v.into_iter().next())
+    }
+
+    async fn addon_env(&self, addon: &str) -> PResult<Vec<EnvVar>> {
+        self.client.get(&format!("{}/addons/{addon}/env", self.owner_path())).await.map_err(|e| Self::e("addon env", e))
     }
 
     async fn instances(&self, app: &str) -> PResult<Vec<InstanceState>> {

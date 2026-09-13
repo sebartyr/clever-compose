@@ -1,0 +1,42 @@
+name: init-scripts-local
+services:
+  api:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    depends_on:
+      db:
+        condition: service_started
+        required: true
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+      DB_PASSWORD: app
+    image: busybox:1.36
+    networks:
+      default: null
+  db:
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_USER: app
+    image: postgres:16
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: <project>/initdb
+        target: /docker-entrypoint-initdb.d
+        bind: {}
+      - type: volume
+        source: pgdata
+        target: /var/lib/postgresql/data
+        volume: {}
+    x-clever:
+      init: local
+networks:
+  default:
+    name: init-scripts-local_default
+volumes:
+  pgdata:
+    name: init-scripts-local_pgdata

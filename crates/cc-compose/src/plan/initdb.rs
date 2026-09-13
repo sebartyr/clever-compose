@@ -94,6 +94,19 @@ pub fn hash(scripts: &[Script], project_dir: &FsPath) -> Result<String, String> 
     Ok(h.finalize().iter().take(16).map(|b| format!("{b:02x}")).collect())
 }
 
+/// Le client en ligne de commande dont l'exécution locale a besoin quand
+/// Docker n'est pas là.
+pub fn client(provider: &str) -> &'static str {
+    match provider {
+        "postgresql-addon" => "psql",
+        "mysql-addon" => "mysql",
+        "mongodb-addon" => "mongo",
+        "redis-addon" => "redis-cli",
+        "es-addon" => "curl",
+        _ => "sh",
+    }
+}
+
 /// Image et script d'exécution selon le fournisseur.
 pub fn runner(rec: &Recognized, version: Option<&str>) -> Option<(String, String)> {
     match rec.provider {
@@ -123,7 +136,7 @@ if [ "$($PSQL -qtAc "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INI
 fi
 # Variables des images officielles, pour les scripts .sh qui les lisent.
 export POSTGRES_USER="$POSTGRESQL_ADDON_USER" POSTGRES_PASSWORD="$POSTGRESQL_ADDON_PASSWORD" POSTGRES_DB="$POSTGRESQL_ADDON_DB" PGHOST="$POSTGRESQL_ADDON_HOST" PGPORT="$POSTGRESQL_ADDON_PORT" PGUSER="$POSTGRESQL_ADDON_USER" PGDATABASE="$POSTGRESQL_ADDON_DB"
-for f in /cc-init/*; do
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.sql)    echo "cc-compose init : $f"; $PSQL -f "$f" ;;
@@ -147,7 +160,7 @@ if [ "$($MYSQL -N -s -e "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE
   exit 0
 fi
 export MYSQL_USER="$MYSQL_ADDON_USER" MYSQL_PASSWORD="$MYSQL_ADDON_PASSWORD" MYSQL_DATABASE="$MYSQL_ADDON_DB" MYSQL_HOST="$MYSQL_ADDON_HOST"
-for f in /cc-init/*; do
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.sql)    echo "cc-compose init : $f"; $MYSQL < "$f" ;;
@@ -170,7 +183,7 @@ if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_
 fi
 # Variables de l'image officielle, pour les scripts .sh qui les lisent.
 export MONGO_INITDB_DATABASE="$MONGODB_ADDON_DB" MONGO_INITDB_ROOT_USERNAME="$MONGODB_ADDON_USER" MONGO_INITDB_ROOT_PASSWORD="$MONGODB_ADDON_PASSWORD"
-for f in /cc-init/*; do
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
     *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
@@ -192,7 +205,7 @@ if [ "$($REDIS EXISTS "cc_compose_init:$CC_COMPOSE_INIT_HASH")" = "1" ]; then
   echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
   exit 0
 fi
-for f in /cc-init/*; do
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)    echo "cc-compose init : $f"; sh "$f" ;;
     *.redis) echo "cc-compose init : $f"; $REDIS < "$f" ;;
@@ -211,22 +224,22 @@ set -eu
 ES="https://$ES_ADDON_HOST"
 export ELASTICSEARCH_URL="$ES" ELASTICSEARCH_USERNAME="$ES_ADDON_USER" ELASTICSEARCH_PASSWORD="$ES_ADDON_PASSWORD"
 # Identifiants hors ligne de commande (visibles dans `ps` sinon).
-printf 'machine %s login %s password %s\n' "$ES_ADDON_HOST" "$ES_ADDON_USER" "$ES_ADDON_PASSWORD" > /tmp/.netrc
-chmod 600 /tmp/.netrc
-# es <méthode> <chemin> [options curl] : corps dans /tmp/es.out, code HTTP
+printf 'machine %s login %s password %s\n' "$ES_ADDON_HOST" "$ES_ADDON_USER" "$ES_ADDON_PASSWORD" > "${TMPDIR:-/tmp}/cc-init.netrc"
+chmod 600 "${TMPDIR:-/tmp}/cc-init.netrc"
+# es <méthode> <chemin> [options curl] : corps dans cc-init-es.out, code HTTP
 # dans $CODE (pas de substitution de commande : elle perdrait la variable).
-es() { m="$1"; p="$2"; shift 2; CODE="$(curl -sS --netrc-file /tmp/.netrc -o /tmp/es.out -w '%{http_code}' -X "$m" "$ES$p" "$@")"; }
+es() { m="$1"; p="$2"; shift 2; CODE="$(curl -sS --netrc-file "${TMPDIR:-/tmp}/cc-init.netrc" -o "${TMPDIR:-/tmp}/cc-init-es.out" -w '%{http_code}' -X "$m" "$ES$p" "$@")"; }
 es GET "/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH"
 if [ "$CODE" = "200" ]; then
   echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
   exit 0
 fi
-for f in /cc-init/*; do
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.ndjson) echo "cc-compose init : $f"
               es POST "/_bulk?refresh=true" -H 'Content-Type: application/x-ndjson' --data-binary "@$f"
-              case "$CODE:$(cat /tmp/es.out)" in 2*:*'"errors":false'*) ;; *) head -c 2000 /tmp/es.out; echo; echo "cc-compose init : échec du bulk $f (HTTP $CODE)"; exit 1 ;; esac ;;
+              case "$CODE:$(cat "${TMPDIR:-/tmp}/cc-init-es.out")" in 2*:*'"errors":false'*) ;; *) head -c 2000 "${TMPDIR:-/tmp}/cc-init-es.out"; echo; echo "cc-compose init : échec du bulk $f (HTTP $CODE)"; exit 1 ;; esac ;;
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done
@@ -256,6 +269,7 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
         health_check_path: None,
         secrets: Vec::new(),
         tags,
+        run: RunWhere::Platform,
     }
 }
 
@@ -264,7 +278,7 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
 /// `seed_extensions`), avec le même témoin (un dump inchangé n'est pas
 /// rechargé). Pour Redis et Elasticsearch, dont l'image n'a pas de scripts
 /// d'initialisation, c'est le seul chemin de reprise de données.
-pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath, images: &dyn super::images::ImageResolver) -> Result<Plan, String> {
+pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath, images: &dyn super::images::ImageResolver, local: bool) -> Result<Plan, String> {
     let addon = plan
         .resources
         .iter()
@@ -301,5 +315,8 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
     task.service = format!("{service}-seed");
     task.name = format!("{}-{service}-seed", plan.project);
     task.id = ResourceId(format!("app/{service}-seed"));
+    if local {
+        task.run = RunWhere::Local;
+    }
     Ok(Plan { project: plan.project.clone(), spec_hash: plan.spec_hash.clone(), resources: vec![Resource::Addon(addon), Resource::App(task)] })
 }

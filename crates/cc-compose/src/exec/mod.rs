@@ -6,5 +6,6 @@
 
 pub mod git;
 pub mod inspect;
+pub mod local;
 pub mod platform;
 pub mod reconcile;

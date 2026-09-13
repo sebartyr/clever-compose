@@ -12,7 +12,8 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose export [terraform|script|all] -o DIR [--branches] [options de plan]");
     eprintln!("          --branches écrit les branches clever-compose/<service> dans le dépôt git du projet");
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
-    eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
+    eprintln!("        clever-compose seed --service SVC --file DUMP.sql [--local] [mêmes options que up]");
+    eprintln!("          --local charge le dump depuis ce poste (Docker ou client local) au lieu d'une tâche");
     eprintln!("        clever-compose down --org ORG [-p PROJET] [--dry-run] [--yes]          (sans plan ; --yes supprime aussi les addons)");
     eprintln!("        clever-compose ps   --org ORG [-p PROJET]                               (état des apps, addons, réseaux)");
     eprintln!("        clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]");
@@ -104,6 +105,7 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let mut dry_run = false;
     let mut no_wait = false;
     let mut confirm_addons = false;
+    let mut seed_local = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -112,6 +114,7 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
                 org = args.get(i).cloned();
             }
             "--dry-run" => dry_run = true,
+            "--local" => seed_local = true,
             "--no-wait" => no_wait = true,
             "--yes" | "-y" => confirm_addons = true,
             other => rest.push(other.to_string()),
@@ -164,7 +167,7 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     }
     let plan = match &seed {
         None => plan,
-        Some((service, file)) => match cc_compose::plan::initdb::seed_plan(&plan, service, file, &project_dir, resolver.as_ref()) {
+        Some((service, file)) => match cc_compose::plan::initdb::seed_plan(&plan, service, file, &project_dir, resolver.as_ref(), seed_local) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("seed : {e}");

@@ -272,7 +272,12 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
                     (_, Err(e)) => diags.push(Diagnostic::error("image-unresolved", format!("{name}-init : image `{image}` : {e}")).with_path(&p.child("volumes"))),
                     (Ok(h), Ok(intr)) => {
                         diags.push(Diagnostic::warning("addon-init-task", format!("`{name}` : {} script(s) d'initialisation rejoués contre l'addon par la tâche `{name}-init` (une fois par contenu, table témoin `cc_compose_init`) : {}", scripts.len(), scripts.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", "))).with_path(&p.child("volumes")));
-                        init_tasks.push(initdb::task(&project.name, name, rec, version.as_deref(), &scripts, &h, &region, tags(&format!("{name}-init")), intr, image, script));
+                        let mut t = initdb::task(&project.name, name, rec, version.as_deref(), &scripts, &h, &region, tags(&format!("{name}-init")), intr, image, script);
+                        if x.init.as_deref() == Some("local") {
+                            t.run = RunWhere::Local;
+                            diags.push(Diagnostic::warning("addon-init-local", format!("`{name}` : `x-clever.init: local` : les scripts sont exécutés depuis ce poste au `up` (Docker s'il est présent, sinon le client `{}` du poste) ; l'export Terraform garde la tâche", initdb::client(rec.provider))).with_path(&p.child("x-clever").child("init")));
+                        }
+                        init_tasks.push(t);
                     }
                 },
             },
@@ -621,6 +626,7 @@ fn plan_service(
         health_check_path,
         secrets,
         tags: Vec::new(),
+        run: RunWhere::Platform,
     }, redirections))
 }
 
