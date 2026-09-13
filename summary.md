@@ -28,6 +28,9 @@ Prochaine étape : phase 1 (parsing, plan, diagnostics).
   PostgreSQL par exemple) et câble les identifiants. À relire en phase 5.
 - [terraform-provider-clevercloud](https://github.com/CleverCloud/terraform-provider-clevercloud) :
   `pkg/resources/ng.go` porte la logique de synchronisation des membres.
+- Monorepo Axo (sources de l'API, local : `~/axo`) : `crates/api/networkgroup`
+  est l'API des network groups (`controller.rs` pour les routes,
+  `dns_handler.rs` pour le DNS servi, `views.rs` pour les modèles).
 
 ## Accès plateforme
 
@@ -98,10 +101,36 @@ Prochaine étape : phase 1 (parsing, plan, diagnostics).
 
 *Questions ouvertes restantes :*
 
-- Le `domainName` ignoré par le DNS est-il un bug ou un choix ? À remonter en
-  interne : s'il devenait effectif, le stub DNS disparaîtrait au profit d'un
+- Le `domainName` ignoré par le DNS : **expliqué par les sources d'Axo**
+  (`~/axo/crates/api/networkgroup`, lu le 13/09/2026). `dns_handler.rs` ne
+  répond qu'à trois formes dérivées des identifiants
+  (`<memberId>.m.<ngId>`, `<hostname>.p.<ngId>`,
+  `<hostname>.<memberId>.m.<ngId>`), reprise verbatim d'OVD
+  (`TypedDnsHandlerActor`), et ne consulte jamais `member.domain_name`. Le
+  champ est validé (`validate_member_domain_name` : forme DNS et suffixe
+  configuré), stocké, exposé dans les vues membre et peer, et n'a aucun autre
+  usage. Le commentaire de la validation (« otherwise it would be registered
+  under a domain the handler never resolves ») montre que l'intention est
+  bien que le nom résolve. Héritage d'OVD, pas un choix récent.
+
+  **Brouillon d'issue Axo (à ouvrir plus tard, pas encore créée) :**
+  « networkgroup: DNS handler ignores member `domainName` ». Le contrôleur
+  accepte et stocke un `domainName` personnalisé (provider Terraform : champ
+  `fqdn` requis, documenté comme résolvant vers les instances), mais
+  `dns_handler::answer` ne matche que par id, donc un membre nommé
+  `db.m.<ngId>.cc-ng.cloud` renvoie NoError sans réponse et
+  `db.<ngId>.cc-ng.cloud` est Refused. Correctif proposé : après la
+  résolution du groupe depuis le cache, si un membre a `domain_name` égal au
+  nom demandé (insensible à la casse), répondre ses peers SERVER comme pour la
+  forme `m` ; et resserrer la validation pour exiger que le nom soit sous
+  `<ngId><suffix>`, faute de quoi le fragment NG n'est pas identifiable et le
+  nom ne pourra jamais résoudre (`db.p0.cc-ng.cloud` est accepté aujourd'hui
+  et ne résoudra jamais). Ajouter un cas dans `tests/dns_parity.rs`.
+
+  Si ce correctif arrive, le stub DNS du shim disparaît au profit d'un
   `search m.<ng_id>.cc-ng.cloud` dans `resolv.conf`, avec des membres nommés
-  `db.m.<ng_id>.cc-ng.cloud`.
+  `<service>.m.<ng_id>.cc-ng.cloud`. En attendant, l'architecture du cadrage
+  (réécriture statique + stub) reste la référence.
 - Terraform : traitement des références mutuelles entre services (cycle) dans
   l'export. Candidats : diagnostic explicite, ou apply en deux passes limité à
   ce cas.
