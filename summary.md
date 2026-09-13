@@ -113,19 +113,30 @@ Prochaine étape : phase 1 (parsing, plan, diagnostics).
   under a domain the handler never resolves ») montre que l'intention est
   bien que le nom résolve. Héritage d'OVD, pas un choix récent.
 
-  **Brouillon d'issue Axo (à ouvrir plus tard, pas encore créée) :**
-  « networkgroup: DNS handler ignores member `domainName` ». Le contrôleur
-  accepte et stocke un `domainName` personnalisé (provider Terraform : champ
-  `fqdn` requis, documenté comme résolvant vers les instances), mais
-  `dns_handler::answer` ne matche que par id, donc un membre nommé
-  `db.m.<ngId>.cc-ng.cloud` renvoie NoError sans réponse et
-  `db.<ngId>.cc-ng.cloud` est Refused. Correctif proposé : après la
-  résolution du groupe depuis le cache, si un membre a `domain_name` égal au
-  nom demandé (insensible à la casse), répondre ses peers SERVER comme pour la
-  forme `m` ; et resserrer la validation pour exiger que le nom soit sous
-  `<ngId><suffix>`, faute de quoi le fragment NG n'est pas identifiable et le
-  nom ne pourra jamais résoudre (`db.p0.cc-ng.cloud` est accepté aujourd'hui
-  et ne résoudra jamais). Ajouter un cas dans `tests/dns_parity.rs`.
+  **Historique retrouvé (Slack et GitLab, 13/09/2026).** Fil
+  `#tech-networkgroups` du 13/08/2026 (miton18 ↔ kannar) : le champ
+  résolvait autrefois par distribution dans `/etc/hosts` des VMs, aujourd'hui
+  vide. kannar : « la contrainte de suffixe c'est uniquement `.cc-ng.cloud`,
+  tout ce qu'il y a avant c'est ok, mais ça doit être unique » (consensus ZK
+  sur l'attribution). Décision : nom complet fourni, suffixe validé. Il n'y a
+  **aucune politique contre la personnalisation**, au contraire. Issues :
+  - ovd#861 (suffixe en dur côté Otoroshi) et ovd#862 (validation du suffixe)
+    : faites (`de297be4a`, route `/networkgroup/configuration`).
+  - **ovd#863 « networkgroup DNS: actually resolve a member's domainName (the
+    field is functionally dead today) » : ouverte, jamais faite**, ni dans OVD
+    ni dans Axo. Le module NG a depuis été retiré d'OVD (`0682794e9`), donc
+    elle est orpheline.
+  - axo#3168 (blackyoup, 01/09) : suite côté Axo, angle validation
+    seulement, sans lien vers ovd#863.
+  - Fil `#support-interne` du 28/08 (Mustcompliance) : `fqdn` requis dans le
+    provider bloque des clients ; David Legrand : « suffit de rendre le champ
+    optionnel côté TF, le domaine est désormais attribué automatiquement ».
+
+  Action retenue : commenter axo#3168 en la reliant à ovd#863, avec le cas
+  d'usage clever-compose et la proposition d'implémentation (matcher
+  `member.domain_name` dans `dns_handler::answer` après le lookup du cache,
+  répondre les peers SERVER comme la forme `m`, resserrer la validation à
+  `<ngId><suffix>`, cas dans `tests/dns_parity.rs`). Pas encore posté.
 
   Si ce correctif arrive, le stub DNS du shim disparaît au profit d'un
   `search m.<ng_id>.cc-ng.cloud` dans `resolv.conf`, avec des membres nommés
