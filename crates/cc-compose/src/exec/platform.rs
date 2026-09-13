@@ -84,6 +84,110 @@ pub struct DeploymentState {
     pub date: u64,
 }
 
+/// Une instance en cours (`/instances`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct InstanceState {
+    pub id: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub flavor: Option<Flavor>,
+    #[serde(rename = "deployNumber", default)]
+    pub deploy_number: u64,
+}
+
+/// Cible d'un flux de logs : application ou ressource (addon).
+#[derive(Debug, Clone, Copy)]
+pub enum LogTarget<'a> {
+    App(&'a str),
+    Resource(&'a str),
+}
+
+/// Ce que demande un flux de logs (bornes RFC 3339, nombre de lignes).
+#[derive(Debug, Clone, Default)]
+pub struct LogQuery {
+    pub since: Option<String>,
+    pub until: Option<String>,
+    pub limit: Option<usize>,
+}
+
+/// Une ligne de logs de la route v4 (`APPLICATION_LOG`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogLine {
+    #[serde(default)]
+    pub date: String,
+    #[serde(default)]
+    pub instance_id: String,
+    #[serde(default)]
+    pub service: String,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// Un événement du flux : une ligne, ou la fin annoncée par le serveur
+/// (`END_OF_STREAM`, `endedBy` = `LIMIT_REACHED` | `UNTIL_REACHED` | `TIMEOUT_REACHED`).
+#[derive(Debug, Clone)]
+pub enum LogEvent {
+    Line(LogLine),
+    End(String),
+}
+
+/// Flux SSE de logs, lu trame par trame (`event:` / `data:` / ligne vide).
+pub struct LogStream {
+    resp: reqwest::Response,
+    buf: Vec<u8>,
+    done: bool,
+}
+
+impl LogStream {
+    /// Événement suivant ; `None` quand le serveur a fermé la connexion.
+    pub async fn next(&mut self) -> PResult<Option<LogEvent>> {
+        loop {
+            if let Some(ev) = self.take_frame()? {
+                return Ok(Some(ev));
+            }
+            if self.done {
+                return Ok(None);
+            }
+            match self.resp.chunk().await.map_err(|e| format!("flux de logs : {e}"))? {
+                Some(bytes) => self.buf.extend_from_slice(&bytes),
+                None => self.done = true,
+            }
+        }
+    }
+
+    /// Une trame complète du tampon, si elle y est (terminée par une ligne
+    /// vide) ; les commentaires (`:`) et les trames sans événement utile
+    /// sont sautés.
+    fn take_frame(&mut self) -> PResult<Option<LogEvent>> {
+        loop {
+            let Some(end) = self.buf.windows(2).position(|w| w == b"\n\n") else { return Ok(None) };
+            let frame: Vec<u8> = self.buf.drain(..end + 2).collect();
+            let text = String::from_utf8_lossy(&frame);
+            let (mut event, mut data) = (String::new(), String::new());
+            for line in text.lines() {
+                if let Some(v) = line.strip_prefix("event:") {
+                    event = v.trim().to_string();
+                } else if let Some(v) = line.strip_prefix("data:") {
+                    if !data.is_empty() {
+                        data.push('\n');
+                    }
+                    data.push_str(v.trim_start());
+                }
+            }
+            match event.as_str() {
+                "APPLICATION_LOG" => return serde_json::from_str::<LogLine>(&data).map(|l| Some(LogEvent::Line(l))).map_err(|e| format!("ligne de log illisible : {e} ({data})")),
+                "END_OF_STREAM" => {
+                    let v: J = serde_json::from_str(&data).unwrap_or(J::Null);
+                    return Ok(Some(LogEvent::End(v["endedBy"].as_str().unwrap_or("").to_string())));
+                }
+                _ => continue,
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Redir {
     pub namespace: String,
@@ -144,6 +248,9 @@ pub trait Platform: Send + Sync {
     fn add_domain(&self, app: &str, fqdn: &str) -> impl Future<Output = PResult<()>> + Send;
     fn redeploy(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
     fn last_deployment(&self, app: &str) -> impl Future<Output = PResult<Option<DeploymentState>>> + Send;
+    fn instances(&self, app: &str) -> impl Future<Output = PResult<Vec<InstanceState>>> + Send;
+    /// Ouvre le flux de logs (SSE, route v4) d'une application ou d'un addon.
+    fn logs(&self, target: LogTarget<'_>, query: &LogQuery) -> impl Future<Output = PResult<LogStream>> + Send;
     fn delete_app(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
     fn delete_addon(&self, addon: &str) -> impl Future<Output = PResult<()>> + Send;
     fn delete_ng(&self, ng: &str) -> impl Future<Output = PResult<()>> + Send;
@@ -374,6 +481,39 @@ impl Platform for Api {
     async fn last_deployment(&self, app: &str) -> PResult<Option<DeploymentState>> {
         let v: Vec<DeploymentState> = self.client.get(&format!("{}/deployments?limit=1", self.app_path(app))).await.map_err(|e| Self::e("deployments", e))?;
         Ok(v.into_iter().next())
+    }
+
+    async fn instances(&self, app: &str) -> PResult<Vec<InstanceState>> {
+        self.client.get(&format!("{}/instances", self.app_path(app))).await.map_err(|e| Self::e("instances", e))
+    }
+
+    async fn logs(&self, target: LogTarget<'_>, query: &LogQuery) -> PResult<LogStream> {
+        let path = match target {
+            LogTarget::App(id) => format!("{}/v4/logs/organisations/{}/applications/{id}/logs", self.base(), self.owner),
+            LogTarget::Resource(id) => format!("{}/v4/logs/organisations/{}/resources/{id}/logs", self.base(), self.owner),
+        };
+        let mut url: reqwest::Url = path.parse().map_err(|e| format!("URL {path} : {e}"))?;
+        {
+            let mut q = url.query_pairs_mut();
+            if let Some(s) = &query.since {
+                q.append_pair("since", s);
+            }
+            if let Some(u) = &query.until {
+                q.append_pair("until", u);
+            }
+            if let Some(l) = query.limit {
+                q.append_pair("limit", &l.to_string());
+            }
+        }
+        let mut req = reqwest::Request::new(reqwest::Method::GET, url);
+        req.headers_mut().insert(reqwest::header::ACCEPT, "text/event-stream".parse().unwrap());
+        let resp = self.client.execute(req).await.map_err(|e| Self::e("logs", e))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("API logs : {status} {text}"));
+        }
+        Ok(LogStream { resp, buf: Vec::new(), done: false })
     }
 
     async fn delete_app(&self, app: &str) -> PResult<()> {

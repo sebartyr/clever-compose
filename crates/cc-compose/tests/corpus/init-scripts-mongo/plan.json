@@ -112,7 +112,7 @@
       "health_check_path": null,
       "tags": [
         "compose-project=init-scripts-mongo",
-        "compose-service=mongo",
+        "compose-service=mongo-init",
         "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
       ]
     },

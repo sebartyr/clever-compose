@@ -21,7 +21,7 @@ ADDON_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name =
 APP_mongo_init="$(clever create -t docker 'init-scripts-mongo-mongo-init' -o "$ORG" -r 'par' --task '' -F json | jq -r .id)"
 clever scale --app "$APP_mongo_init" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts-mongo
-# tag : compose-service=mongo
+# tag : compose-service=mongo-init
 # tag : compose-spec=3909e8e24f11e2d03b03f848ab3f283c
 APP_api="$(clever create -t docker 'init-scripts-mongo-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_api" --flavor 'XS' --min-instances 1 --max-instances 1

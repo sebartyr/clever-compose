@@ -208,23 +208,30 @@ const ES_RUNNER: &str = r#"#!/bin/sh
 # Généré par clever-compose : charge les données dans l'addon, une fois par
 # contenu (index témoin cc_compose_init, document <hash>).
 set -eu
-ES="${ES_ADDON_URI%/}"
-CURL="curl -sS --fail-with-body -u $ES_ADDON_USER:$ES_ADDON_PASSWORD"
-if $CURL -o /dev/null "$ES/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" 2>/dev/null; then
+ES="https://$ES_ADDON_HOST"
+export ELASTICSEARCH_URL="$ES" ELASTICSEARCH_USERNAME="$ES_ADDON_USER" ELASTICSEARCH_PASSWORD="$ES_ADDON_PASSWORD"
+# Identifiants hors ligne de commande (visibles dans `ps` sinon).
+printf 'machine %s login %s password %s\n' "$ES_ADDON_HOST" "$ES_ADDON_USER" "$ES_ADDON_PASSWORD" > /tmp/.netrc
+chmod 600 /tmp/.netrc
+# es <méthode> <chemin> [options curl] : corps dans /tmp/es.out, code HTTP
+# dans $CODE (pas de substitution de commande : elle perdrait la variable).
+es() { m="$1"; p="$2"; shift 2; CODE="$(curl -sS --netrc-file /tmp/.netrc -o /tmp/es.out -w '%{http_code}' -X "$m" "$ES$p" "$@")"; }
+es GET "/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH"
+if [ "$CODE" = "200" ]; then
   echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
   exit 0
 fi
-export ELASTICSEARCH_URL="$ES" ELASTICSEARCH_USERNAME="$ES_ADDON_USER" ELASTICSEARCH_PASSWORD="$ES_ADDON_PASSWORD"
 for f in /cc-init/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.ndjson) echo "cc-compose init : $f"
-              out="$($CURL -H 'Content-Type: application/x-ndjson' -X POST "$ES/_bulk?refresh=true" --data-binary "@$f")"
-              case "$out" in *'"errors":false'*) ;; *) echo "$out" | head -c 2000; echo; echo "cc-compose init : erreurs dans le bulk $f"; exit 1 ;; esac ;;
+              es POST "/_bulk?refresh=true" -H 'Content-Type: application/x-ndjson' --data-binary "@$f"
+              case "$CODE:$(cat /tmp/es.out)" in 2*:*'"errors":false'*) ;; *) head -c 2000 /tmp/es.out; echo; echo "cc-compose init : échec du bulk $f (HTTP $CODE)"; exit 1 ;; esac ;;
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$CURL -o /dev/null -H 'Content-Type: application/json' -X PUT "$ES/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" -d "{\"applied_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+es PUT "/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" -H 'Content-Type: application/json' -d "{\"applied_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+case "$CODE" in 2*) ;; *) echo "cc-compose init : témoin non écrit (HTTP $CODE)"; exit 1 ;; esac
 echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
 "#;
 
@@ -289,7 +296,8 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
     let h = hash(&scripts, project_dir)?;
     let (image, script) = runner(&rec, addon.version.as_deref()).ok_or("fournisseur sans image d'exécution")?;
     let intr = images.resolve(&image)?;
-    let mut task = task(&plan.project, service, &rec, addon.version.as_deref(), &scripts, &h, &addon.region, addon.tags.clone(), intr, image, script);
+    let tags: Vec<String> = addon.tags.iter().map(|t| if t.starts_with("compose-service=") { format!("compose-service={service}-seed") } else { t.clone() }).collect();
+    let mut task = task(&plan.project, service, &rec, addon.version.as_deref(), &scripts, &h, &addon.region, tags, intr, image, script);
     task.service = format!("{service}-seed");
     task.name = format!("{}-{service}-seed", plan.project);
     task.id = ResourceId(format!("app/{service}-seed"));

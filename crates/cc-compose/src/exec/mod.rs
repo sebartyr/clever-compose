@@ -5,5 +5,6 @@
 //! déploiement dans l'ordre topologique, en attendant chaque succès.
 
 pub mod git;
+pub mod inspect;
 pub mod platform;
 pub mod reconcile;

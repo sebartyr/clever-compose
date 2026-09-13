@@ -165,6 +165,15 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   addons, network groups, `ccnginxtf` via `terraform destroy`, phase 0).
   Reste au propriétaire : supprimer le dépôt GitHub jetable
   `sebartyr/cc-compose-tftest` (le token `gh` n'a pas le scope `delete_repo`).
+- `ps` et `logs` ajoutés le 13/09/2026 à la demande du propriétaire, sans
+  plan comme `down` (`exec/inspect.rs`) : `ps` liste apps, tâches (état des
+  instances ou dernier déploiement, premier domaine), addons et réseaux ;
+  `logs` lit la route SSE v4 (`/v4/logs/organisations/{o}/applications/{id}/logs`,
+  `resources/{id}/logs` pour les addons ; `since`/`until` RFC 3339, `limit`,
+  `END_OF_STREAM`), un flux par ressource, lignes préfixées du service,
+  triées par date hors `-f`. Constaté sur les logs de la plateforme : stdout
+  et stderr du conteneur ne sont pas ordonnés entre eux à la milliseconde
+  près.
 - Au passage, `down` recalculait un plan et échouait dès qu'un diagnostic
   bloquait (option `--allow-ephemeral` oubliée, chemin relatif) : il ne
   supprimait alors rien. Réécrit sans plan : nom de projet (`-p`,
@@ -180,7 +189,33 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   documentation (`environment-variables/reference.md`) et le test e2e Redis
   d'Axo (`REDIS_URL` = `redis://:pass@host:port`) : `MONGODB_ADDON_*`,
   `ES_ADDON_*`, `REDIS_*`. MongoDB et Elasticsearch sont des fournisseurs
-  hors OVD/Axo (API à part). Non exercés sur un addon réel.
+  hors OVD/Axo (API à part).
+- **MongoDB, Elasticsearch et Redis exercés en réel le 13/09/2026**
+  (`ccmongo`, `cces`, `ccredis2`, détruits ensuite) :
+  - MongoDB (seule version servie : 4.0.3) : tâche d'init avec le shell
+    `mongo` de l'image `mongo:4.0`, scripts `.js`/`.sh`, collection témoin
+    `cc_compose_init` ; `seed` en `.js`, `.archive` (mongorestore) ou `.sh`.
+    Vérifié : `01-users.js` rejoué, sonde lisant `alice`/`bob`, seed d'un
+    second script.
+  - Elasticsearch : l'image n'exécute aucun script d'initialisation, un
+    montage vers `/docker-entrypoint-initdb.d` est refusé
+    (`addon-init-scripts`) ; la reprise passe par `seed` en `.ndjson`
+    (`_bulk` via `curlimages/curl`, index témoin `cc_compose_init`).
+    Constaté : `ES_ADDON_HOST` est un hôte nu servi en HTTPS seul, et
+    `ES_ADDON_URI` embarque les identifiants ; les URL des consommateurs sont
+    donc reconstruites en `https://user:pass@host` quel que soit le schéma
+    d'origine. Vérifié : bulk chargé, sonde trouvant le document, rejeu de la
+    tâche arrêté par le témoin.
+  - Redis (Valkey compris) : même absence de mécanisme d'init dans l'image,
+    refus du montage ; `seed` en `.redis` (commandes, `redis-cli <`) ou
+    `.resp` (`--pipe`), clé témoin `cc_compose_init:<hash>`. Vérifié :
+    `GET greeting` → `bonjour` via `REDIS_URL` réécrite.
+- Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
+  `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
+  candidates donnent `addon-version-ambiguous`.
+- Alternative notée par le propriétaire (13/09/2026), à explorer plus tard :
+  DocumentDB sur PostgreSQL pour remplacer MongoDB (l'addon Mongo est figé
+  en 4.0.3).
 - SDK Rust : PR #81 (mai 2025, approuvée, en conflit) apporte les network
   groups ; à rebaser plutôt qu'à refaire. Bug de désérialisation de
   `v2::plan::list`.

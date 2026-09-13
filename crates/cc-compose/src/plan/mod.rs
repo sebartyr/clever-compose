@@ -236,7 +236,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
                     (_, Err(e)) => diags.push(Diagnostic::error("image-unresolved", format!("{name}-init : image `{image}` : {e}")).with_path(&p.child("volumes"))),
                     (Ok(h), Ok(intr)) => {
                         diags.push(Diagnostic::warning("addon-init-task", format!("`{name}` : {} script(s) d'initialisation rejoués contre l'addon par la tâche `{name}-init` (une fois par contenu, table témoin `cc_compose_init`) : {}", scripts.len(), scripts.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", "))).with_path(&p.child("volumes")));
-                        init_tasks.push(initdb::task(&project.name, name, rec, version.as_deref(), &scripts, &h, &region, tags(name), intr, image, script));
+                        init_tasks.push(initdb::task(&project.name, name, rec, version.as_deref(), &scripts, &h, &region, tags(&format!("{name}-init")), intr, image, script));
                     }
                 },
             },

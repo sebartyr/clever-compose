@@ -14,6 +14,8 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
     eprintln!("        clever-compose down --org ORG [-p PROJET] [--dry-run] [--yes]          (sans plan ; --yes supprime aussi les addons)");
+    eprintln!("        clever-compose ps   --org ORG [-p PROJET]                               (état des apps, addons, réseaux)");
+    eprintln!("        clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
@@ -26,6 +28,8 @@ fn main() -> ExitCode {
         Some("export") => export(&args[1..]),
         Some("up") => up(&args[1..], None),
         Some("down") => down(&args[1..]),
+        Some("ps") => inspect(&args[1..], Inspect::Ps),
+        Some("logs") => inspect(&args[1..], Inspect::Logs),
         Some("seed") => {
             // clever-compose seed --service SVC --file DUMP [options de up]
             let mut rest: Vec<String> = Vec::new();
@@ -181,14 +185,20 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     }
 }
 
-/// `down` ne recalcule pas de plan : le nom du projet suffit, l'état est
-/// relu depuis l'API. Le nom vient de `-p`, de `COMPOSE_PROJECT_NAME`, du
-/// compose s'il se charge encore, sinon du répertoire du projet.
-fn down(args: &[String]) -> ExitCode {
+/// Les commandes sans plan (`down`, `ps`, `logs`) : le nom du projet et
+/// l'accès à l'API suffisent, l'état est relu depuis la plateforme. Le nom
+/// vient de `-p`, de `COMPOSE_PROJECT_NAME`, du compose s'il se charge
+/// encore, sinon du répertoire du projet.
+struct Stateless {
+    project: String,
+    api: cc_compose::exec::platform::Api,
+    /// Arguments non consommés (propres à la commande).
+    rest: Vec<String>,
+}
+
+fn stateless(cmd: &str, args: &[String], consume: &mut dyn FnMut(&str, &mut usize, &[String]) -> bool) -> Result<Stateless, ExitCode> {
     let mut rest: Vec<String> = Vec::new();
     let mut org: Option<String> = std::env::var("CC_ORG").ok();
-    let mut dry_run = false;
-    let mut confirm_addons = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -196,24 +206,29 @@ fn down(args: &[String]) -> ExitCode {
                 i += 1;
                 org = args.get(i).cloned();
             }
-            "--dry-run" => dry_run = true,
-            "--yes" | "-y" => confirm_addons = true,
-            other => rest.push(other.to_string()),
+            // Options de plan à valeur : la valeur n'est pas un positionnel.
+            o @ ("-p" | "--project-name" | "--project-directory" | "-f" | "--file" | "--env-file" | "--profile" | "--images") => {
+                rest.push(o.to_string());
+                i += 1;
+                rest.extend(args.get(i).cloned());
+            }
+            other => {
+                if !consume(other, &mut i, args) {
+                    rest.push(other.to_string());
+                }
+            }
         }
         i += 1;
     }
     let Some(org) = org else {
-        eprintln!("clever-compose down : --org ORG (ou CC_ORG) est requis");
-        return ExitCode::from(2);
+        eprintln!("clever-compose {cmd} : --org ORG (ou CC_ORG) est requis");
+        return Err(ExitCode::from(2));
     };
-    let Some((opts, _, _)) = parse_plan_args(&rest) else { return usage() };
-    let creds = match cc_compose::exec::platform::credentials_from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::from(2);
-        }
-    };
+    let Some((opts, _, _)) = parse_plan_args(&rest) else { return Err(usage()) };
+    let creds = cc_compose::exec::platform::credentials_from_env().map_err(|e| {
+        eprintln!("{e}");
+        ExitCode::from(2)
+    })?;
     let project = match opts.project_name.clone().or_else(|| std::env::var("COMPOSE_PROJECT_NAME").ok().filter(|n| !n.is_empty())) {
         Some(n) => n,
         None => {
@@ -227,15 +242,77 @@ fn down(args: &[String]) -> ExitCode {
             }
         }
     };
-    let api = cc_compose::exec::platform::Api::new(org, creds);
+    Ok(Stateless { project, api: cc_compose::exec::platform::Api::new(org, creds), rest: Vec::new() })
+}
+
+fn run_stateless(f: impl std::future::Future<Output = Result<(), String>>) -> ExitCode {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
-    match rt.block_on(cc_compose::exec::reconcile::down(&project, &api, dry_run, confirm_addons, &mut log)) {
+    match rt.block_on(f) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("erreur : {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+fn down(args: &[String]) -> ExitCode {
+    let mut dry_run = false;
+    let mut confirm_addons = false;
+    let st = match stateless("down", args, &mut |a, _, _| match a {
+        "--dry-run" => {
+            dry_run = true;
+            true
+        }
+        "--yes" | "-y" => {
+            confirm_addons = true;
+            true
+        }
+        _ => false,
+    }) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let _ = &st.rest;
+    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
+    run_stateless(cc_compose::exec::reconcile::down(&st.project, &st.api, dry_run, confirm_addons, &mut log))
+}
+
+enum Inspect {
+    Ps,
+    Logs,
+}
+
+fn inspect(args: &[String], what: Inspect) -> ExitCode {
+    let mut lopts = cc_compose::exec::inspect::LogsOptions::default();
+    let st = match stateless(if matches!(what, Inspect::Ps) { "ps" } else { "logs" }, args, &mut |a, i, args| match a {
+        "-f" | "--follow" if matches!(what, Inspect::Logs) => {
+            lopts.follow = true;
+            true
+        }
+        "--since" => {
+            *i += 1;
+            lopts.since = args.get(*i).cloned();
+            true
+        }
+        "-n" | "--tail" => {
+            *i += 1;
+            lopts.limit = args.get(*i).and_then(|v| v.parse().ok());
+            true
+        }
+        a if !a.starts_with('-') && matches!(what, Inspect::Logs) => {
+            lopts.services.push(a.to_string());
+            true
+        }
+        _ => false,
+    }) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| println!("{line}"));
+    match what {
+        Inspect::Ps => run_stateless(cc_compose::exec::inspect::ps(&st.project, &st.api, &mut log)),
+        Inspect::Logs => run_stateless(cc_compose::exec::inspect::logs(&st.project, &st.api, &lopts, &mut log)),
     }
 }
 

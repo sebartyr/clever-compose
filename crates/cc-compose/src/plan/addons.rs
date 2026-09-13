@@ -229,6 +229,9 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Templa
             lit(&mut segs, tail);
         }
         "es-addon" => {
+            // L'addon ne sert que HTTPS sur 443 (`ES_ADDON_HOST` est un hôte
+            // nu, constaté le 13/09/2026) : le schéma d'origine ne tient pas.
+            segs[0] = Segment::Literal("https://".into());
             push(&mut segs, seg(addon, provider, Role::User));
             lit(&mut segs, ":");
             push(&mut segs, seg(addon, provider, Role::Password));

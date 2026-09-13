@@ -19,7 +19,7 @@ ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "
 APP_db_init="$(clever create -t docker 'init-scripts-db-init' -o "$ORG" -r 'par' --task '' -F json | jq -r .id)"
 clever scale --app "$APP_db_init" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts
-# tag : compose-service=db
+# tag : compose-service=db-init
 # tag : compose-spec=03540be59232bd165adc912500eccfb6
 APP_api="$(clever create -t docker 'init-scripts-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_api" --flavor 'XS' --min-instances 1 --max-instances 1
