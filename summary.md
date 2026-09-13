@@ -147,6 +147,20 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 - Scripts d'initialisation pour Redis, MongoDB, Elasticsearch : non
   supportés (erreur explicite).
+- **Redis vérifié en réel** (`ccredis`, plan `s_mono`, 13/09/2026) :
+  `REDIS_URL=redis://:pass@cache:6379/0` reconstruit en
+  `redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/0`,
+  `CACHE_HOST`/`CACHE_PASSWORD` corrélés, `AUTH` puis `PING` → `+PONG`
+  depuis une tâche. `--requirepass` dans la `command` n'est plus pris pour
+  un réglage. Piège de test : `$VAR` dans une `command` est interpolé par
+  Compose au chargement (`$$` pour un littéral), comme avec docker compose.
+- **Gitea vérifié en réel** (`ccgitea`, PostgreSQL 17 `dev`) :
+  `DB_HOST=db:5432` → `${POSTGRESQL_ADDON_HOST}:${POSTGRESQL_ADDON_PORT}`,
+  `/api/healthz` en `pass`.
+- Projets vivants dans Test SBRUNAT au 13/09/2026, à nettoyer avec `down
+  --yes` : `ccp3`, `ccwp`, `ccwpa`, `ccinit`, `ccnginx`, `ccgitea`,
+  `ccredis`, `ccnginxtf` (via `terraform destroy` dans le scratchpad, plus
+  le dépôt GitHub `sebartyr/cc-compose-tftest`), `cc-phase0-*` et `p0`.
 - Latence du proxy / hôte direct (§6.4) : non proposé.
 - Noms des variables injectées confirmés par la page de référence de la
   documentation (`environment-variables/reference.md`) et le test e2e Redis
