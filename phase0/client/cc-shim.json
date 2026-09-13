@@ -1,0 +1,4 @@
+{
+  "argv": ["/probe.sh"],
+  "port": { "mode": "health" }
+}

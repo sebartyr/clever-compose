@@ -5,7 +5,7 @@
 //! test ne l'impose pas.
 //!
 //! Séquence : lire la config figée, lancer l'enfant avec les privilèges de
-//! l'image, ouvrir le relais quand le port réel répond, relayer les signaux,
+//! l'image, servir 8080 (relais ou santé) quand le port réel répond, relayer les signaux,
 //! récupérer les zombies, propager le code de sortie (sémantique tini).
 
 mod child;
@@ -57,9 +57,7 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     // plateforme reflète la disponibilité réelle du service.
     let child = child::spawn(&config)?;
 
-    if let Some(relay) = &config.relay {
-        tokio::spawn(relay::serve(relay.target_port));
-    }
+    tokio::spawn(relay::serve(config.port.clone()));
 
     child.supervise().await
 }

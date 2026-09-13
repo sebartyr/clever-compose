@@ -40,18 +40,32 @@ pub struct ShimConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
 
-    /// Relais TCP du port plateforme vers le port réel de l'image. `None` pour
-    /// un worker qui n'écoute sur rien, ou une image qui écoute déjà sur 8080.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub relay: Option<Relay>,
+    /// Ce que le shim fait du port plateforme, voir [`PlatformPort`].
+    pub port: PlatformPort,
 }
 
+/// Comportement du shim sur [`PLATFORM_HTTP_PORT`].
+///
+/// Constaté en phase 0 : le déployeur valide un déploiement par un GET HTTP
+/// sur 8080 et accepte tout code 200 à 500 ; une réponse non HTTP ou aucune
+/// écoute font échouer le déploiement, y compris pour un worker. Chaque
+/// conteneur doit donc répondre en HTTP sur 8080.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Relay {
-    /// Port réel sur lequel l'image écoute, relayé depuis
-    /// [`PLATFORM_HTTP_PORT`].
-    pub target_port: u16,
+#[serde(tag = "mode", rename_all = "lowercase", deny_unknown_fields)]
+pub enum PlatformPort {
+    /// L'image écoute elle-même en HTTP sur 8080 : le shim ne touche à rien.
+    Image,
+    /// Service HTTP sur un autre port : relais TCP depuis 8080, ouvert une
+    /// fois le port réel joignable.
+    Forward { target_port: u16 },
+    /// Service non HTTP (joint sur son port réel dans le network group) ou
+    /// worker sans port : répondeur `200 OK`. Avec `ready_port`, la réponse
+    /// n'est servie qu'une fois ce port joignable, pour que le succès du
+    /// déploiement reflète la disponibilité réelle.
+    Health {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ready_port: Option<u16>,
+    },
 }
 
 /// Identifiants numériques résolus au build de l'image.
