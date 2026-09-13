@@ -163,10 +163,19 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 *Questions ouvertes restantes :*
 
 - Validation du plan intermédiaire par le propriétaire du projet.
-- **UDP** : par quel port le trafic d'une redirection UDP entre-t-il dans le
-  conteneur (équivalent de 4040) ? Non documenté ; le plan porte le
-  protocole, le shim ne relaie pas encore, avertissement
-  `redirection-udp-unverified`.
+- **UDP** : d'après le propriétaire (13/09/2026), « TCP config = UDP
+  config » : l'UDP entre aussi par 4040. Relais UDP implémenté dans le shim
+  sur cette base. Lu dans `~/supernova` : les ports standard de la VM
+  (8080, 10050, 22, 4040 `checkPort`) sont NATés en TCP par défaut, une
+  redirection UDP passe par `assignExtraPort(uuid, 'udp', …)` ; et
+  l'algorithme cc-api de `udpRedirs` a sa publication `hayxorp` en
+  commentaire. À confirmer par un test réel en phase 3.
+- **Contrôle de santé, précisé par `~/rubydeployer`** (`util/health_check.rb`,
+  `scripts/deploy-docker.sh`) : `CC_HEALTH_CHECK_PATH` exige un code 2xx
+  (`200...300`), le défaut `/` accepte `200...500` ; ~4 min d'attente du
+  port puis ~17 min de tentatives ; en port mapping, `-p 8080:<http>
+  -p 4040:<tcp>` sans `/udp`. Le répondeur de santé du shim renvoie 200,
+  donc compatible dans les deux cas.
 - Lecteur de registre (`oci-client`) pour la configuration des images.
 - `secrets` (matérialisation par le shim) et bind mounts de répertoires :
   refusés pour l'instant.

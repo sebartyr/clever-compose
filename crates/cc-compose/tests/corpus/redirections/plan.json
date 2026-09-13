@@ -155,6 +155,9 @@
         },
         "tcp": {
           "target_port": 27016
+        },
+        "udp": {
+          "target_port": 27015
         }
       },
       "env": [

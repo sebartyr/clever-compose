@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 use std::path::Path as FsPath;
 
 use cc_compose_model::plan::*;
-use cc_compose_model::shim::{PlatformPort, ShimConfig, TcpRelay, PLATFORM_HTTP_PORT};
+use cc_compose_model::shim::{PlatformPort, ShimConfig, TcpRelay, UdpRelay, PLATFORM_HTTP_PORT};
 use indexmap::IndexMap;
 
 use crate::compose::model::{Project, Service};
@@ -258,7 +258,7 @@ fn plan_service(
     // Port plateforme (phase 0) : 8080 servi par le shim ; les autres ports
     // publiés deviennent des redirections TCP/UDP, le TCP entrant par 4040.
     let port = platform_port(name, s, x, &intrinsics, p, is_task, diags);
-    let (redirections, tcp) = redirections(name, s, x, &port, p, diags);
+    let (redirections, tcp, udp) = redirections(name, s, x, &port, p, diags);
 
     // Variables d'environnement : refus des variables réservées, réécriture
     // des noms de services, table DNS.
@@ -310,7 +310,7 @@ fn plan_service(
         scaling,
         source,
         image: intrinsics,
-        shim: ShimConfig { argv, workdir, user, port, tcp },
+        shim: ShimConfig { argv, workdir, user, port, tcp, udp },
         env,
         depends_on,
         health_check_path: None,
@@ -319,10 +319,9 @@ fn plan_service(
 }
 
 /// Ports publiés qui ne sont pas le port HTTP : une redirection chacun. Le
-/// shim ne relaie 4040 que vers le premier port TCP, faute d'un second port
-/// d'entrée ; l'UDP est modélisé mais son port d'entrée côté conteneur
-/// reste à confirmer (question ouverte, summary.md).
-fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &Path, diags: &mut Diagnostics) -> (Vec<Redirection>, Option<TcpRelay>) {
+/// TCP et l'UDP entrent tous deux par 4040, donc un seul port de chaque
+/// protocole peut être relayé par application.
+fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &Path, diags: &mut Diagnostics) -> (Vec<Redirection>, Option<TcpRelay>, Option<UdpRelay>) {
     let http_port = match port {
         PlatformPort::Image => Some(PLATFORM_HTTP_PORT),
         PlatformPort::Forward { target_port } => Some(*target_port),
@@ -331,6 +330,7 @@ fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &P
     let namespace = x.tcp_namespace.clone().unwrap_or_else(|| "default".into());
     let mut out = Vec::new();
     let mut tcp: Option<TcpRelay> = None;
+    let mut udp: Option<UdpRelay> = None;
     let mut seen: Vec<(u16, &str)> = Vec::new();
     for (i, pt) in s.ports.iter().enumerate() {
         if pt.published.is_none() || Some(pt.target) == http_port && pt.protocol == "tcp" {
@@ -343,7 +343,13 @@ fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &P
         let pp = p.child("ports").index(i);
         let protocol = match pt.protocol.as_str() {
             "udp" => {
-                diags.push(Diagnostic::warning("redirection-udp-unverified", format!("`{name}` : le port UDP {} publié devient une redirection UDP ; le port d'entrée côté conteneur n'est pas encore relayé par le shim (à confirmer)", pt.target)).with_path(&pp));
+                if udp.is_none() {
+                    udp = Some(UdpRelay { target_port: pt.target });
+                    diags.push(Diagnostic::warning("redirection-udp", format!("`{name}` : le port UDP {} publié devient une redirection UDP (port externe attribué par la plateforme), relayée depuis 4040 par le shim", pt.target)).with_path(&pp));
+                } else {
+                    diags.push(Diagnostic::error("redirection-udp-multiple", format!("`{name}` : un seul port UDP peut être relayé depuis 4040 ; {} ne sera pas exposé publiquement (joignable dans le network group)", pt.target)).with_path(&pp));
+                    continue;
+                }
                 Protocol::Udp
             }
             "tcp" => {
@@ -363,7 +369,7 @@ fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &P
         };
         out.push(Redirection { id: ResourceId(format!("redir/{name}/{}/{}", pt.protocol, pt.target)), app: ResourceId(format!("app/{name}")), namespace: namespace.clone(), protocol, target_port: pt.target });
     }
-    (out, tcp)
+    (out, tcp, udp)
 }
 
 /// Ports connus comme non HTTP, pour deviner le mode du port plateforme

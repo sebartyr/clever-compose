@@ -52,6 +52,17 @@ pub struct ShimConfig {
     /// joignable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tcp: Option<TcpRelay>,
+
+    /// Relais UDP depuis [`PLATFORM_TCP_PORT`] (même port d'entrée que le
+    /// TCP) vers le port réel, pour une redirection UDP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub udp: Option<UdpRelay>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UdpRelay {
+    pub target_port: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

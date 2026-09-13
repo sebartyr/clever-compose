@@ -8,7 +8,12 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
-use cc_compose_model::shim::{PlatformPort, TcpRelay, PLATFORM_HTTP_PORT, PLATFORM_TCP_PORT};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use cc_compose_model::shim::{PlatformPort, TcpRelay, UdpRelay, PLATFORM_HTTP_PORT, PLATFORM_TCP_PORT};
+use tokio::net::UdpSocket;
+use tokio::sync::Mutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -86,6 +91,63 @@ pub async fn serve_tcp(relay: TcpRelay) {
                 tokio::time::sleep(READY_POLL).await;
             }
         }
+    }
+}
+
+/// Redirection UDP : chaque source distante reçoit son propre socket vers la
+/// cible, pour que les réponses reviennent à la bonne source. Une entrée
+/// inactive depuis deux minutes est fermée.
+pub async fn serve_udp(relay: UdpRelay) {
+    let target = local(relay.target_port);
+    let listen = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PLATFORM_TCP_PORT));
+    let inbound = match UdpSocket::bind(listen).await {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!("cc-shim: bind udp {listen} : {e}");
+            return;
+        }
+    };
+    eprintln!("cc-shim: {listen} relayé vers {target} (udp)");
+    let table: Arc<Mutex<HashMap<SocketAddr, Arc<UdpSocket>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let mut buf = vec![0u8; 65535];
+    loop {
+        let (n, from) = match inbound.recv_from(&mut buf).await {
+            Ok(x) => x,
+            Err(e) => {
+                eprintln!("cc-shim: udp recv : {e}");
+                continue;
+            }
+        };
+        let sock = {
+            let mut t = table.lock().await;
+            match t.get(&from) {
+                Some(s) => s.clone(),
+                None => {
+                    let Ok(s) = UdpSocket::bind("127.0.0.1:0").await else { continue };
+                    if s.connect(target).await.is_err() {
+                        continue;
+                    }
+                    let s = Arc::new(s);
+                    t.insert(from, s.clone());
+                    // Réponses de la cible vers la source, puis expiration.
+                    let (inbound, table, s2) = (inbound.clone(), table.clone(), s.clone());
+                    tokio::spawn(async move {
+                        let mut rbuf = vec![0u8; 65535];
+                        loop {
+                            match tokio::time::timeout(Duration::from_secs(120), s2.recv(&mut rbuf)).await {
+                                Ok(Ok(n)) => {
+                                    let _ = inbound.send_to(&rbuf[..n], from).await;
+                                }
+                                _ => break,
+                            }
+                        }
+                        table.lock().await.remove(&from);
+                    });
+                    s
+                }
+            }
+        };
+        let _ = sock.send(&buf[..n]).await;
     }
 }
 
