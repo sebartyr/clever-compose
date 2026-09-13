@@ -1,72 +1,4 @@
 {
-  "provider": {
-    "clevercloud": {
-      "organisation": "${var.organisation}"
-    }
-  },
-  "resource": {
-    "clevercloud_docker": {
-      "db": {
-        "biggest_flavor": "XS",
-        "deployment": {
-          "commit": "refs/heads/clever-compose/db",
-          "repository": "${var.repository}"
-        },
-        "environment": {
-          "POSTGRES_DB": "gitea",
-          "POSTGRES_PASSWORD": "gitea",
-          "POSTGRES_USER": "gitea"
-        },
-        "max_instance_count": 1,
-        "min_instance_count": 1,
-        "name": "gitea-db",
-        "networkgroups": [
-          {
-            "fqdn": "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-            "networkgroup_id": "${clevercloud_networkgroup.default.id}"
-          }
-        ],
-        "region": "par",
-        "smallest_flavor": "XS"
-      },
-      "gitea": {
-        "biggest_flavor": "XS",
-        "deployment": {
-          "commit": "refs/heads/clever-compose/gitea",
-          "repository": "${var.repository}"
-        },
-        "environment": {
-          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:5432",
-          "DB_NAME": "gitea",
-          "DB_PASSWD": "gitea",
-          "DB_TYPE": "postgres",
-          "DB_USER": "gitea"
-        },
-        "max_instance_count": 1,
-        "min_instance_count": 1,
-        "name": "gitea-gitea",
-        "networkgroups": [
-          {
-            "fqdn": "gitea.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-            "networkgroup_id": "${clevercloud_networkgroup.default.id}"
-          }
-        ],
-        "region": "par",
-        "smallest_flavor": "XS"
-      }
-    },
-    "clevercloud_networkgroup": {
-      "default": {
-        "name": "gitea-default",
-        "tags": [
-          "compose-project=gitea",
-          "compose-network=default",
-          "compose-spec=68a37ba677359e09018f300954276e41"
-        ]
-      }
-    }
-  },
   "terraform": {
     "required_providers": {
       "clevercloud": {
@@ -75,15 +7,83 @@
       }
     }
   },
+  "provider": {
+    "clevercloud": {
+      "organisation": "${var.organisation}"
+    }
+  },
   "variable": {
     "organisation": {
+      "type": "string",
       "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)",
-      "sensitive": true,
-      "type": "string"
+      "sensitive": true
     },
     "repository": {
-      "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)",
-      "type": "string"
+      "type": "string",
+      "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+    }
+  },
+  "resource": {
+    "clevercloud_networkgroup": {
+      "default": {
+        "name": "gitea-default",
+        "tags": [
+          "compose-project=gitea",
+          "compose-network=default",
+          "compose-spec=9aa14d857c9c7c91984add8639f6f607"
+        ]
+      }
+    },
+    "clevercloud_docker": {
+      "gitea": {
+        "name": "gitea-gitea",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:5432",
+          "DB_NAME": "gitea",
+          "DB_PASSWD": "gitea",
+          "DB_TYPE": "postgres",
+          "DB_USER": "gitea"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "gitea.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/gitea"
+        }
+      },
+      "db": {
+        "name": "gitea-db",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "POSTGRES_DB": "gitea",
+          "POSTGRES_PASSWORD": "gitea",
+          "POSTGRES_USER": "gitea"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/db"
+        }
+      }
     }
   }
 }

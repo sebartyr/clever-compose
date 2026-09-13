@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `redirections` (spec cdf5f26b02357c05b8a4da821fe3451e).
+# Bootstrap généré par clever-compose pour le projet `redirections` (spec ab46b6e9e5851eda9d6f09c939d555f5).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'redirections-default' -o "$ORG" --tags 'compose-project=redirections,compose-network=default,compose-spec=cdf5f26b02357c05b8a4da821fe3451e'
+clever ng create 'redirections-default' -o "$ORG" --tags 'compose-project=redirections,compose-network=default,compose-spec=ab46b6e9e5851eda9d6f09c939d555f5'
 NG_default="$(clever ng get 'redirections-default' -o "$ORG" -F json | jq -r .id)"
 
 # Applications, créées sans déploiement
@@ -16,12 +16,12 @@ APP_db="$(clever create -t docker 'redirections-db' -o "$ORG" -r 'par' -F json |
 clever scale --app "$APP_db" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=redirections
 # tag : compose-service=db
-# tag : compose-spec=cdf5f26b02357c05b8a4da821fe3451e
+# tag : compose-spec=ab46b6e9e5851eda9d6f09c939d555f5
 APP_game="$(clever create -t docker 'redirections-game' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_game" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=redirections
 # tag : compose-service=game
-# tag : compose-spec=cdf5f26b02357c05b8a4da821fe3451e
+# tag : compose-spec=ab46b6e9e5851eda9d6f09c939d555f5
 
 # Liaisons aux network groups
 clever ng link "$APP_db" 'redirections-default' -o "$ORG"

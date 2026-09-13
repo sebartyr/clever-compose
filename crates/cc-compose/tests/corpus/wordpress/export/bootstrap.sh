@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `wordpress` (spec 5a65e589c9975ae4fcb5adab9d29fab4).
+# Bootstrap généré par clever-compose pour le projet `wordpress` (spec b31c71e276f0a456e63e12b61ad6a2a3).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'wordpress-default' -o "$ORG" --tags 'compose-project=wordpress,compose-network=default,compose-spec=5a65e589c9975ae4fcb5adab9d29fab4'
+clever ng create 'wordpress-default' -o "$ORG" --tags 'compose-project=wordpress,compose-network=default,compose-spec=b31c71e276f0a456e63e12b61ad6a2a3'
 NG_default="$(clever ng get 'wordpress-default' -o "$ORG" -F json | jq -r .id)"
 
 # Applications, créées sans déploiement
@@ -16,12 +16,12 @@ APP_db="$(clever create -t docker 'wordpress-db' -o "$ORG" -r 'par' -F json | jq
 clever scale --app "$APP_db" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=wordpress
 # tag : compose-service=db
-# tag : compose-spec=5a65e589c9975ae4fcb5adab9d29fab4
+# tag : compose-spec=b31c71e276f0a456e63e12b61ad6a2a3
 APP_wordpress="$(clever create -t docker 'wordpress-wordpress' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_wordpress" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=wordpress
 # tag : compose-service=wordpress
-# tag : compose-spec=5a65e589c9975ae4fcb5adab9d29fab4
+# tag : compose-spec=b31c71e276f0a456e63e12b61ad6a2a3
 
 # Liaisons aux network groups
 clever ng link "$APP_db" 'wordpress-default' -o "$ORG"

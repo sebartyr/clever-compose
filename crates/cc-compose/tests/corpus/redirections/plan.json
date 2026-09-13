@@ -1,6 +1,6 @@
 {
   "project": "redirections",
-  "spec_hash": "cdf5f26b02357c05b8a4da821fe3451e",
+  "spec_hash": "ab46b6e9e5851eda9d6f09c939d555f5",
   "resources": [
     {
       "resource": "network_group",
@@ -10,7 +10,7 @@
       "tags": [
         "compose-project=redirections",
         "compose-network=default",
-        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+        "compose-spec=ab46b6e9e5851eda9d6f09c939d555f5"
       ]
     },
     {
@@ -96,7 +96,7 @@
       "tags": [
         "compose-project=redirections",
         "compose-service=db",
-        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+        "compose-spec=ab46b6e9e5851eda9d6f09c939d555f5"
       ]
     },
     {
@@ -152,7 +152,7 @@
       "tags": [
         "compose-project=redirections",
         "compose-service=game",
-        "compose-spec=cdf5f26b02357c05b8a4da821fe3451e"
+        "compose-spec=ab46b6e9e5851eda9d6f09c939d555f5"
       ]
     },
     {

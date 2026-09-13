@@ -1,6 +1,6 @@
 {
   "project": "nextcloud",
-  "spec_hash": "f30238c54d8b2a18d0b3e7fbf67a617c",
+  "spec_hash": "a8756149457c4f7cfba9e5a2388e71c4",
   "resources": [
     {
       "resource": "network_group",
@@ -10,83 +10,7 @@
       "tags": [
         "compose-project=nextcloud",
         "compose-network=default",
-        "compose-spec=f30238c54d8b2a18d0b3e7fbf67a617c"
-      ]
-    },
-    {
-      "resource": "app",
-      "id": "app/db",
-      "service": "db",
-      "name": "nextcloud-db",
-      "kind": "service",
-      "region": "par",
-      "scaling": {
-        "flavor": "XS",
-        "min_instances": 1,
-        "max_instances": 1
-      },
-      "source": {
-        "type": "synthetic",
-        "image": "postgres:alpine",
-        "private_registry": false,
-        "files": []
-      },
-      "image": {
-        "entrypoint": [
-          "docker-entrypoint.sh"
-        ],
-        "cmd": [
-          "postgres"
-        ],
-        "user": null,
-        "workdir": "/",
-        "exposed_ports": [
-          5432
-        ]
-      },
-      "shim": {
-        "argv": [
-          "docker-entrypoint.sh",
-          "postgres"
-        ],
-        "workdir": "/",
-        "port": {
-          "mode": "health",
-          "ready_port": 5432
-        }
-      },
-      "env": [
-        {
-          "key": "POSTGRES_DB",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_PASSWORD",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        },
-        {
-          "key": "POSTGRES_USER",
-          "value": [
-            {
-              "literal": "nextcloud"
-            }
-          ]
-        }
-      ],
-      "depends_on": [],
-      "health_check_path": null,
-      "tags": [
-        "compose-project=nextcloud",
-        "compose-service=db",
-        "compose-spec=f30238c54d8b2a18d0b3e7fbf67a617c"
+        "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
       ]
     },
     {
@@ -187,16 +111,83 @@
       "tags": [
         "compose-project=nextcloud",
         "compose-service=nc",
-        "compose-spec=f30238c54d8b2a18d0b3e7fbf67a617c"
+        "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
       ]
     },
     {
-      "resource": "membership",
-      "id": "member/db@default",
-      "member": "app/db",
-      "group": "ng/default",
-      "aliases": [
-        "db"
+      "resource": "app",
+      "id": "app/db",
+      "service": "db",
+      "name": "nextcloud-db",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "postgres:alpine",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "postgres"
+        ],
+        "user": null,
+        "workdir": "/",
+        "exposed_ports": [
+          5432
+        ]
+      },
+      "shim": {
+        "argv": [
+          "docker-entrypoint.sh",
+          "postgres"
+        ],
+        "workdir": "/",
+        "port": {
+          "mode": "health",
+          "ready_port": 5432
+        }
+      },
+      "env": [
+        {
+          "key": "POSTGRES_DB",
+          "value": [
+            {
+              "literal": "nextcloud"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_PASSWORD",
+          "value": [
+            {
+              "literal": "nextcloud"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_USER",
+          "value": [
+            {
+              "literal": "nextcloud"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=nextcloud",
+        "compose-service=db",
+        "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
       ]
     },
     {
@@ -206,6 +197,15 @@
       "group": "ng/default",
       "aliases": [
         "nc"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "app/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
       ]
     }
   ]

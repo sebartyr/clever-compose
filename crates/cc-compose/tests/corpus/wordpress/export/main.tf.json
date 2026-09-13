@@ -1,72 +1,4 @@
 {
-  "provider": {
-    "clevercloud": {
-      "organisation": "${var.organisation}"
-    }
-  },
-  "resource": {
-    "clevercloud_docker": {
-      "db": {
-        "biggest_flavor": "XS",
-        "deployment": {
-          "commit": "refs/heads/clever-compose/db",
-          "repository": "${var.repository}"
-        },
-        "environment": {
-          "MYSQL_DATABASE": "wordpress",
-          "MYSQL_PASSWORD": "wordpress",
-          "MYSQL_ROOT_PASSWORD": "somewordpress",
-          "MYSQL_USER": "wordpress"
-        },
-        "max_instance_count": 1,
-        "min_instance_count": 1,
-        "name": "wordpress-db",
-        "networkgroups": [
-          {
-            "fqdn": "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-            "networkgroup_id": "${clevercloud_networkgroup.default.id}"
-          }
-        ],
-        "region": "par",
-        "smallest_flavor": "XS"
-      },
-      "wordpress": {
-        "biggest_flavor": "XS",
-        "deployment": {
-          "commit": "refs/heads/clever-compose/wordpress",
-          "repository": "${var.repository}"
-        },
-        "environment": {
-          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "WORDPRESS_DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "WORDPRESS_DB_NAME": "wordpress",
-          "WORDPRESS_DB_PASSWORD": "wordpress",
-          "WORDPRESS_DB_USER": "wordpress"
-        },
-        "max_instance_count": 1,
-        "min_instance_count": 1,
-        "name": "wordpress-wordpress",
-        "networkgroups": [
-          {
-            "fqdn": "wordpress.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-            "networkgroup_id": "${clevercloud_networkgroup.default.id}"
-          }
-        ],
-        "region": "par",
-        "smallest_flavor": "XS"
-      }
-    },
-    "clevercloud_networkgroup": {
-      "default": {
-        "name": "wordpress-default",
-        "tags": [
-          "compose-project=wordpress",
-          "compose-network=default",
-          "compose-spec=5a65e589c9975ae4fcb5adab9d29fab4"
-        ]
-      }
-    }
-  },
   "terraform": {
     "required_providers": {
       "clevercloud": {
@@ -75,15 +7,83 @@
       }
     }
   },
+  "provider": {
+    "clevercloud": {
+      "organisation": "${var.organisation}"
+    }
+  },
   "variable": {
     "organisation": {
+      "type": "string",
       "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)",
-      "sensitive": true,
-      "type": "string"
+      "sensitive": true
     },
     "repository": {
-      "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)",
-      "type": "string"
+      "type": "string",
+      "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+    }
+  },
+  "resource": {
+    "clevercloud_networkgroup": {
+      "default": {
+        "name": "wordpress-default",
+        "tags": [
+          "compose-project=wordpress",
+          "compose-network=default",
+          "compose-spec=b31c71e276f0a456e63e12b61ad6a2a3"
+        ]
+      }
+    },
+    "clevercloud_docker": {
+      "db": {
+        "name": "wordpress-db",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "MYSQL_DATABASE": "wordpress",
+          "MYSQL_PASSWORD": "wordpress",
+          "MYSQL_ROOT_PASSWORD": "somewordpress",
+          "MYSQL_USER": "wordpress"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/db"
+        }
+      },
+      "wordpress": {
+        "name": "wordpress-wordpress",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "WORDPRESS_DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "WORDPRESS_DB_NAME": "wordpress",
+          "WORDPRESS_DB_PASSWORD": "wordpress",
+          "WORDPRESS_DB_USER": "wordpress"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "wordpress.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/wordpress"
+        }
+      }
     }
   }
 }

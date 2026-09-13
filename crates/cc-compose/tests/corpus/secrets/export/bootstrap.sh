@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `secrets` (spec 146d3418d2188ff3c87af2b66be889bc).
+# Bootstrap généré par clever-compose pour le projet `secrets` (spec 69b84dbca4ba8bebc96faaaea68b4416).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'secrets-default' -o "$ORG" --tags 'compose-project=secrets,compose-network=default,compose-spec=146d3418d2188ff3c87af2b66be889bc'
+clever ng create 'secrets-default' -o "$ORG" --tags 'compose-project=secrets,compose-network=default,compose-spec=69b84dbca4ba8bebc96faaaea68b4416'
 NG_default="$(clever ng get 'secrets-default' -o "$ORG" -F json | jq -r .id)"
 
 # Applications, créées sans déploiement
@@ -16,7 +16,7 @@ APP_app="$(clever create -t docker 'secrets-app' -o "$ORG" -r 'par' -F json | jq
 clever scale --app "$APP_app" --flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=secrets
 # tag : compose-service=app
-# tag : compose-spec=146d3418d2188ff3c87af2b66be889bc
+# tag : compose-spec=69b84dbca4ba8bebc96faaaea68b4416
 
 # Liaisons aux network groups
 clever ng link "$APP_app" 'secrets-default' -o "$ORG"

@@ -1,6 +1,6 @@
 {
   "project": "wordpress",
-  "spec_hash": "5a65e589c9975ae4fcb5adab9d29fab4",
+  "spec_hash": "b31c71e276f0a456e63e12b61ad6a2a3",
   "resources": [
     {
       "resource": "network_group",
@@ -10,7 +10,7 @@
       "tags": [
         "compose-project=wordpress",
         "compose-network=default",
-        "compose-spec=5a65e589c9975ae4fcb5adab9d29fab4"
+        "compose-spec=b31c71e276f0a456e63e12b61ad6a2a3"
       ]
     },
     {
@@ -93,7 +93,7 @@
       "tags": [
         "compose-project=wordpress",
         "compose-service=db",
-        "compose-spec=5a65e589c9975ae4fcb5adab9d29fab4"
+        "compose-spec=b31c71e276f0a456e63e12b61ad6a2a3"
       ]
     },
     {
@@ -194,7 +194,7 @@
       "tags": [
         "compose-project=wordpress",
         "compose-service=wordpress",
-        "compose-spec=5a65e589c9975ae4fcb5adab9d29fab4"
+        "compose-spec=b31c71e276f0a456e63e12b61ad6a2a3"
       ]
     },
     {
