@@ -19,7 +19,10 @@ Fixtures `phase0/postgres` et `phase0/client` déployées à la main dans
 l'organisation Test SBRUNAT (apps `cc-phase0-postgres`, `cc-phase0-client`,
 network group `p0`), à supprimer quand elles ne servent plus.
 
-Prochaine étape : phase 1 (parsing, plan, diagnostics).
+**Phase 1 en cours** (parsing terminé, plan et diagnostics à faire).
+Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
+sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
+`~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
 
 ## Références
 
@@ -56,6 +59,70 @@ Prochaine étape : phase 1 (parsing, plan, diagnostics).
 | 5 | Résolution `cc-ng.cloud` en `--net host`, `resolv.conf` modifiable ? | **répondue** | Oui, via le résolveur de la VM (`nameserver 10.2.0.1`, puis `1.1.1.1`, `search .`). Zone privée, pas résolvable depuis l'extérieur. `resolv.conf` est un bind mount : **réécrivable en place, pas remplaçable** (`rm` refusé). |
 | 6 | Workers sans port : critère de succès du déploiement | **répondue** | Le déployeur fait un **GET HTTP sur 8080** et accepte tout code 200 à 500. Sans écoute : échec après 4 min. Réponse non HTTP : plantage du déployeur, échec. Chaque conteneur doit répondre en HTTP sur 8080, worker compris. |
 | 7 | Expansion des variables entre elles par la plateforme | **répondue** | **Non.** `P0_REF=ref=${P0_PASSWORD}/end` arrive littéralement dans le conteneur. L'expansion par le shim (§6.2) est nécessaire. |
+
+---
+
+## Phase 1 : parsing, plan et diagnostics
+
+*Décidé :*
+
+- **Pas de crate `compose_spec`** (écart au cadrage §9, assumé) : elle
+  date d'octobre 2024, dépend de `serde_yaml` archivé, et ne résout pas le
+  problème, puisque dans `compose-go` la fusion des overrides, `extends`,
+  `include` et la canonicalisation opèrent sur l'arbre brut avant tout
+  typage. Ce travail est porté sur notre arbre brut (`Node` avec positions),
+  et le typage vient en dernier. Référence : les sources de compose-go
+  `v2.15.1-0.20260908103050` (celle de Docker Compose 5.5.1), lues dans
+  `~/go/pkg/mod`.
+- **Parseur YAML** : `saphyr` (YAML 1.2, `early_parse(false)` pour obtenir
+  les scalaires bruts avec leur style), avec **notre propre résolution des
+  scalaires**, portée de `go.yaml.in/yaml/v4` (`internal/libyaml/resolver.go`),
+  qui n'est ni 1.1 ni 1.2 : `yes`/`no` restent des chaînes, pas de
+  sexagésimal, mais octal à zéro initial (`0777` → 511, `09` → 9.0 par le
+  motif flottant), underscores dans les nombres, horodatages sur scalaires
+  non quotés. Table vérifiée contre l'oracle
+  (`tests/corpus/yaml-resolution`). Clés de fusion `<<` faites par nous.
+- **`saphyr-parser` vendorisé** (`vendor/`, patch d'une ligne) : libyaml ne
+  vérifie pas l'indentation en contexte flow, saphyr si ; le compose de
+  Sentry (crochet fermant aligné sur sa clé) est refusé sans ce patch. À
+  proposer en amont.
+- **Chaîne portée de compose-go**, dans son ordre : clés en chaînes,
+  interpolation (six opérateurs, `$$`, défaut substitué, conversions de type
+  par chemin), `include` (répertoire et `.env` propres), `!reset`/`!override`
+  appliqués à l'accumulé, `extends` (base canonicalisée, chemins résolus
+  relativement à son fichier, cache, cycles), fusion par chemin
+  (`override/merge.go`), unicité (`uncity.go`), schéma JSON, canonicalisation
+  (`transform/*`), `OmitEmpty` (seulement `services.*.dns`), valeurs par
+  défaut, chemins relatifs, `Normalize`, décodeurs du modèle typé
+  (`MappingWithEquals`, `ShellCommand` via un port de go-shellwords,
+  `StringOrNumberList`, `HostsList`, `UnitBytes`, `Duration`), fusion des
+  `env_file`, profils, élagage des ressources inutilisées, `omitempty` Go
+  (dont `OptOut` pour `create_host_path` et `required` sans omitempty).
+- **Schéma JSON** embarqué depuis compose-go (`schema/PROVENANCE.md`),
+  validé après la fusion de chaque fichier : clé inconnue ou type invalide
+  produisent une erreur avec chemin et position.
+- **Test différentiel** : `tests/corpus/<cas>/compose.yaml` (+ `.env`,
+  overrides, includes) ; `expected.yaml` = sortie de `docker compose config`
+  figée, régénérée par `CC_REGEN_ORACLE=1 cargo test`. Comparaison en JSON
+  après une seule règle de forme : les `$$` que `config` produit en sortie
+  sont ramenés à `$`. **Treize cas identiques à l'oracle** : WordPress,
+  Gitea, Nextcloud, Plausible, Immich, Mastodon, Sentry, la sonde YAML, et
+  cinq synthétiques (règles de fusion des overrides, `extends`, `include`,
+  formes d'interpolation, profils).
+- Précédence du nom de projet : `-p`, `COMPOSE_PROJECT_NAME` (shell ou
+  `.env`), `name:`, répertoire.
+
+*Invalidé :*
+
+- L'hypothèse du cadrage que `serde_yaml_ng`/`serde_norway`/`saphyr`
+  suffiraient tels quels : la résolution des scalaires doit être la nôtre.
+- L'hypothèse implicite qu'un parseur YAML 1.2 strict accepte les fichiers
+  réels : Sentry demande la tolérance de libyaml.
+
+*Questions ouvertes restantes :*
+
+- Le plan intermédiaire (§5) et les diagnostics de refus (§6) : à faire.
+- Les messages du validateur de schéma sont en anglais (crate `jsonschema`).
 
 ---
 
