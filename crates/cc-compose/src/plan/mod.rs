@@ -330,10 +330,19 @@ fn plan_service(
     }
     let dns_map = env::dns_map(name, s, memberships);
     if !dns_map.0.is_empty() {
-        env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map });
+        env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map.clone() });
     }
-    if let Some(path) = &s.healthcheck.as_ref().and_then(|h| health_path(h, name, p, diags)) {
+    let health_check_path = s.healthcheck.as_ref().and_then(|h| health_path(h, name, p, diags));
+    if let Some(path) = &health_check_path {
         env.push(EnvVar { key: "CC_HEALTH_CHECK_PATH".into(), value: Template::literal(path.clone()) });
+    }
+    // Diagnostic obligatoire sur les proxys (CLAUDE.md §7) : nginx, haproxy
+    // et traefik résolvent les noms une fois au démarrage.
+    if !dns_map.0.is_empty() {
+        let image_name = s.image.as_deref().unwrap_or("").rsplit('/').next().unwrap_or("").split(':').next().unwrap_or("").to_string();
+        if ["nginx", "haproxy", "traefik", "openresty"].contains(&image_name.as_str()) {
+            diags.push(Diagnostic::warning("proxy-resolver", format!("`{name}` ({image_name}) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez un `resolver` (adresse dans /etc/resolv.conf, TTL court) et passez l'hôte amont par une variable pour forcer la résolution à chaque requête")).with_path(&p.child("image")));
+        }
     }
     env.sort_by(|a, b| a.key.cmp(&b.key));
 
@@ -366,7 +375,7 @@ fn plan_service(
         shim: ShimConfig { argv, workdir, user, port, tcp, udp, secrets: shim_secrets },
         env,
         depends_on,
-        health_check_path: None,
+        health_check_path,
         secrets,
         tags: Vec::new(),
     }, redirections))
@@ -486,6 +495,7 @@ fn health_path(h: &crate::compose::model::HealthCheck, name: &str, p: &Path, dia
     match url {
         Some(u) => {
             let after = u.splitn(4, '/').nth(3).map(|s| format!("/{s}")).unwrap_or_else(|| "/".into());
+            diags.push(Diagnostic::warning("healthcheck-strict", format!("`{name}` : le healthcheck devient `CC_HEALTH_CHECK_PATH={after}` ; le déployeur exige alors une réponse 2xx sur ce chemin (le défaut `/` accepte jusqu'à 499)")).with_path(&p.child("healthcheck")));
             Some(after)
         }
         None => {

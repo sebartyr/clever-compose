@@ -30,6 +30,8 @@ compose.yaml:51:5: erreur [image-unresolved] services.monitors-clock-tasks.build
 compose.yaml:4:16: avertissement [key-ignored] services.monitors-clock-tasks.pull_policy: `pull_policy` est ignoré : l'image est reconstruite à chaque déploiement
 compose.yaml:51:5: erreur [image-unresolved] services.monitors-clock-tick.build: monitors-clock-tick : ./sentry/Dockerfile : No such file or directory (os error 2)
 compose.yaml:4:16: avertissement [key-ignored] services.monitors-clock-tick.pull_policy: `pull_policy` est ignoré : l'image est reconstruite à chaque déploiement
+compose.yaml:612:7: avertissement [healthcheck-strict] services.nginx.healthcheck: `nginx` : le healthcheck devient `CC_HEALTH_CHECK_PATH=/` ; le déployeur exige alors une réponse 2xx sur ce chemin (le défaut `/` accepte jusqu'à 499)
+compose.yaml:603:12: avertissement [proxy-resolver] services.nginx.image: `nginx` (nginx) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez un `resolver` (adresse dans /etc/resolv.conf, TTL court) et passez l'hôte amont par une variable pour forcer la résolution à chaque requête
 compose.yaml:605:9: erreur [bind-missing] services.nginx.volumes[0]: le chemin `./nginx.conf` monté vers `/etc/nginx/nginx.conf` n'existe pas sur ce poste
 compose.yaml:609:9: avertissement [volume-ephemeral] services.nginx.volumes[1]: le volume `sentry-nginx-cache` monté sur `/var/cache/nginx` sera éphémère : les données sont perdues à chaque redéploiement
 compose.yaml:610:9: avertissement [volume-ephemeral] services.nginx.volumes[2]: le volume `sentry-nginx-www` monté sur `/var/www` sera éphémère : les données sont perdues à chaque redéploiement
@@ -58,6 +60,7 @@ compose.yaml:630:9: erreur [bind-missing] services.relay.volumes[0]: le chemin `
 compose.yaml:634:9: erreur [bind-missing] services.relay.volumes[1]: le chemin `./geoip` monté vers `/geoip` n'existe pas sur ce poste
 compose.yaml:275:5: avertissement [port-assumed-http] services.seaweedfs: `seaweedfs` : le port 7333 est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas
 avertissement [multiple-ports] services.seaweedfs.expose: `seaweedfs` expose plusieurs ports ([7333, 8080, 8333, 8888, 9333, 18080, 18888, 19333]) : 7333 est pris pour le port HTTP, les autres restent joignables dans le network group
+compose.yaml:296:7: avertissement [healthcheck-strict] services.seaweedfs.healthcheck: `seaweedfs` : le healthcheck devient `CC_HEALTH_CHECK_PATH=/healthz` ; le déployeur exige alors une réponse 2xx sur ce chemin (le défaut `/` accepte jusqu'à 499)
 compose.yaml:294:9: avertissement [volume-ephemeral] services.seaweedfs.volumes[0]: le volume `sentry-seaweedfs` monté sur `/data` sera éphémère : les données sont perdues à chaque redéploiement
 compose.yaml:594:7: erreur [image-unresolved] services.sentry-cleanup.build: sentry-cleanup : ./cron/Dockerfile : No such file or directory (os error 2)
 compose.yaml:4:16: avertissement [key-ignored] services.sentry-cleanup.pull_policy: `pull_policy` est ignoré : l'image est reconstruite à chaque déploiement

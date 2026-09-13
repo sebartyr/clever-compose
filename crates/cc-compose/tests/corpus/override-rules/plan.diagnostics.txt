@@ -1,0 +1,18 @@
+compose.yaml:41:5: avertissement [port-assumed-http] services.api: `api` : le port 3000 est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas
+compose.yaml:51:14: erreur [unsupported-key] services.api.cap_add: `cap_add` n'a pas d'équivalent sur Clever Cloud : aucune capacité supplémentaire n'est accordée
+compose.yaml:53:7: erreur [unsupported-key] services.api.sysctls: `sysctls` n'a pas d'équivalent sur Clever Cloud : pas de réglage noyau
+compose.yaml:50:12: avertissement [tmpfs-ignored] services.api.tmpfs: `tmpfs` est ignoré : le système de fichiers du conteneur est déjà éphémère
+compose.override.yaml:53:5: avertissement [port-assumed-tcp] services.db: `db` : le port 5432 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
+compose.yaml:31:7: avertissement [key-ignored] services.web.dns: `dns` est ignoré : le résolveur est celui de la VM, le shim y ajoute les noms de services
+compose.yaml:15:9: avertissement [environment-unset] services.web.environment.EMPTY: `EMPTY` est déclarée sans valeur et absente de l'environnement : ignorée
+compose.yaml:38:7: avertissement [key-ignored] services.web.extra_hosts: `extra_hosts` est ignoré : pas d'écriture de /etc/hosts (CLAUDE.md §7)
+compose.yaml:24:7: avertissement [healthcheck-ignored] services.web.healthcheck: `web` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
+compose.yaml:3:12: avertissement [proxy-resolver] services.web.image: `web` (nginx) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez un `resolver` (adresse dans /etc/resolv.conf, TTL court) et passez l'hôte amont par une variable pour forcer la résolution à chaque requête
+compose.yaml:17:7: avertissement [key-ignored] services.web.labels: `labels` est ignoré : les labels de conteneur n'ont pas de destination ; les tags plateforme sont posés par l'outil
+compose.override.yaml:26:7: avertissement [key-ignored] services.web.logging: `logging` est ignoré : les logs sont collectés par la plateforme
+compose.yaml:8:9: avertissement [redirection-tcp] services.web.ports[1]: `web` : le port TCP 443 publié devient une redirection TCP (port externe attribué par la plateforme), relayée depuis 4040 par le shim
+compose.override.yaml:7:9: erreur [redirection-tcp-multiple] services.web.ports[2]: `web` : un seul port TCP peut être relayé depuis 4040 ; 9000 ne sera pas exposé publiquement (joignable dans le network group)
+compose.yaml:33:7: avertissement [key-ignored] services.web.ulimits: `ulimits` est ignoré : le déployeur fixe lui-même `nofile=1024:524288`
+compose.override.yaml:9:9: erreur [bind-directory] services.web.volumes[0]: le montage de répertoire `./html2` vers `/usr/share/nginx/html` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image
+compose.yaml:11:9: erreur [volume-unsupported] services.web.volumes[1]: le volume `logs` monté sur `/var/log/nginx` n'a pas d'équivalent : pas de volume persistant sur le runtime Docker ; utilisez un addon managé, ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données
+compose.override.yaml:10:9: erreur [volume-unsupported] services.web.volumes[2]: le volume `cache` monté sur `/var/cache/nginx` n'a pas d'équivalent : pas de volume persistant sur le runtime Docker ; utilisez un addon managé, ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données

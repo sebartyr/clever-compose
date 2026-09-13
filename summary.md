@@ -19,7 +19,10 @@ Fixtures `phase0/postgres` et `phase0/client` déployées à la main dans
 l'organisation Test SBRUNAT (apps `cc-phase0-postgres`, `cc-phase0-client`,
 network group `p0`), à supprimer quand elles ne servent plus.
 
-**Phase 1 en cours** (parsing terminé, plan et diagnostics à faire).
+**Phase 1 terminée le 13/09/2026** : le corpus (15 cas dont un refus) passe
+le test différentiel, chaque clé refusée produit un diagnostic avec chemin
+et position, le plan sort en golden files. Le plan intermédiaire reste
+soumis à validation ; **phase 2 (émetteurs) ouverte**.
 Dépôt déplacé le 13/09/2026 dans `~/cc-compose/clever-compose`, avec les
 sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 `~/ovd`. Remote `origin` : `github.com/sebartyr/clever-compose`.
@@ -63,6 +66,13 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
 ---
 
 ## Phase 1 : parsing, plan et diagnostics
+
+*Sortie :* atteinte le 13/09/2026. Différentiel : 15 cas identiques ou
+refusés à l'identique. Politique des clés relue contre le tableau du §6 :
+chaque ligne a sa traduction ou son refus (`plan/policy.rs`,
+`plan/mod.rs`). Ajouts de dernière relecture : `healthcheck-strict`
+(2xx exigé avec `CC_HEALTH_CHECK_PATH`, source rubydeployer) et
+`proxy-resolver` (§7, nginx/haproxy/traefik/openresty).
 
 *Décidé :*
 
