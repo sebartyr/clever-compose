@@ -165,7 +165,10 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   --yes` : `ccp3`, `ccwp`, `ccwpa`, `ccinit`, `ccnginx`, `ccgitea`,
   `ccredis`, `ccnginxtf` (via `terraform destroy` dans le scratchpad, plus
   le dépôt GitHub `sebartyr/cc-compose-tftest`), `cc-phase0-*` et `p0`.
-- Latence du proxy / hôte direct (§6.4) : non proposé.
+- Latence du proxy / hôte direct (§6.4) : **décision du propriétaire
+  (13/09/2026) : on ne propose pas l'hôte direct.** Un addon se joint soit par
+  son hôte public (variables injectées par le lien), soit via le network group
+  (`x-clever.private: true`). Point clos, à ne pas rouvrir.
 - Noms des variables injectées confirmés par la page de référence de la
   documentation (`environment-variables/reference.md`) et le test e2e Redis
   d'Axo (`REDIS_URL` = `redis://:pass@host:port`) : `MONGODB_ADDON_*`,
