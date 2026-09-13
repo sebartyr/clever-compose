@@ -1,4 +1,4 @@
-name: sentry
+name: sentry-self-hosted
 services:
   attachments-consumer:
     build:
@@ -3510,13 +3510,13 @@ services:
         bind: {}
 networks:
   default:
-    name: sentry_default
+    name: sentry-self-hosted_default
 volumes:
   sentry-clickhouse:
     name: sentry-clickhouse
     external: true
   sentry-clickhouse-log:
-    name: sentry_sentry-clickhouse-log
+    name: sentry-self-hosted_sentry-clickhouse-log
   sentry-data:
     name: sentry-data
     external: true
@@ -3524,11 +3524,11 @@ volumes:
     name: sentry-kafka
     external: true
   sentry-kafka-log:
-    name: sentry_sentry-kafka-log
+    name: sentry-self-hosted_sentry-kafka-log
   sentry-nginx-cache:
-    name: sentry_sentry-nginx-cache
+    name: sentry-self-hosted_sentry-nginx-cache
   sentry-nginx-www:
-    name: sentry_sentry-nginx-www
+    name: sentry-self-hosted_sentry-nginx-www
   sentry-postgres:
     name: sentry-postgres
     external: true
@@ -3539,17 +3539,17 @@ volumes:
     name: sentry-seaweedfs
     external: true
   sentry-secrets:
-    name: sentry_sentry-secrets
+    name: sentry-self-hosted_sentry-secrets
   sentry-smtp:
-    name: sentry_sentry-smtp
+    name: sentry-self-hosted_sentry-smtp
   sentry-smtp-log:
-    name: sentry_sentry-smtp-log
+    name: sentry-self-hosted_sentry-smtp-log
   sentry-symbolicator:
-    name: sentry_sentry-symbolicator
+    name: sentry-self-hosted_sentry-symbolicator
   sentry-taskbroker:
-    name: sentry_sentry-taskbroker
+    name: sentry-self-hosted_sentry-taskbroker
   sentry-vroom:
-    name: sentry_sentry-vroom
+    name: sentry-self-hosted_sentry-vroom
 x-depends_on-default:
   condition: service_started
 x-depends_on-healthy:

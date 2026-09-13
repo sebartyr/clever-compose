@@ -1,0 +1,30 @@
+name: include
+services:
+  included:
+    environment:
+      EXTRA: other
+      TAG: v2
+    image: included:v2
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/include/sub/subdata
+        target: /subdata
+        bind: {}
+  main:
+    depends_on:
+      included:
+        condition: service_started
+        required: true
+    image: main:1
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/include/local
+        target: /local
+        bind: {}
+networks:
+  default:
+    name: include_default

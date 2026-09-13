@@ -1,0 +1,91 @@
+name: extends
+services:
+  base:
+    environment:
+      LEVEL: base
+      SHARED: "1"
+    image: alpine:3
+    labels:
+      origin: base
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/extends/data
+        target: /data
+        bind: {}
+  child:
+    environment:
+      LEVEL: child
+      SHARED: "1"
+    image: alpine:3
+    labels:
+      origin: child
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/extends/data
+        target: /data
+        bind: {}
+  external:
+    environment:
+      COMMON: "true"
+      FROM: main
+      FROM_FILE: common
+    image: busybox
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/extends/base/conf
+        target: /conf
+        read_only: true
+        bind: {}
+  external-chain:
+    environment:
+      COMMON: "true"
+      DERIVED: 'yes'
+      FROM_FILE: common
+    image: busybox
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8000"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/extends/base/conf
+        target: /conf
+        read_only: true
+        bind: {}
+  grandchild:
+    command:
+      - echo
+      - hi
+    environment:
+      LEVEL: child
+      SHARED: "1"
+    image: alpine:3
+    labels:
+      origin: child
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/extends/data
+        target: /data
+        bind: {}
+  reset-child:
+    environment:
+      ONLY: this
+    image: alpine:3
+    labels:
+      origin: base
+    networks:
+      default: null
+networks:
+  default:
+    name: extends_default

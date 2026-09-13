@@ -1,0 +1,26 @@
+services:
+  app:
+    image: "app:${TAG}"
+    environment:
+      PLAIN: $PLAIN
+      BRACED: ${PLAIN}
+      DEFAULT_UNSET: ${UNSET:-def}
+      DEFAULT_EMPTY: ${EMPTY:-def}
+      DASH_EMPTY: ${EMPTY-def}
+      DASH_UNSET: ${UNSET-def}
+      PLUS_SET: ${PLAIN:+alt}
+      PLUS_EMPTY: ${EMPTY:+alt}
+      PLUS_UNSET_NOCOLON: ${EMPTY+alt}
+      NESTED: ${UNSET:-${PLAIN}-x}
+      ESCAPED: $$PLAIN and $${PLAIN}
+      MIXED: pre-${PLAIN}-post
+      DOLLAR_ALONE: "$ 5 $1"
+      UNSET_EMPTY: ${UNSET}
+      FROM_DOTENV: ${DOTENV_VAR}
+      COMPUTED: ${DOTENV_COMPUTED}
+    deploy:
+      replicas: ${REPLICAS}
+    privileged: "${PRIV}"
+    ports:
+      - target: ${PORT}
+        published: "${PORT}"

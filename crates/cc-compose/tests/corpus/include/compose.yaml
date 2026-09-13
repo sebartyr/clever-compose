@@ -1,0 +1,14 @@
+include:
+  - path: sub/compose.yaml
+  - path:
+      - sub/compose.yaml
+      - sub/override.yaml
+    project_directory: sub
+    env_file: sub/other.env
+services:
+  main:
+    image: main:1
+    depends_on:
+      - included
+    volumes:
+      - ./local:/local

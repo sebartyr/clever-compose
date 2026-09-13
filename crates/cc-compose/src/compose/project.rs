@@ -1,11 +1,13 @@
-//! Chargement d'un projet : découverte des fichiers, puis la chaîne de
-//! normalisation, étape par étape, chacune ajoutée quand le corpus l'exige.
+//! Chargement d'un projet : découverte des fichiers, environnement, puis la
+//! chaîne du [`loader`], la normalisation, le typage, les `env_file`, les
+//! profils.
 
 use std::path::{Path as FsPath, PathBuf};
 
 use super::dotenv::{self, Vars};
+use super::loader::{Config, Loader};
 use super::node::{Node, Path, Value};
-use super::{envfile, interpolate, merge, normalize, paths, transform, typed, yaml};
+use super::{envfile, normalize, typed};
 use crate::diagnostic::{Diagnostic, Diagnostics, Files};
 
 /// Noms cherchés dans le répertoire du projet, dans l'ordre de compose-go
@@ -21,6 +23,8 @@ pub struct Options {
     pub project_name: Option<String>,
     /// Fichiers d'environnement (`--env-file`). Vide : `.env` du projet.
     pub env_files: Vec<PathBuf>,
+    /// Profils actifs (`--profile`, `COMPOSE_PROFILES`).
+    pub profiles: Vec<String>,
 }
 
 pub struct Project {
@@ -31,127 +35,64 @@ pub struct Project {
 }
 
 pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
-    let paths = match discover(opts) {
-        Ok(p) => p,
-        Err(d) => {
-            diags.push(d);
-            return None;
+    match load_inner(opts) {
+        Ok((project, warnings)) => {
+            diags.items.extend(warnings);
+            Some(project)
         }
-    };
-
-    // Environnement d'interpolation : le shell, puis `.env` sans écraser
-    // (compose-go `WithOsEnv` puis `WithDotEnv`).
-    let env = match project_env(opts) {
-        Ok(e) => e,
-        Err(d) => {
+        Err((d, files)) => {
+            let _ = files;
             diags.push(d);
-            return None;
+            None
         }
-    };
-    let lookup = |k: &str| env.get(k).cloned();
+    }
+}
 
+fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic, Files)> {
     let mut files = Files::default();
-    let mut docs: Vec<Node> = Vec::new();
-    for p in &paths {
-        let display = p.strip_prefix(&opts.project_dir).unwrap_or(p).display().to_string();
-        let idx = files.add(display.clone());
-        let source = match std::fs::read_to_string(p) {
-            Ok(s) => s,
-            Err(e) => {
-                diags.push(Diagnostic::error("file-unreadable", format!("{display} : {e}")));
-                return None;
-            }
-        };
-        match yaml::load(&source, idx) {
-            Ok(n) => {
-                let mut errs = Vec::new();
-                let n = interpolate::interpolate(n, &lookup, &mut errs);
-                if !errs.is_empty() {
-                    diags.items.extend(errs);
-                    return None;
-                }
-                docs.push(n);
-            }
-            Err(e) => {
-                diags.push(Diagnostic::error("yaml-invalid", format!("{display} : {e}")));
-                return None;
-            }
-        }
+    let fail = |d: Diagnostic, files: &Files| (d, files.clone());
+
+    let paths = discover(opts).map_err(|d| fail(d, &files))?;
+    let working_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
+    let env = project_env(opts).map_err(|d| fail(d, &files))?;
+    let profiles: Vec<String> = if opts.profiles.is_empty() {
+        env.get("COMPOSE_PROFILES").map(|p| p.split(',').map(str::to_string).collect()).unwrap_or_default()
+    } else {
+        opts.profiles.clone()
+    };
+
+    let config = Config { working_dir: working_dir.clone(), files: paths, env: env.clone() };
+    let tree = {
+        let mut loader = Loader::new(&mut files);
+        loader.load_model(&config, &[])
+    }
+    .map_err(|d| fail(d, &files))?;
+    if tree.as_map().is_some_and(|m| m.is_empty()) {
+        return Err(fail(Diagnostic::error("empty-compose-file", "fichier compose vide"), &files));
     }
 
-    // Chaîne de compose-go (`loadYamlFile`), fichier par fichier : clés en
-    // chaînes (fait au chargement), interpolation, include, extends, fusion
-    // dans l'accumulateur, unicité, schéma, canonicalisation, OmitEmpty,
-    // unicité. Les étapes absentes (interpolation, include, extends, schéma)
-    // viendront avec les cas du corpus qui les exercent.
-    let mut acc: Option<Node> = None;
-    let mut first_doc: Option<Node> = None;
-    for doc in docs {
-        if doc.as_map().is_none() {
-            diags.push(Diagnostic::error("root-not-mapping", "la racine du fichier doit être un mapping").at(&Path::root(), doc.span));
-            return None;
-        }
-        if first_doc.is_none() {
-            first_doc = Some(doc.clone());
-        }
-        let step = |r: Result<Node, Diagnostic>, diags: &mut Diagnostics| -> Option<Node> {
-            match r {
-                Ok(n) => Some(n),
-                Err(d) => {
-                    diags.push(d);
-                    None
-                }
-            }
-        };
-        let merged = match acc.take() {
-            None => doc,
-            Some(a) => step(merge::merge(a, doc), diags)?,
-        };
-        let merged = step(merge::enforce_unicity(merged), diags)?;
-        let merged = step(transform::canonical(merged), diags)?;
-        let merged = transform::omit_empty(merged);
-        acc = Some(step(merge::enforce_unicity(merged), diags)?);
-    }
-    let tree = acc?;
-    let tree = match transform::set_defaults(tree) {
-        Ok(t) => t,
-        Err(d) => {
-            diags.push(d);
-            return None;
-        }
-    };
-    let working_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
-    let tree = match paths::resolve(tree, &working_dir) {
-        Ok(t) => t,
-        Err(d) => {
-            diags.push(d);
-            return None;
-        }
-    };
-    let name = project_name(opts, first_doc.as_ref()?, diags)?;
+    let name = project_name(opts, &tree, &env).map_err(|d| fail(d, &files))?;
     let tree = normalize::normalize(tree, &name, &env);
-    let mut tree = match typed::apply(tree) {
-        Ok(t) => t,
-        Err(d) => {
-            diags.push(d);
-            return None;
-        }
-    };
+    let mut tree = typed::apply(tree).map_err(|d| fail(d, &files))?;
     let mut errs = Vec::new();
     envfile::resolve(&mut tree, &env, &mut errs);
-    if !errs.is_empty() {
-        diags.items.extend(errs);
-        return None;
+    if let Some(d) = errs.into_iter().next() {
+        return Err(fail(d, &files));
     }
+    let mut warnings = Vec::new();
+    apply_profiles(&mut tree, &profiles, &mut warnings).map_err(|d| fail(d, &files))?;
+    typed::prune_unused(&mut tree);
     let mut tree = typed::omit_zero(tree);
     let span = tree.span;
     if let Some(m) = tree.as_map_mut() {
         m.shift_remove("name");
         m.shift_insert(0, "name".into(), Node::new(span, Value::Str(name.clone())));
     }
-    Some(Project { name, files, tree })
+    Ok((Project { name, files, tree }, warnings))
 }
 
+/// Environnement du projet : le shell, puis `.env` sans écraser
+/// (compose-go `WithOsEnv` puis `WithDotEnv`).
 fn project_env(opts: &Options) -> Result<Vars, Diagnostic> {
     let mut env: Vars = std::env::vars().collect();
     let files: Vec<PathBuf> = if opts.env_files.is_empty() {
@@ -190,24 +131,24 @@ fn discover(opts: &Options) -> Result<Vec<PathBuf>, Diagnostic> {
     Ok(out)
 }
 
-/// Nom du projet : option, puis `name:` du fichier, puis le nom du répertoire
-/// normalisé comme compose-go (`NormalizeProjectName`).
-fn project_name(opts: &Options, tree: &Node, diags: &mut Diagnostics) -> Option<String> {
+/// Nom du projet : option, `COMPOSE_PROJECT_NAME`, `name:` du fichier, puis
+/// le nom du répertoire, normalisé comme compose-go (`NormalizeProjectName`).
+fn project_name(opts: &Options, tree: &Node, env: &Vars) -> Result<String, Diagnostic> {
     if let Some(n) = &opts.project_name {
-        return Some(n.clone());
+        return Ok(n.clone());
+    }
+    if let Some(n) = env.get("COMPOSE_PROJECT_NAME").filter(|n| !n.is_empty()) {
+        return Ok(n.clone());
     }
     if let Some(n) = tree.as_map().and_then(|m| m.get("name")) {
         return match n.as_str() {
-            Some(s) => Some(s.to_string()),
-            None => {
-                diags.push(Diagnostic::error("name-not-string", "`name` doit être une chaîne").at(&Path::root().child("name"), n.span));
-                None
-            }
+            Some(s) => Ok(s.to_string()),
+            None => Err(Diagnostic::error("name-not-string", "`name` doit être une chaîne").at(&Path::root().child("name"), n.span)),
         };
     }
     let dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
     let base = dir.file_name().and_then(|s| s.to_str()).unwrap_or("default");
-    Some(normalize_project_name(base))
+    Ok(normalize_project_name(base))
 }
 
 /// `NormalizeProjectName` de compose-go : minuscules, seuls `[a-z0-9_-]`
@@ -216,6 +157,44 @@ pub fn normalize_project_name(s: &str) -> String {
     let lower = s.to_lowercase();
     let kept: String = lower.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
     kept.trim_start_matches(|c: char| !c.is_ascii_alphanumeric()).to_string()
+}
+
+/// Profils : un service sans `profiles` est toujours actif ; un service
+/// dont aucun profil n'est actif est retiré ; un `depends_on` vers un
+/// service inactif est une erreur (CLAUDE.md §9.4).
+fn apply_profiles(tree: &mut Node, active: &[String], warnings: &mut Vec<Diagnostic>) -> Result<(), Diagnostic> {
+    let Some(services) = tree.as_map_mut().and_then(|m| m.get_mut("services")).and_then(Node::as_map_mut) else {
+        return Ok(());
+    };
+    let enabled = |s: &Node| -> bool {
+        match s.as_map().and_then(|m| m.get("profiles")).and_then(Node::as_seq) {
+            None => true,
+            Some(profiles) if profiles.is_empty() => true,
+            Some(profiles) => active.iter().any(|a| a == "*") || profiles.iter().filter_map(Node::as_str).any(|p| active.iter().any(|a| a == p)),
+        }
+    };
+    let disabled: Vec<String> = services.iter().filter(|(_, s)| !enabled(s)).map(|(k, _)| k.clone()).collect();
+    for (name, s) in services.iter() {
+        if disabled.contains(name) {
+            continue;
+        }
+        if let Some(deps) = s.as_map().and_then(|m| m.get("depends_on")).and_then(Node::as_map) {
+            for (dep, cfg) in deps {
+                if disabled.contains(dep) {
+                    let required = cfg.as_map().and_then(|m| m.get("required")).map(|r| r.value != Value::Bool(false)).unwrap_or(true);
+                    let p = Path::root().child("services").child(name).child("depends_on").child(dep);
+                    if required {
+                        return Err(Diagnostic::error("depends-on-inactive-profile", format!("le service `{name}` dépend de `{dep}`, inactif (profil non activé)")).at(&p, cfg.span));
+                    }
+                    warnings.push(Diagnostic::warning("depends-on-inactive-profile", format!("le service `{name}` dépend de `{dep}`, inactif (profil non activé) ; dépendance optionnelle ignorée")).at(&p, cfg.span));
+                }
+            }
+        }
+    }
+    for name in disabled {
+        services.shift_remove(&name);
+    }
+    Ok(())
 }
 
 pub fn project_dir_of(file: &FsPath) -> PathBuf {

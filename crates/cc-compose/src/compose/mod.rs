@@ -8,6 +8,7 @@
 pub mod dotenv;
 pub mod envfile;
 pub mod interpolate;
+pub mod loader;
 pub mod merge;
 pub mod node;
 pub mod normalize;

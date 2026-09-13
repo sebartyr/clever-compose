@@ -23,7 +23,7 @@ fn regen_oracle(dir: &Path) -> String {
         .args(["compose", "--project-directory"])
         .arg(dir)
         .arg("config")
-        .env("COMPOSE_PROJECT_NAME", dir.file_name().unwrap())
+        .env_remove("COMPOSE_PROJECT_NAME")
         .output()
         .expect("docker compose introuvable");
     assert!(out.status.success(), "oracle en échec sur {} :\n{}", dir.display(), String::from_utf8_lossy(&out.stderr));
@@ -41,8 +41,19 @@ fn canonical(v: J) -> J {
     }
 }
 
+/// Côté oracle seulement : `docker compose config` double les `$` de sa
+/// sortie (`cmd/compose/config.go`) pour qu'elle reste réinterpolable.
+fn unescape_dollars(v: J) -> J {
+    match v {
+        J::String(s) => J::String(s.replace("$$", "$")),
+        J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, unescape_dollars(v))).collect()),
+        J::Array(a) => J::Array(a.into_iter().map(unescape_dollars).collect()),
+        other => other,
+    }
+}
+
 fn ours(dir: &Path) -> J {
-    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new() };
+    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
     let mut diags = Diagnostics::default();
     let project = load(&opts, &mut diags);
     for d in &diags.items {
@@ -70,7 +81,7 @@ fn corpus_matches_docker_compose_config() {
             std::fs::write(&expected_path, regen_oracle(&dir)).unwrap();
         }
         let expected = yaml::load(&std::fs::read_to_string(&expected_path).unwrap(), 0).unwrap();
-        let expected = canonical(expected.to_json());
+        let expected = canonical(unescape_dollars(expected.to_json()));
         let actual = std::panic::catch_unwind(|| ours(&dir));
         match actual {
             Ok(actual) if actual == expected => {}

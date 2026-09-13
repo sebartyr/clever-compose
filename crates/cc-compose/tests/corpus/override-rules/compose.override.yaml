@@ -1,0 +1,55 @@
+services:
+  web:
+    command: ["nginx", "-T"]
+    entrypoint: !reset null
+    ports:
+      - "8080:80"
+      - "9000:9000"
+    volumes:
+      - ./html2:/usr/share/nginx/html
+      - cache:/var/cache/nginx
+    environment:
+      A: override
+      C: 3
+    labels:
+      - tier=back
+      - extra=1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      back:
+        aliases: [web-alias]
+    healthcheck:
+      test: ["CMD", "true"]
+    logging:
+      driver: syslog
+      options:
+        tag: web
+    dns: 8.8.8.8
+    ulimits:
+      nofile:
+        soft: 2048
+        hard: 4096
+    extra_hosts:
+      - "other:10.0.0.1"
+    build:
+      context: ./web
+      args:
+        - X=1
+  api:
+    image: api:2
+    networks: !override
+      - back
+    deploy:
+      labels:
+        c: d
+    tmpfs:
+      - /run
+    cap_add: [SYS_ADMIN, NET_ADMIN]
+    sysctls:
+      - net.ipv4.ip_forward=1
+  db:
+    image: postgres:16
+volumes:
+  cache: {}

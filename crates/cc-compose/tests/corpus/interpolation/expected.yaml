@@ -1,0 +1,33 @@
+name: interpolation
+services:
+  app:
+    deploy:
+      replicas: 3
+    environment:
+      BRACED: plain
+      COMPUTED: 1.0-fallback
+      DASH_EMPTY: ""
+      DASH_UNSET: def
+      DEFAULT_EMPTY: def
+      DEFAULT_UNSET: def
+      DOLLAR_ALONE: $$ 5 $$1
+      ESCAPED: $$PLAIN and $${PLAIN}
+      FROM_DOTENV: quoted plain
+      MIXED: pre-plain-post
+      NESTED: plain-x
+      PLAIN: plain
+      PLUS_EMPTY: ""
+      PLUS_SET: alt
+      PLUS_UNSET_NOCOLON: alt
+      UNSET_EMPTY: ""
+    image: app:1.0
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8080
+        published: "8080"
+        protocol: tcp
+networks:
+  default:
+    name: interpolation_default

@@ -1,0 +1,58 @@
+services:
+  web:
+    image: nginx:1.27
+    command: nginx -g "daemon off;"
+    entrypoint: /docker-entrypoint.sh
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+      - logs:/var/log/nginx
+    environment:
+      - A=1
+      - B=2
+      - EMPTY
+    labels:
+      tier: front
+      keep: "yes"
+    depends_on:
+      - api
+    networks:
+      - front
+    healthcheck:
+      test: curl -f http://localhost/
+      interval: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+    dns:
+      - 1.1.1.1
+    ulimits:
+      nofile: 1024
+      nproc:
+        soft: 10
+        hard: 20
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    build: ./web
+  api:
+    image: api:1
+    networks:
+      front:
+        aliases: [api-alias]
+      back: {}
+    deploy:
+      replicas: 2
+      labels:
+        a: b
+    tmpfs: /tmp
+    cap_add: [NET_ADMIN]
+    sysctls:
+      net.core.somaxconn: 1024
+networks:
+  front: {}
+  back: {}
+volumes:
+  logs: {}

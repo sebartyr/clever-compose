@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn usage() -> ExitCode {
-    eprintln!("usage : clever-compose config [--project-directory DIR] [-f FILE]... [-p NAME] [--format json]");
+    eprintln!("usage : clever-compose config [--project-directory DIR] [-f FILE]... [-p NAME] [--env-file F] [--profile P] [--format json]");
     ExitCode::from(2)
 }
 
@@ -19,7 +19,7 @@ fn main() -> ExitCode {
 }
 
 fn config(args: &[String]) -> ExitCode {
-    let mut opts = compose::project::Options { project_dir: PathBuf::from("."), files: Vec::new(), project_name: None, env_files: Vec::new() };
+    let mut opts = compose::project::Options { project_dir: PathBuf::from("."), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
     let mut format = "yaml".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -35,6 +35,14 @@ fn config(args: &[String]) -> ExitCode {
             "-p" | "--project-name" => {
                 i += 1;
                 opts.project_name = args.get(i).cloned();
+            }
+            "--profile" => {
+                i += 1;
+                opts.profiles.push(args.get(i).cloned().unwrap_or_default());
+            }
+            "--env-file" => {
+                i += 1;
+                opts.env_files.push(PathBuf::from(args.get(i).cloned().unwrap_or_default()));
             }
             "--format" => {
                 i += 1;

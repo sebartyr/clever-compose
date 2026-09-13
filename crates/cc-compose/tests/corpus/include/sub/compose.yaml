@@ -1,0 +1,9 @@
+services:
+  included:
+    image: included:${TAG:-latest}
+    volumes:
+      - ./subdata:/subdata
+    environment:
+      TAG: ${TAG}
+volumes:
+  subvol: {}

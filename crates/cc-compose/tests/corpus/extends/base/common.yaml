@@ -1,0 +1,14 @@
+services:
+  common:
+    image: busybox
+    volumes:
+      - ./conf:/conf:ro
+    environment:
+      COMMON: "true"
+    env_file: vars.env
+  derived:
+    extends: common
+    environment:
+      DERIVED: "yes"
+    ports:
+      - 8000:8000

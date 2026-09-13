@@ -16,6 +16,17 @@ pub fn merge(base: Node, other: Node) -> Result<Node, Diagnostic> {
     merge_at(base, other, &Path::root())
 }
 
+/// Fusion à un chemin donné (ressources importées par `include`).
+pub fn merge_at_path(base: Node, other: Node, p: &Path) -> Result<Node, Diagnostic> {
+    merge_at(base, other, p)
+}
+
+/// `override.ExtendService` : fusion d'un service sur sa base, avec les
+/// règles de `services.*`.
+pub fn merge_service(base: Node, other: Node) -> Result<Node, Diagnostic> {
+    merge_at(base, other, &Path::root().child("services").child("x"))
+}
+
 fn merge_at(base: Node, other: Node, p: &Path) -> Result<Node, Diagnostic> {
     // `mergeSpecials` de compose-go, dans le même ordre logique.
     const OVERRIDE: &[&str] = &["services.*.command", "services.*.entrypoint", "services.*.healthcheck.test"];
@@ -56,11 +67,15 @@ fn merge_at(base: Node, other: Node, p: &Path) -> Result<Node, Diagnostic> {
         return merge_as_mapping(base, other, &[], p);
     }
     if p.matches("services.*.build") {
-        let to_build = |n: Node| match n.value {
-            Value::Str(s) => Node::new(n.span, Value::Map(IndexMap::from([("context".to_string(), Node::new(n.span, Value::Str(s)))]))),
-            _ => n,
+        let to_build = |n: Node| -> IndexMap<String, Node> {
+            match n.value {
+                Value::Str(s) => IndexMap::from([("context".to_string(), Node::new(n.span, Value::Str(s)))]),
+                Value::Map(m) => m,
+                _ => IndexMap::new(),
+            }
         };
-        return merge_at(to_build(base), to_build(other), p);
+        let span = base.span;
+        return Ok(Node::new(span, Value::Map(merge_mappings(to_build(base), to_build(other), p)?)));
     }
     if p.matches("services.*.logging") {
         return merge_logging(base, other, p);

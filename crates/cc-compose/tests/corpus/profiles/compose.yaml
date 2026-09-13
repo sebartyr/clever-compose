@@ -1,0 +1,18 @@
+services:
+  always:
+    image: a:1
+    depends_on:
+      debug:
+        condition: service_started
+        required: false
+  debug:
+    image: d:1
+    profiles: [debug]
+  tools:
+    image: t:1
+    profiles:
+      - tools
+      - debug
+  other:
+    image: o:1
+    profiles: [other]

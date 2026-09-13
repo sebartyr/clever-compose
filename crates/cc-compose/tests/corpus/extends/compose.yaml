@@ -1,0 +1,35 @@
+services:
+  base:
+    image: alpine:3
+    environment:
+      - SHARED=1
+      - LEVEL=base
+    volumes:
+      - ./data:/data
+    labels:
+      origin: base
+  child:
+    extends: base
+    environment:
+      - LEVEL=child
+    labels:
+      origin: child
+  grandchild:
+    extends:
+      service: child
+    command: echo hi
+  external:
+    extends:
+      file: base/common.yaml
+      service: common
+    environment:
+      FROM: main
+  external-chain:
+    extends:
+      file: base/common.yaml
+      service: derived
+  reset-child:
+    extends: base
+    volumes: !reset []
+    environment: !override
+      ONLY: this

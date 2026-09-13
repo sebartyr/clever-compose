@@ -122,6 +122,10 @@ impl Path {
         &self.0
     }
 
+    pub fn from_segments(segments: Vec<String>) -> Self {
+        Path(segments)
+    }
+
     /// Correspondance avec un motif où `*` remplace un segment et `[]` un
     /// index de liste, comme `tree.Path.Matches` de compose-go
     /// (`services.*.command`, `services.*.ports.[].target`). `*` accepte

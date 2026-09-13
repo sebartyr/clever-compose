@@ -1,0 +1,4 @@
+services:
+  included:
+    environment:
+      EXTRA: ${EXTRA:-none}

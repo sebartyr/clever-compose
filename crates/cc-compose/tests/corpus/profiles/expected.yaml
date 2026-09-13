@@ -1,0 +1,20 @@
+name: profiles
+services:
+  always:
+    depends_on:
+      debug:
+        condition: service_started
+        required: false
+    image: a:1
+    networks:
+      default: null
+  tools:
+    profiles:
+      - tools
+      - debug
+    image: t:1
+    networks:
+      default: null
+networks:
+  default:
+    name: profiles_default

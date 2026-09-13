@@ -1,0 +1,115 @@
+name: override-rules
+services:
+  api:
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    deploy:
+      replicas: 2
+      labels:
+        a: b
+        c: d
+    image: api:2
+    networks:
+      back: null
+    sysctls:
+      net.core.somaxconn: "1024"
+      net.ipv4.ip_forward: "1"
+    tmpfs:
+      - /tmp
+      - /run
+  db:
+    image: postgres:16
+    networks:
+      default: null
+  web:
+    build:
+      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/override-rules/web
+      dockerfile: Dockerfile
+      args:
+        X: "1"
+    command:
+      - nginx
+      - -T
+    depends_on:
+      api:
+        condition: service_started
+        required: true
+      db:
+        condition: service_healthy
+        required: true
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      A: override
+      B: "2"
+      C: "3"
+      EMPTY: null
+    extra_hosts:
+      - host.docker.internal=host-gateway
+      - other=10.0.0.1
+    healthcheck:
+      test:
+        - CMD
+        - "true"
+      interval: 10s
+    image: nginx:1.27
+    labels:
+      extra: "1"
+      keep: 'yes'
+      tier: back
+    logging:
+      driver: syslog
+      options:
+        tag: web
+    networks:
+      back:
+        aliases:
+          - web-alias
+      front: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "8080"
+        protocol: tcp
+      - mode: ingress
+        target: 443
+        published: "8443"
+        protocol: tcp
+      - mode: ingress
+        target: 9000
+        published: "9000"
+        protocol: tcp
+    ulimits:
+      nofile:
+        soft: 2048
+        hard: 4096
+      nproc:
+        soft: 10
+        hard: 20
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/override-rules/html2
+        target: /usr/share/nginx/html
+        bind: {}
+      - type: volume
+        source: logs
+        target: /var/log/nginx
+        volume: {}
+      - type: volume
+        source: cache
+        target: /var/cache/nginx
+        volume: {}
+networks:
+  back:
+    name: override-rules_back
+  default:
+    name: override-rules_default
+  front:
+    name: override-rules_front
+volumes:
+  cache:
+    name: override-rules_cache
+  logs:
+    name: override-rules_logs

@@ -66,6 +66,9 @@ fn at(node: Node, p: &Path) -> Result<Node, Diagnostic> {
     if SHELL_COMMAND.iter().any(|pat| p.matches(pat)) {
         return shell_command(node, p);
     }
+    if p.matches("services.*.extra_hosts") {
+        return hosts_list(node, p);
+    }
     if p.matches("services.*.healthcheck.test") {
         return Ok(match node.value {
             Value::Str(s) => Node::new(node.span, Value::Seq(vec![str_node(node.span, "CMD-SHELL"), str_node(node.span, s)])),
@@ -172,6 +175,54 @@ fn string_mapping(node: Node, p: &Path) -> Result<Node, Diagnostic> {
         Value::Null => Ok(node),
         _ => Err(Diagnostic::error("mapping-invalid", format!("{p} : type inattendu pour un mapping")).at(p, span)),
     }
+}
+
+/// `HostsList` : entrées `host=ip` ou `host:ip` (ou mapping host → ip ou
+/// liste d'ips), IPs sans crochets, rendues `host=ip` triées.
+fn hosts_list(node: Node, p: &Path) -> Result<Node, Diagnostic> {
+    let span = node.span;
+    let mut hosts: IndexMap<String, Vec<String>> = IndexMap::new();
+    let mut add = |host: &str, ips: &str| {
+        let entry = hosts.entry(host.to_string()).or_default();
+        for ip in ips.split(',') {
+            let ip = ip.strip_prefix('[').and_then(|i| i.strip_suffix(']')).filter(|i| !i.is_empty()).unwrap_or(ip);
+            entry.push(ip.to_string());
+        }
+    };
+    match node.value {
+        Value::Seq(items) => {
+            for i in items {
+                let s = go_sprint(&i);
+                let split = s.split_once('=').or_else(|| s.split_once(':'));
+                let Some((host, ips)) = split else {
+                    return Err(Diagnostic::error("extra-hosts-invalid", format!("{p} : hôte supplémentaire invalide, IP manquante : {s}")).at(p, i.span));
+                };
+                add(host, ips);
+            }
+        }
+        Value::Map(m) => {
+            for (host, v) in m {
+                match v.value {
+                    Value::Seq(items) => {
+                        for i in items {
+                            add(&host, &go_sprint(&i));
+                        }
+                    }
+                    Value::Null => add(&host, ""),
+                    _ => add(&host, &go_sprint(&v)),
+                }
+            }
+        }
+        _ => return Err(Diagnostic::error("extra-hosts-invalid", format!("{p} : type inattendu pour extra_hosts")).at(p, span)),
+    }
+    for host in hosts.keys() {
+        if host.is_empty() || host.contains([':', '=']) {
+            return Err(Diagnostic::error("extra-hosts-invalid", format!("{p} : nom d'hôte invalide `{host}`")).at(p, span));
+        }
+    }
+    let mut list: Vec<String> = hosts.iter().flat_map(|(h, ips)| ips.iter().map(move |ip| format!("{h}={ip}"))).collect();
+    list.sort();
+    Ok(Node::new(span, Value::Seq(list.into_iter().map(|s| str_node(span, s)).collect())))
 }
 
 fn shell_command(node: Node, p: &Path) -> Result<Node, Diagnostic> {
@@ -470,6 +521,50 @@ mod tests {
 /// mappings à valeurs libres (environnement, labels, extensions...) gardent
 /// tout, et une structure vide reste (pointeur non nul côté Go :
 /// `volume: {}`, `healthcheck: {}`).
+/// `Project.WithoutUnnecessaryResources` : `docker compose config` retire
+/// les réseaux, volumes, secrets et configs qu'aucun service n'utilise.
+pub fn prune_unused(tree: &mut Node) {
+    let Some(root) = tree.as_map_mut() else { return };
+    let mut networks = Vec::new();
+    let mut volumes = Vec::new();
+    let mut secrets = Vec::new();
+    let mut configs = Vec::new();
+    if let Some(services) = root.get("services").and_then(Node::as_map) {
+        for s in services.values().filter_map(Node::as_map) {
+            if let Some(n) = s.get("networks").and_then(Node::as_map) {
+                networks.extend(n.keys().cloned());
+            }
+            if let Some(v) = s.get("volumes").and_then(Node::as_seq) {
+                for m in v.iter().filter_map(Node::as_map) {
+                    if m.get("type").and_then(Node::as_str) == Some("volume") {
+                        if let Some(src) = m.get("source").and_then(Node::as_str).filter(|s| !s.is_empty()) {
+                            volumes.push(src.to_string());
+                        }
+                    }
+                }
+            }
+            let sources = |key: &str| -> Vec<String> {
+                s.get(key).and_then(Node::as_seq).map(|l| l.iter().filter_map(|m| m.as_map().and_then(|m| m.get("source")).and_then(Node::as_str).map(str::to_string)).collect()).unwrap_or_default()
+            };
+            secrets.extend(sources("secrets"));
+            if let Some(b) = s.get("build").and_then(Node::as_map) {
+                if let Some(l) = b.get("secrets").and_then(Node::as_seq) {
+                    secrets.extend(l.iter().filter_map(|m| m.as_map().and_then(|m| m.get("source")).and_then(Node::as_str).map(str::to_string)));
+                }
+            }
+            configs.extend(sources("configs"));
+        }
+    }
+    for (key, used) in [("networks", networks), ("volumes", volumes), ("secrets", secrets), ("configs", configs)] {
+        if let Some(m) = root.get_mut(key).and_then(Node::as_map_mut) {
+            m.retain(|k, _| used.contains(k));
+        }
+        if root.get(key).and_then(Node::as_map).is_some_and(|m| m.is_empty()) {
+            root.shift_remove(key);
+        }
+    }
+}
+
 pub fn omit_zero(node: Node) -> Node {
     omit_zero_at(node, &Path::root())
 }
@@ -531,10 +626,12 @@ fn omit_zero_at(node: Node, p: &Path) -> Node {
                     out.insert(k, v);
                     continue;
                 }
-                if !value_map && is_zero(&v) {
+                let cp = p.child(&k);
+                // `ServiceDependency.Required` n'a pas d'omitempty.
+                let always = cp.matches("services.*.depends_on.*.required");
+                if !value_map && !always && is_zero(&v) {
                     continue;
                 }
-                let cp = p.child(&k);
                 // `OptOut` : booléen dont la valeur zéro est `true`.
                 if cp.matches("services.*.volumes.[].bind.create_host_path") && v.value == Value::Bool(true) {
                     continue;
