@@ -1,0 +1,3 @@
+{
+  "redis:8.10.1": { "entrypoint": ["docker-entrypoint.sh"], "cmd": ["redis-server"], "user": null, "workdir": null, "exposed_ports": [6379] }
+}

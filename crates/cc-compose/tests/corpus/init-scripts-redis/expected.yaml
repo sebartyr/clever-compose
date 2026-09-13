@@ -1,0 +1,14 @@
+name: init-scripts-redis
+services:
+  cache:
+    image: redis:8.10.1
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: <project>/initdb
+        target: /docker-entrypoint-initdb.d
+        bind: {}
+networks:
+  default:
+    name: init-scripts-redis_default

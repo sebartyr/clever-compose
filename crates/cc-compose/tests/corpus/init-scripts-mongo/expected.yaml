@@ -1,0 +1,45 @@
+name: init-scripts-mongo
+services:
+  api:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    depends_on:
+      mongo:
+        condition: service_started
+        required: true
+    environment:
+      MONGO_URL: mongodb://app:app@mongo:27017/app
+    image: busybox:1.36
+    networks:
+      default: null
+  cache:
+    image: valkey/valkey:8
+    networks:
+      default: null
+  mongo:
+    environment:
+      MONGO_INITDB_DATABASE: app
+      MONGO_INITDB_ROOT_PASSWORD: app
+      MONGO_INITDB_ROOT_USERNAME: app
+    image: mongo:7
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: <project>/initdb
+        target: /docker-entrypoint-initdb.d
+        bind: {}
+      - type: volume
+        source: mongodata
+        target: /data/db
+        volume: {}
+    x-clever:
+      version: "4.0"
+networks:
+  default:
+    name: init-scripts-mongo_default
+volumes:
+  mongodata:
+    name: init-scripts-mongo_mongodata

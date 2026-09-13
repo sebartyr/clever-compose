@@ -1,0 +1,242 @@
+{
+  "project": "init-scripts-mongo",
+  "spec_hash": "3909e8e24f11e2d03b03f848ab3f283c",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "init-scripts-mongo-default",
+      "tags": [
+        "compose-project=init-scripts-mongo",
+        "compose-network=default",
+        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/mongo",
+      "service": "mongo",
+      "name": "init-scripts-mongo-mongo",
+      "provider": "mongodb-addon",
+      "plan": "xs_sml",
+      "region": "par",
+      "version": "4.0.3",
+      "tags": [
+        "compose-project=init-scripts-mongo",
+        "compose-service=mongo",
+        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/cache",
+      "service": "cache",
+      "name": "init-scripts-mongo-cache",
+      "provider": "redis-addon",
+      "plan": "s_mono",
+      "region": "par",
+      "version": "8.10.1",
+      "tags": [
+        "compose-project=init-scripts-mongo",
+        "compose-service=cache",
+        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/mongo-init",
+      "service": "mongo-init",
+      "name": "init-scripts-mongo-mongo-init",
+      "kind": "task",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "mongo:4.0",
+        "private_registry": false,
+        "files": [
+          {
+            "source": "./initdb/01-users.js",
+            "target": "/cc-init/01-users.js",
+            "read_only": true
+          }
+        ],
+        "generated": [
+          {
+            "target": "/cc-init.sh",
+            "content": "#!/bin/sh\n# Généré par clever-compose : rejoue les scripts d'initialisation contre\n# l'addon, une fois par contenu (collection témoin cc_compose_init).\nset -eu\nMONGO=\"mongo --quiet $MONGODB_ADDON_URI\"\nif [ \"$($MONGO --eval \"print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)\")\" = \"1\" ]; then\n  echo \"cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)\"\n  exit 0\nfi\n# Variables de l'image officielle, pour les scripts .sh qui les lisent.\nexport MONGO_INITDB_DATABASE=\"$MONGODB_ADDON_DB\" MONGO_INITDB_ROOT_USERNAME=\"$MONGODB_ADDON_USER\" MONGO_INITDB_ROOT_PASSWORD=\"$MONGODB_ADDON_PASSWORD\"\nfor f in /cc-init/*; do\n  case \"$f\" in\n    *.sh)      echo \"cc-compose init : $f\"; sh \"$f\" ;;\n    *.js)      echo \"cc-compose init : $f\"; $MONGO \"$f\" ;;\n    *.archive) echo \"cc-compose init : $f\"; mongorestore --quiet --uri=\"$MONGODB_ADDON_URI\" --archive=\"$f\" --nsFrom='*.*' --nsTo=\"$MONGODB_ADDON_DB.*\" ;;\n    *)         echo \"cc-compose init : $f ignoré\" ;;\n  esac\ndone\n$MONGO --eval \"db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})\"\necho \"cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)\"\n",
+            "executable": true
+          }
+        ]
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "mongod"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          27017
+        ]
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "/cc-init.sh"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_INIT_HASH",
+          "value": [
+            {
+              "literal": "965bdbffd89e76fcb0544c283a25b57e"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/mongo"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=init-scripts-mongo",
+        "compose-service=mongo",
+        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/api",
+      "service": "api",
+      "name": "init-scripts-mongo-api",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "busybox:1.36",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [],
+        "cmd": [
+          "sh"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": []
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "-c",
+          "while true; do sleep 30; done"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "MONGO_URL"
+            }
+          ]
+        },
+        {
+          "key": "MONGO_URL",
+          "value": [
+            {
+              "literal": "mongodb://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "MONGODB_ADDON_USER"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "MONGODB_ADDON_PASSWORD"
+              }
+            },
+            {
+              "literal": "@"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "MONGODB_ADDON_HOST"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "MONGODB_ADDON_PORT"
+              }
+            },
+            {
+              "literal": "/"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "MONGODB_ADDON_DB"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/mongo",
+        "app/mongo-init"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=init-scripts-mongo",
+        "compose-service=api",
+        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/api@default",
+      "member": "app/api",
+      "group": "ng/default",
+      "aliases": [
+        "api"
+      ]
+    }
+  ]
+}

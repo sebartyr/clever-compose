@@ -2,7 +2,8 @@
 //! 5c) : les fichiers montés sur `/docker-entrypoint-initdb.d` d'un service
 //! substitué s'exécutent contre l'addon par une Clever Task, une seule fois
 //! par contenu grâce à une table témoin (`cc_compose_init`, hash des
-//! scripts). Même mécanique pour `seed` avec un dump local.
+//! scripts). Même mécanique pour `seed` avec un dump local. Formats par
+//! fournisseur : `accepted_extensions` (initdb) et `seed_extensions`.
 
 use std::path::Path as FsPath;
 
@@ -19,13 +20,44 @@ pub struct Script {
     pub source: String,
 }
 
+/// Ce que l'image officielle du service source exécute depuis
+/// `/docker-entrypoint-initdb.d` (et ce que la tâche sait rejouer). Redis
+/// et Elasticsearch n'ont aucun mécanisme d'initialisation dans leur image :
+/// des scripts montés là ne s'exécutent pas non plus en local.
+pub fn accepted_extensions(provider: &str) -> &'static [&'static str] {
+    match provider {
+        "postgresql-addon" | "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
+        "mongodb-addon" => &[".js", ".sh"],
+        _ => &[],
+    }
+}
+
+/// Ce que `seed` accepte comme dump, par fournisseur.
+pub fn seed_extensions(provider: &str) -> &'static [&'static str] {
+    match provider {
+        "postgresql-addon" | "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
+        "mongodb-addon" => &[".js", ".archive", ".sh"],
+        "redis-addon" => &[".redis", ".resp", ".sh"],
+        "es-addon" => &[".ndjson", ".sh"],
+        _ => &[],
+    }
+}
+
+fn has_ext(name: &str, exts: &[&str]) -> bool {
+    exts.iter().any(|e| name.ends_with(e))
+}
+
 /// Scripts d'un service : fichiers montés (un fichier ou un répertoire)
 /// vers `/docker-entrypoint-initdb.d`, triés par nom.
-pub fn collect(service: &crate::compose::model::Service, _project_dir: &FsPath, display: &dyn Fn(&str) -> String) -> Result<Vec<Script>, String> {
+pub fn collect(service: &crate::compose::model::Service, rec: &Recognized, _project_dir: &FsPath, display: &dyn Fn(&str) -> String) -> Result<Vec<Script>, String> {
     let mut scripts: Vec<Script> = Vec::new();
+    let exts = accepted_extensions(rec.provider);
     for v in &service.volumes {
         if v.kind != "bind" || !v.target.starts_with("/docker-entrypoint-initdb.d") {
             continue;
+        }
+        if exts.is_empty() {
+            return Err(format!("`{}` monté vers `{}` : l'image {} n'exécute aucun script d'initialisation (pas de mécanisme dans l'image officielle) ; ce montage ne fait rien non plus en local. Retirez-le, ou chargez les données avec `clever-compose seed`", display(v.source.as_deref().unwrap_or("")), v.target, rec.kind));
         }
         let src = v.source.clone().unwrap_or_default();
         let meta = std::fs::metadata(&src).map_err(|_| format!("le chemin `{}` monté vers `{}` n'existe pas sur ce poste", display(&src), v.target))?;
@@ -37,7 +69,7 @@ pub fn collect(service: &crate::compose::model::Service, _project_dir: &FsPath, 
             entries.sort_by_key(|e| e.file_name());
             for e in entries {
                 let name = e.file_name().to_string_lossy().to_string();
-                if !(name.ends_with(".sql") || name.ends_with(".sql.gz") || name.ends_with(".sh")) {
+                if !has_ext(&name, exts) {
                     continue;
                 }
                 scripts.push(Script { name, source: display(&e.path().to_string_lossy()) });
@@ -67,6 +99,13 @@ pub fn runner(rec: &Recognized, version: Option<&str>) -> Option<(String, String
     match rec.provider {
         "postgresql-addon" => Some((format!("postgres:{}", version.unwrap_or("17")), POSTGRES_RUNNER.to_string())),
         "mysql-addon" => Some((format!("mysql:{}", version.unwrap_or("8.4")), MYSQL_RUNNER.to_string())),
+        // Le shell `mongo` de l'image de la version servie (4.0 : pas de
+        // mongosh, et un mongosh récent ne parle plus à un 4.0).
+        "mongodb-addon" => Some((format!("mongo:{}", version.map(|v| v.split('.').take(2).collect::<Vec<_>>().join(".")).unwrap_or_else(|| "4.0".into())), MONGO_RUNNER.to_string())),
+        // Pas d'image `redis` complète : redis-cli suffit, celle-ci est légère.
+        "redis-addon" => Some((format!("redis:{}", version.unwrap_or("8")), REDIS_RUNNER.to_string())),
+        // L'image elasticsearch pèse plus d'un gigaoctet pour un curl.
+        "es-addon" => Some(("curlimages/curl:8.14.1".to_string(), ES_RUNNER.to_string())),
         _ => None,
     }
 }
@@ -120,15 +159,79 @@ $MYSQL -e "INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')"
 echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
 "#;
 
+const MONGO_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : rejoue les scripts d'initialisation contre
+# l'addon, une fois par contenu (collection témoin cc_compose_init).
+set -eu
+MONGO="mongo --quiet $MONGODB_ADDON_URI"
+if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+# Variables de l'image officielle, pour les scripts .sh qui les lisent.
+export MONGO_INITDB_DATABASE="$MONGODB_ADDON_DB" MONGO_INITDB_ROOT_USERNAME="$MONGODB_ADDON_USER" MONGO_INITDB_ROOT_PASSWORD="$MONGODB_ADDON_PASSWORD"
+for f in /cc-init/*; do
+  case "$f" in
+    *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
+    *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
+    *.archive) echo "cc-compose init : $f"; mongorestore --quiet --uri="$MONGODB_ADDON_URI" --archive="$f" --nsFrom='*.*' --nsTo="$MONGODB_ADDON_DB.*" ;;
+    *)         echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})"
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
+const REDIS_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : charge les données dans l'addon, une fois par
+# contenu (clé témoin cc_compose_init:<hash>).
+set -eu
+export REDISCLI_AUTH="$REDIS_PASSWORD"
+REDIS="redis-cli -h $REDIS_HOST -p $REDIS_PORT"
+if [ "$($REDIS EXISTS "cc_compose_init:$CC_COMPOSE_INIT_HASH")" = "1" ]; then
+  echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+for f in /cc-init/*; do
+  case "$f" in
+    *.sh)    echo "cc-compose init : $f"; sh "$f" ;;
+    *.redis) echo "cc-compose init : $f"; $REDIS < "$f" ;;
+    *.resp)  echo "cc-compose init : $f"; $REDIS --pipe < "$f" ;;
+    *)       echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$REDIS SET "cc_compose_init:$CC_COMPOSE_INIT_HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /dev/null
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
+const ES_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : charge les données dans l'addon, une fois par
+# contenu (index témoin cc_compose_init, document <hash>).
+set -eu
+ES="${ES_ADDON_URI%/}"
+CURL="curl -sS --fail-with-body -u $ES_ADDON_USER:$ES_ADDON_PASSWORD"
+if $CURL -o /dev/null "$ES/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" 2>/dev/null; then
+  echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+export ELASTICSEARCH_URL="$ES" ELASTICSEARCH_USERNAME="$ES_ADDON_USER" ELASTICSEARCH_PASSWORD="$ES_ADDON_PASSWORD"
+for f in /cc-init/*; do
+  case "$f" in
+    *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
+    *.ndjson) echo "cc-compose init : $f"
+              out="$($CURL -H 'Content-Type: application/x-ndjson' -X POST "$ES/_bulk?refresh=true" --data-binary "@$f")"
+              case "$out" in *'"errors":false'*) ;; *) echo "$out" | head -c 2000; echo; echo "cc-compose init : erreurs dans le bulk $f"; exit 1 ;; esac ;;
+    *)        echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$CURL -o /dev/null -H 'Content-Type: application/json' -X PUT "$ES/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" -d "{\"applied_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
 /// La tâche d'initialisation d'un addon.
 pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str>, scripts: &[Script], hash: &str, region: &str, tags: Vec<String>, intrinsics: ImageIntrinsics, image: String, script: String) -> App {
     let _ = rec;
     let name = format!("{service}-init");
-    let vars = match rec.provider {
-        "postgresql-addon" => ["POSTGRESQL_ADDON_HOST", "POSTGRESQL_ADDON_PORT", "POSTGRESQL_ADDON_USER", "POSTGRESQL_ADDON_PASSWORD", "POSTGRESQL_ADDON_DB"],
-        _ => ["MYSQL_ADDON_HOST", "MYSQL_ADDON_PORT", "MYSQL_ADDON_USER", "MYSQL_ADDON_PASSWORD", "MYSQL_ADDON_DB"],
-    };
-    let _ = vars;
     let files: Vec<CopiedFile> = scripts.iter().map(|s| CopiedFile { source: s.source.clone(), target: format!("/cc-init/{}", s.name), read_only: true }).collect();
     let _ = version;
     App {
@@ -150,8 +253,10 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
 }
 
 /// `clever-compose seed` : un plan réduit à l'addon du service et à une
-/// tâche `<service>-seed` qui charge `dump` (`.sql`, `.sql.gz` ou `.sh`),
-/// avec la même table témoin (un dump inchangé n'est pas rechargé).
+/// tâche `<service>-seed` qui charge `dump` (extensions par fournisseur,
+/// `seed_extensions`), avec le même témoin (un dump inchangé n'est pas
+/// rechargé). Pour Redis et Elasticsearch, dont l'image n'a pas de scripts
+/// d'initialisation, c'est le seul chemin de reprise de données.
 pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath, images: &dyn super::images::ImageResolver) -> Result<Plan, String> {
     let addon = plan
         .resources
@@ -164,6 +269,9 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
     let rec = super::addons::recognize(match addon.provider.as_str() {
         "postgresql-addon" => "postgres",
         "mysql-addon" => "mysql",
+        "mongodb-addon" => "mongo",
+        "redis-addon" => "redis",
+        "es-addon" => "elasticsearch",
         other => return Err(format!("seed non supporté pour {other}")),
     })
     .ok_or("fournisseur non reconnu")?;
@@ -173,8 +281,9 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
         Err(_) => return Err(format!("le dump {} doit être dans le répertoire du projet {}", abs.display(), project_dir.display())),
     };
     let name = abs.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dump.sql".into());
-    if !(name.ends_with(".sql") || name.ends_with(".sql.gz") || name.ends_with(".sh")) {
-        return Err(format!("`{name}` : un dump est un fichier .sql, .sql.gz ou .sh"));
+    let exts = seed_extensions(rec.provider);
+    if !has_ext(&name, exts) {
+        return Err(format!("`{name}` : pour {} un dump est un fichier {}", rec.kind, exts.join(", ")));
     }
     let scripts = vec![Script { name, source: rel }];
     let h = hash(&scripts, project_dir)?;

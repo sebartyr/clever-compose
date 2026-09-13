@@ -180,12 +180,26 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             (None, Some(v)) => Some(v),
             (None, None) => provider.default_version.clone(),
         };
-        if let Some(v) = &version {
-            if !provider.versions.is_empty() && !provider.versions.iter().any(|av| av == v) {
-                diags.push(Diagnostic::error("addon-version-unavailable", format!("`{name}` : version {v} indisponible pour {} (versions : {}) ; `x-clever.version` pour en choisir une", provider.name, provider.versions.join(", "))).with_path(&p.child("image")));
-                continue;
+        // Une version demandée moins précise que celles servies (`8` pour
+        // `8.10.1`, `4.0` pour `4.0.3`) désigne la seule qui la prolonge :
+        // même version, pas un rabattement. Plusieurs candidates = ambigu.
+        let version = match version {
+            Some(v) if !provider.versions.is_empty() && !provider.versions.iter().any(|av| *av == v) => {
+                let candidates: Vec<&String> = provider.versions.iter().filter(|av| av.starts_with(&format!("{v}."))).collect();
+                match candidates.as_slice() {
+                    [one] => Some((*one).clone()),
+                    [] => {
+                        diags.push(Diagnostic::error("addon-version-unavailable", format!("`{name}` : version {v} indisponible pour {} (versions : {}) ; `x-clever.version` pour en choisir une", provider.name, provider.versions.join(", "))).with_path(&p.child("image")));
+                        continue;
+                    }
+                    many => {
+                        diags.push(Diagnostic::error("addon-version-ambiguous", format!("`{name}` : version {v} ambiguë pour {} ({}) ; précisez-la avec `x-clever.version`", provider.name, many.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))).with_path(&p.child("image")));
+                        continue;
+                    }
+                }
             }
-        }
+            other => other,
+        };
         // Coût annoncé (§6) : la substitution est facturée.
         diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
         // Falaises sémantiques (§6.4).
@@ -212,7 +226,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         }
         // Scripts d'initialisation (§6.3) : rejoués par une tâche.
         let display = |path: &str| ctx.display(path);
-        match initdb::collect(s, ctx.project_dir, &display) {
+        match initdb::collect(s, rec, ctx.project_dir, &display) {
             Err(e) => diags.push(Diagnostic::error("addon-init-scripts", format!("`{name}` : {e}")).with_path(&p.child("volumes"))),
             Ok(scripts) if scripts.is_empty() => {}
             Ok(scripts) => match initdb::runner(rec, version.as_deref()) {

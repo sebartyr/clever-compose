@@ -1,0 +1,23 @@
+services:
+  api:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    environment:
+      MONGO_URL: mongodb://app:app@mongo:27017/app
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:7
+    x-clever:
+      version: "4.0"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: app
+      MONGO_INITDB_ROOT_PASSWORD: app
+      MONGO_INITDB_DATABASE: app
+    volumes:
+      - ./initdb:/docker-entrypoint-initdb.d
+      - mongodata:/data/db
+  cache:
+    image: valkey/valkey:8
+volumes:
+  mongodata: {}
