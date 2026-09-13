@@ -16,6 +16,10 @@ repository = "https://github.com/CleverCloud/clever-compose"
 cc-compose-model = { path = "crates/cc-compose-model" }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
+indexmap = { version = "2", features = ["serde"] }
+saphyr = "0.0.12"
+saphyr-parser = "0.0.12"
+thiserror = "2"
 
 # Profil dédié au shim : binaire statique musl, minimal, sans unwinding.
 # `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`

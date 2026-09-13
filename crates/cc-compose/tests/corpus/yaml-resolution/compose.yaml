@@ -1,0 +1,46 @@
+services:
+  a:
+    image: busybox
+    environment:
+      YES_: yes
+      NO_: no
+      ON_: on
+      OFF_: off
+      TRUE_: true
+      Y_: y
+      SEXA: 22:22
+      SEXA2: 1:00:00
+      OCT: 0777
+      OCT2: 0o777
+      HEX: 0x1F
+      UNDER: 1_000
+      FLOAT: 1e3
+      FLOAT2: .5
+      NULL_: null
+      TILDE: ~
+      EMPTY:
+      DATE: 2026-09-13
+      DOTS: 1.2.3
+      STR_YES: "yes"
+      PLUS: +12
+      LEAD0: 012
+      ANCHOR: &anc anchored
+      REF: *anc
+    ports:
+      - 8080:80
+      - 22:22
+      - "9000"
+    labels:
+      - a=yes
+    command: echo yes
+    x-clever:
+      flavor: nano
+    <<: &base
+      restart: always
+  b:
+    <<: *base
+    image: busybox
+    scale: 2
+    stop_grace_period: 1m30s
+    mem_limit: 512m
+    cpus: 0.5

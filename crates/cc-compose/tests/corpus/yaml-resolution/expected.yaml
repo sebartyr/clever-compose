@@ -1,0 +1,63 @@
+name: yaml-resolution
+services:
+  a:
+    command:
+      - echo
+      - 'yes'
+    environment:
+      ANCHOR: anchored
+      DATE: 2026-09-13 00:00:00 +0000 UTC
+      DOTS: 1.2.3
+      EMPTY: null
+      FLOAT: "1000"
+      FLOAT2: "0.5"
+      HEX: "31"
+      LEAD0: "10"
+      NO_: 'no'
+      NULL_: null
+      OCT: "511"
+      OCT2: "511"
+      OFF_: 'off'
+      ON_: 'on'
+      PLUS: "12"
+      REF: anchored
+      SEXA: '22:22'
+      SEXA2: '1:00:00'
+      STR_YES: 'yes'
+      TILDE: null
+      TRUE_: "true"
+      UNDER: "1000"
+      Y_: 'y'
+      YES_: 'yes'
+    image: busybox
+    labels:
+      a: 'yes'
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "8080"
+        protocol: tcp
+      - mode: ingress
+        target: 22
+        published: "22"
+        protocol: tcp
+      - mode: ingress
+        target: 9000
+        protocol: tcp
+    restart: always
+    x-clever:
+      flavor: nano
+  b:
+    cpus: 0.5
+    image: busybox
+    mem_limit: "536870912"
+    networks:
+      default: null
+    restart: always
+    scale: 2
+    stop_grace_period: 1m30s
+networks:
+  default:
+    name: yaml-resolution_default

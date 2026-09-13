@@ -6,9 +6,22 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lib]
+name = "cc_compose"
+path = "src/lib.rs"
+
 [[bin]]
 name = "clever-compose"
 path = "src/main.rs"
 
 [dependencies]
 cc-compose-model.workspace = true
+indexmap.workspace = true
+saphyr.workspace = true
+saphyr-parser.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1"
