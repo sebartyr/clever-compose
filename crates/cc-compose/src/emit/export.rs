@@ -13,15 +13,36 @@ pub struct What {
     pub terraform: bool,
     pub script: bool,
     pub repos: bool,
+    /// Écrire les branches `clever-compose/<service>` dans le dépôt git du
+    /// projet (pour `deployment.repository`).
+    pub branches: bool,
 }
 
 pub fn write(plan: &Plan, project_dir: &FsPath, out_dir: &FsPath, what: &What, diags: &mut Diagnostics) -> Result<(), Diagnostic> {
     std::fs::create_dir_all(out_dir).map_err(|e| Diagnostic::error("export-io", format!("{} : {e}", out_dir.display())))?;
     let io = |p: &FsPath, e: std::io::Error| Diagnostic::error("export-io", format!("{} : {e}", p.display()));
+    let mut origin: Option<String> = None;
+    if what.branches {
+        for r in &plan.resources {
+            let Resource::App(app) = r else { continue };
+            let files = repo_files(app, project_dir).map_err(|e| Diagnostic::error("export-sources", format!("{} : {e}", app.service)))?;
+            match crate::exec::git::write_branch(project_dir, &app.service, &files) {
+                Ok((oid, o)) => {
+                    // La plateforme clone en HTTPS : `git@host:x/y.git` → `https://host/x/y.git`.
+                    origin = origin.or(o.map(|u| match u.strip_prefix("git@").and_then(|r| r.split_once(':')) {
+                        Some((host, path)) => format!("https://{host}/{path}"),
+                        None => u,
+                    }));
+                    diags.push(Diagnostic::warning("export-branch", format!("branche clever-compose/{} écrite ({}) ; à pousser : git push origin 'refs/heads/clever-compose/*'", app.service, &oid.to_string()[..12])));
+                }
+                Err(e) => diags.push(Diagnostic::warning("export-branch", e)),
+            }
+        }
+    }
     if what.terraform {
         // HCL lisible pour l'utilisateur ; la structure JSON reste celle qui
         // est validée en test.
-        let tf = terraform::emit(plan, &terraform::Options { out_dir, project_dir }, diags);
+        let tf = terraform::emit(plan, &terraform::Options { out_dir, project_dir, repository: origin.clone() }, diags);
         let p = out_dir.join("main.tf");
         std::fs::write(&p, super::hcl::render(&tf, &terraform::schema())).map_err(|e| io(&p, e))?;
     }
@@ -78,4 +99,9 @@ fn copy_tree(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Fichiers du dépôt synthétique, contexte de build compris.
+fn repo_files(app: &cc_compose_model::plan::App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
+    crate::exec::reconcile::repo_files(app, project_dir)
 }

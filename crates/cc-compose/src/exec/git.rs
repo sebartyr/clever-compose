@@ -81,3 +81,53 @@ pub fn push(dir: &FsPath, url: &str, creds: &(String, String)) -> Result<(), Str
         None => Ok(()),
     }
 }
+
+/// Écrit le dépôt synthétique comme branche `refs/heads/clever-compose/<service>`
+/// dans le dépôt git qui contient `project_dir` (objets écrits dans son
+/// ODB, aucun identifiant nécessaire). Renvoie l'id du commit et l'URL de
+/// `origin` si elle existe.
+pub fn write_branch(project_dir: &FsPath, service: &str, files: &[File]) -> Result<(Oid, Option<String>), String> {
+    let repo = Repository::discover(project_dir).map_err(|_| format!("{} n'est pas dans un dépôt git : les branches clever-compose/* n'ont nulle part où aller", project_dir.display()))?;
+    let tree_id = build_tree(&repo, files)?;
+    let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
+    let sig = Signature::new(AUTHOR, EMAIL, &Time::new(0, 0)).map_err(|e| e.to_string())?;
+    let refname = format!("refs/heads/clever-compose/{service}");
+    // Toujours un commit racine : l'historique synthétique n'a qu'un commit.
+    let commit = repo.commit(None, &sig, &sig, "clever-compose", &tree, &[]).map_err(|e| format!("branche {refname} : {e}"))?;
+    repo.reference(&refname, commit, true, "clever-compose export").map_err(|e| format!("branche {refname} : {e}"))?;
+    let origin = repo.find_remote("origin").ok().and_then(|r| r.url().map(str::to_string));
+    Ok((commit, origin))
+}
+
+/// Arbre git des fichiers, blobs écrits dans l'ODB du dépôt, répertoires
+/// imbriqués construits récursivement, entrées triées.
+fn build_tree(repo: &Repository, files: &[File]) -> Result<Oid, String> {
+    #[derive(Default)]
+    struct Dir {
+        files: Vec<(String, Oid, bool)>,
+        dirs: std::collections::BTreeMap<String, Dir>,
+    }
+    let mut root = Dir::default();
+    for f in files {
+        let oid = repo.blob(&f.content).map_err(|e| format!("blob {} : {e}", f.path))?;
+        let mut parts: Vec<&str> = f.path.split('/').collect();
+        let name = parts.pop().unwrap().to_string();
+        let mut cur = &mut root;
+        for p in parts {
+            cur = cur.dirs.entry(p.to_string()).or_default();
+        }
+        cur.files.push((name, oid, f.executable));
+    }
+    fn write(repo: &Repository, d: &Dir) -> Result<Oid, String> {
+        let mut b = repo.treebuilder(None).map_err(|e| e.to_string())?;
+        for (name, sub) in &d.dirs {
+            let oid = write(repo, sub)?;
+            b.insert(name, oid, 0o040000).map_err(|e| e.to_string())?;
+        }
+        for (name, oid, exec) in &d.files {
+            b.insert(name, *oid, if *exec { 0o100755 } else { 0o100644 }).map_err(|e| e.to_string())?;
+        }
+        b.write().map_err(|e| e.to_string())
+    }
+    write(repo, &root)
+}

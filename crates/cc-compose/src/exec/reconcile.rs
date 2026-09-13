@@ -259,7 +259,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     Ok(state)
 }
 
-fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
+pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
     let mut files = sources::files(app, project_dir)?;
     if let Source::Context { context, .. } = &app.source {
         let root = project_dir.join(context.trim_start_matches("./"));

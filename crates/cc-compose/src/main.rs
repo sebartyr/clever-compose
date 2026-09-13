@@ -9,7 +9,8 @@ fn usage() -> ExitCode {
     eprintln!("usage : clever-compose config [--project-directory DIR] [-f FILE]... [-p NAME] [--env-file F] [--profile P] [--format json]");
     eprintln!("        clever-compose plan   [mêmes options] [--images FIXTURE.json] [--allow-ephemeral]");
     eprintln!("        clever-compose images --project-directory DIR");
-    eprintln!("        clever-compose export [terraform|script|all] -o DIR [options de plan]");
+    eprintln!("        clever-compose export [terraform|script|all] -o DIR [--branches] [options de plan]");
+    eprintln!("          --branches écrit les branches clever-compose/<service> dans le dépôt git du projet");
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
     eprintln!("        clever-compose down --org ORG [--dry-run] [--yes] [options de plan]   (--yes supprime aussi les addons)");
@@ -196,15 +197,16 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
 }
 
 fn export(args: &[String]) -> ExitCode {
-    let mut what = cc_compose::emit::export::What { terraform: true, script: true, repos: true };
+    let mut what = cc_compose::emit::export::What { terraform: true, script: true, repos: true, branches: false };
     let mut rest: Vec<String> = Vec::new();
     let mut out: Option<PathBuf> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "terraform" if i == 0 => what = cc_compose::emit::export::What { terraform: true, script: false, repos: true },
-            "script" if i == 0 => what = cc_compose::emit::export::What { terraform: false, script: true, repos: true },
+            "terraform" if i == 0 => what = cc_compose::emit::export::What { terraform: true, script: false, repos: true, branches: false },
+            "script" if i == 0 => what = cc_compose::emit::export::What { terraform: false, script: true, repos: true, branches: false },
             "all" if i == 0 => {}
+            "--branches" => what.branches = true,
             "-o" | "--output" => {
                 i += 1;
                 out = args.get(i).map(PathBuf::from);

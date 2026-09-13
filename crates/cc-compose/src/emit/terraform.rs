@@ -24,16 +24,19 @@ pub struct Options<'a> {
     /// Répertoire de sortie, pour les chemins `file()` relatifs.
     pub out_dir: &'a FsPath,
     pub project_dir: &'a FsPath,
+    /// Valeur par défaut de `var.repository` (URL de `origin` du projet).
+    pub repository: Option<String>,
 }
 
 pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
     let schema = schema();
     let mut variables = Map::new();
     variables.insert("organisation".into(), json!({ "type": "string", "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)", "sensitive": true }));
-    variables.insert(
-        "repository".into(),
-        json!({ "type": "string", "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)" }),
-    );
+    let mut repository = json!({ "type": "string", "description": "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)" });
+    if let Some(url) = &opts.repository {
+        repository["default"] = json!(url);
+    }
+    variables.insert("repository".into(), repository);
     let mut networkgroups = Map::new();
     let mut dockers = Map::new();
     let mut addon_resources: Map<String, J> = Map::new(); // type de ressource -> { nom -> corps }

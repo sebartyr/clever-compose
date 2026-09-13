@@ -16,7 +16,7 @@ variable "organisation" {
 
 variable "repository" {
   type        = string
-  description = "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+  description = "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)"
 }
 
 resource "clevercloud_networkgroup" "default" {

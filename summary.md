@@ -281,9 +281,20 @@ modification du fichier source ; page d'installation servie.
   expression nue pour une interpolation unique (`var.x`, `file(...)`).
   `export` écrit `main.tf` ; le JSON reste la forme validée en test, et le
   HCL rendu est validé à son tour (`export/hcl/`).
-- `deployment.repository` : Terraform attend que les branches
-  `clever-compose/<service>` soient poussées sur un dépôt de l'utilisateur
-  (§10) ; c'est l'exécuteur ou `export` qui les poussera (phase 3).
+- `deployment.repository` : **fait le 13/09/2026**. `export --branches`
+  écrit les branches `clever-compose/<service>` dans le dépôt git du projet
+  (blobs et arbre via `git2`, commit racine déterministe, aucun identifiant),
+  à pousser par `git push origin 'refs/heads/clever-compose/*'` ;
+  `var.repository` prend par défaut l'URL de `origin` convertie en HTTPS.
+  Les commits sont identiques à ceux que l'exécuteur pousse.
+- **Équivalence des backends vérifiée** (§11) sur `ccnginxtf` (Test
+  SBRUNAT, dépôt jetable `github.com/sebartyr/cc-compose-tftest` à
+  supprimer au ménage, état Terraform dans le scratchpad) : `terraform
+  apply` en une passe crée le groupe, les deux applications avec le même
+  environnement, les membres (alias `<service>.m.<ng>.cc-ng.cloud`), et
+  déploie le même commit (`49e9bb6caf42`) que l'exécuteur ; le front sert
+  « bonjour depuis app ». Le provider a lu `CLEVER_TOKEN`/`CLEVER_SECRET`
+  et `TF_VAR_organisation`.
 
 ---
 

@@ -43,12 +43,12 @@ fn corpus_exports_match_golden_files() {
         let mut diags = Diagnostics::default();
         let Some(plan) = run(&opts, &fixture, &mut diags) else { continue };
         let out_dir = dir.join("export");
-        let tf = terraform::emit(&plan, &terraform::Options { out_dir: &out_dir, project_dir: &dir }, &mut diags);
+        let tf = terraform::emit(&plan, &terraform::Options { out_dir: &out_dir, project_dir: &dir, repository: None }, &mut diags);
         let tf_text = serde_json::to_string_pretty(&tf).unwrap() + "\n";
         // Le HCL vit dans `export/hcl/` : ses `file()` sont relatifs à ce
         // répertoire.
         let hcl_dir = out_dir.join("hcl");
-        let tf_for_hcl = terraform::emit(&plan, &terraform::Options { out_dir: &hcl_dir, project_dir: &dir }, &mut Diagnostics::default());
+        let tf_for_hcl = terraform::emit(&plan, &terraform::Options { out_dir: &hcl_dir, project_dir: &dir, repository: None }, &mut Diagnostics::default());
         let hcl_text = cc_compose::emit::hcl::render(&tf_for_hcl, &terraform::schema());
         let sh_text = script::emit(&plan, &script::Options { out_dir: &out_dir, project_dir: &dir }, &mut diags);
         std::fs::create_dir_all(&out_dir).unwrap();
