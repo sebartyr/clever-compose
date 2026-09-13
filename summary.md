@@ -136,7 +136,8 @@ Prochaine étape : phase 1 (parsing, plan, diagnostics).
   d'usage clever-compose et la proposition d'implémentation (matcher
   `member.domain_name` dans `dns_handler::answer` après le lookup du cache,
   répondre les peers SERVER comme la forme `m`, resserrer la validation à
-  `<ngId><suffix>`, cas dans `tests/dns_parity.rs`). Pas encore posté.
+  `<ngId><suffix>`, cas dans `tests/dns_parity.rs`). **Posté le 13/09/2026 :**
+  https://gitlab.corp.clever-cloud.com/clever-cloud/axo/-/work_items/3168#note_852711
 
   Si ce correctif arrive, le stub DNS du shim disparaît au profit d'un
   `search m.<ng_id>.cc-ng.cloud` dans `resolv.conf`, avec des membres nommés
