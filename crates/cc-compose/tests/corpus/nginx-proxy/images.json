@@ -1,0 +1,28 @@
+{
+  "nginx:1.27-alpine": {
+    "entrypoint": [
+      "/docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "nginx",
+      "-g",
+      "daemon off;"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      80
+    ]
+  },
+  "hashicorp/http-echo:1.0": {
+    "entrypoint": [
+      "/http-echo"
+    ],
+    "cmd": [],
+    "user": "65532",
+    "workdir": "/home/nonroot",
+    "exposed_ports": [
+      5678
+    ]
+  }
+}

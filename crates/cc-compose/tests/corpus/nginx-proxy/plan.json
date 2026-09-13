@@ -1,0 +1,164 @@
+{
+  "project": "nginx-proxy",
+  "spec_hash": "da5189ef58842a94fc072d48ba2e55e6",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "nginx-proxy-default",
+      "tags": [
+        "compose-project=nginx-proxy",
+        "compose-network=default",
+        "compose-spec=da5189ef58842a94fc072d48ba2e55e6"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/app",
+      "service": "app",
+      "name": "nginx-proxy-app",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "hashicorp/http-echo:1.0",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/http-echo"
+        ],
+        "cmd": [],
+        "user": "65532",
+        "workdir": "/home/nonroot",
+        "exposed_ports": [
+          5678
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/http-echo",
+          "-listen=:8000",
+          "-text=bonjour depuis app"
+        ],
+        "workdir": "/home/nonroot",
+        "user": "65532",
+        "port": {
+          "mode": "forward",
+          "target_port": 8000
+        }
+      },
+      "env": [],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=nginx-proxy",
+        "compose-service=app",
+        "compose-spec=da5189ef58842a94fc072d48ba2e55e6"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/front",
+      "service": "front",
+      "name": "nginx-proxy-front",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "nginx:1.27-alpine",
+        "private_registry": false,
+        "files": [
+          {
+            "source": "./default.conf",
+            "target": "/etc/nginx/conf.d/default.conf",
+            "read_only": true
+          }
+        ]
+      },
+      "image": {
+        "entrypoint": [
+          "/docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "nginx",
+          "-g",
+          "daemon off;"
+        ],
+        "user": null,
+        "workdir": "/",
+        "exposed_ports": [
+          80
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/docker-entrypoint.sh",
+          "nginx",
+          "-g",
+          "daemon off;"
+        ],
+        "workdir": "/",
+        "port": {
+          "mode": "forward",
+          "target_port": 80
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "app="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/app@default"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "app/app"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=nginx-proxy",
+        "compose-service=front",
+        "compose-spec=da5189ef58842a94fc072d48ba2e55e6"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/front@default",
+      "member": "app/front",
+      "group": "ng/default",
+      "aliases": [
+        "front"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/app@default",
+      "member": "app/app",
+      "group": "ng/default",
+      "aliases": [
+        "app"
+      ]
+    }
+  ]
+}

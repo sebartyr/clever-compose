@@ -31,9 +31,14 @@ pub fn spawn(config: &ShimConfig, env_remove: &[String], env_set: &[(String, Str
         cmd.current_dir(dir);
     }
     if let Some(user) = &config.user {
-        let raw = std::fs::read_to_string(IDS_PATH)
-            .map_err(|e| format!("utilisateur `{user}` : lecture de {IDS_PATH} : {e}"))?;
-        let ids = Ids::parse(&raw).map_err(|e| format!("{IDS_PATH} : {e}"))?;
+        let ids = match Ids::from_numeric(user) {
+            Some(ids) => ids,
+            None => {
+                let raw = std::fs::read_to_string(IDS_PATH)
+                    .map_err(|e| format!("utilisateur `{user}` : lecture de {IDS_PATH} : {e}"))?;
+                Ids::parse(&raw).map_err(|e| format!("{IDS_PATH} : {e}"))?
+            }
+        };
         // Abandon des privilèges dans l'enfant, après le fork, dans l'ordre
         // setgroups, setgid, setuid (`CommandExt::groups` est instable ;
         // `Command::uid/gid` s'appliqueraient avant `pre_exec`, trop tôt pour

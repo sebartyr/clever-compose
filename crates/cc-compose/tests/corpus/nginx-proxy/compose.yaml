@@ -1,0 +1,14 @@
+services:
+  front:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+  app:
+    image: hashicorp/http-echo:1.0
+    command: ["-listen=:8000", "-text=bonjour depuis app"]
+    x-clever:
+      http_port: 8000

@@ -9,6 +9,7 @@
 //! récupérer les zombies, propager le code de sortie (sémantique tini).
 
 mod child;
+mod dns;
 mod expand;
 mod relay;
 mod secrets;
@@ -57,6 +58,9 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     // L'enfant démarre avant le relais : le relais n'ouvre 8080 qu'une fois le
     // port réel joignable, pour que le succès du déploiement vu par la
     // plateforme reflète la disponibilité réelle du service.
+    // Le stub DNS et resolv.conf avant l'enfant, qui peut résoudre au
+    // démarrage (nginx).
+    dns::start().await?;
     let consumed = secrets::materialize(&config.secrets)?;
     let expanded = expand::expand_all();
     let child = child::spawn(&config, &consumed, &expanded)?;

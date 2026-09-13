@@ -127,6 +127,13 @@ pub struct Ids {
 }
 
 impl Ids {
+    /// Un `USER` numérique (`65532` ou `65532:65532`) se lit sans fichier,
+    /// sans groupes supplémentaires.
+    pub fn from_numeric(user: &str) -> Option<Self> {
+        let (u, g) = user.split_once(':').unwrap_or((user, user));
+        Some(Ids { uid: u.parse().ok()?, gid: g.parse().ok()?, groups: Vec::new() })
+    }
+
     /// Parse le contenu de [`IDS_PATH`].
     pub fn parse(s: &str) -> Result<Self, String> {
         let s = s.trim();

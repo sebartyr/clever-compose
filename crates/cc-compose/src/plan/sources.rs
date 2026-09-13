@@ -68,9 +68,11 @@ pub fn dockerfile(app: &App, project_dir: &FsPath) -> Result<String, String> {
         out.push_str(&format!("COPY cc-generated/{i} {}\n", g.target));
     }
     out.push_str("USER root\n");
-    if let Some(user) = &app.shim.user {
+    if let Some(user) = app.shim.user.as_deref().filter(|u| cc_compose_model::shim::Ids::from_numeric(u).is_none()) {
         // Résolution du nom en uid/gid au build, avec la libc de l'image
-        // (getpwnam n'est pas fiable en musl statique, CLAUDE.md §8).
+        // (getpwnam n'est pas fiable en musl statique, CLAUDE.md §8). Un
+        // utilisateur numérique n'en a pas besoin (images distroless sans
+        // shell).
         out.push_str(&format!(
             "RUN printf '%s:%s:%s\\n' \"$(id -u {user})\" \"$(id -g {user})\" \"$(id -G {user} | tr ' ' ',')\" > {IDS_PATH}\n"
         ));

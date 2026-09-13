@@ -1,0 +1,82 @@
+{
+  "terraform": {
+    "required_providers": {
+      "clevercloud": {
+        "source": "CleverCloud/clevercloud",
+        "version": "~> 2.1"
+      }
+    }
+  },
+  "provider": {
+    "clevercloud": {
+      "organisation": "${var.organisation}"
+    }
+  },
+  "variable": {
+    "organisation": {
+      "type": "string",
+      "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)",
+      "sensitive": true
+    },
+    "repository": {
+      "type": "string",
+      "description": "Dépôt git qui héberge les branches clever-compose/<service> (dépôts synthétiques poussés par `clever-compose export`)"
+    }
+  },
+  "resource": {
+    "clevercloud_networkgroup": {
+      "default": {
+        "name": "nginx-proxy-default",
+        "tags": [
+          "compose-project=nginx-proxy",
+          "compose-network=default",
+          "compose-spec=da5189ef58842a94fc072d48ba2e55e6"
+        ]
+      }
+    },
+    "clevercloud_docker": {
+      "app": {
+        "name": "nginx-proxy-app",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "app.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/app"
+        }
+      },
+      "front": {
+        "name": "nginx-proxy-front",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_DNS_MAP": "app=${clevercloud_docker.app.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "front.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/front"
+        },
+        "depends_on": [
+          "clevercloud_docker.app"
+        ]
+      }
+    }
+  }
+}

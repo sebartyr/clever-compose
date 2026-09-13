@@ -1,0 +1,1 @@
+compose.yaml:3:12: avertissement [proxy-resolver] services.front.image: `front` (nginx) résout les noms de services une seule fois au démarrage : après un redéploiement d'un service amont, il renverra des 502. Déclarez un `resolver` (adresse dans /etc/resolv.conf, TTL court) et passez l'hôte amont par une variable pour forcer la résolution à chaque requête

@@ -210,9 +210,23 @@ modification du fichier source ; page d'installation servie.
 
 *Décidé :*
 
-- Le stub DNS du shim (§8) reste **non écrit** : aucun cas du corpus
-  n'échoue encore sur un nom codé en dur (règle « que ce soit un test qui le
-  dise »). La table `CC_COMPOSE_DNS_MAP` est posée et prête pour lui.
+- **Stub DNS du shim écrit le 13/09/2026**, sur un test qui l'exigeait :
+  un nginx avec `proxy_pass http://app:8000` dans un fichier de
+  configuration copié échouait en `[emerg] host not found in upstream
+  "app"` (cas `nginx-proxy`, projet `ccnginx`). Implémentation (`shim/dns.rs`,
+  `hickory-proto`) conforme au §8 : 127.0.0.153:53 en UDP, `resolv.conf`
+  réécrit en place sans `search`, amont = nameservers d'origine, pas de
+  cache, CNAME alias → FQDN plus les enregistrements amont, AAAA relayé,
+  autres noms relayés. Piège rencontré : `Name::from_utf8` de hickory
+  refuse les `_` des identifiants (`app_…`, `ng_…`), les noms se
+  construisent par labels bruts. Après le stub : « bonjour depuis app »
+  servi par nginx à travers le network group.
+- Utilisateur numérique (`USER 65532`, images distroless sans `/bin/sh`) :
+  lu directement par le shim, pas d'étape `RUN` de résolution.
+- Limite constatée : un port réel imposé par la `command` et différent de
+  l'`EXPOSE` de l'image (http-echo `-listen=:8000`) n'est pas décidable
+  statiquement ; `x-clever.http_port` le fixe, le diagnostic
+  `port-assumed-http` le signale.
 
 ---
 

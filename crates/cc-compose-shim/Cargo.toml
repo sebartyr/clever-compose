@@ -23,3 +23,4 @@ tokio = { version = "1", default-features = false, features = [
     "macros",
     "sync",
 ] }
+hickory-proto = { version = "0.25", default-features = false }
