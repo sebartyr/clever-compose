@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cc-compose-model",
+    "crates/cc-compose-shim",
+    "crates/cc-compose",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/CleverCloud/clever-compose"
+
+[workspace.dependencies]
+cc-compose-model = { path = "crates/cc-compose-model" }
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+
+# Profil dédié au shim : binaire statique musl, minimal, sans unwinding.
+# `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`
+[profile.shim]
+inherits = "release"
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+strip = true

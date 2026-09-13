@@ -1,0 +1,4 @@
+{
+  "argv": ["docker-entrypoint.sh", "postgres"],
+  "relay": { "target_port": 5432 }
+}

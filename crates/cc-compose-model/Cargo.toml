@@ -1,0 +1,11 @@
+[package]
+name = "cc-compose-model"
+description = "Plan intermédiaire, configuration du shim et types partagés de clever-compose"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Dépendances volontairement frugales : le shim en hérite.
+[dependencies]
+serde.workspace = true
