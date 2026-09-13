@@ -350,3 +350,57 @@ async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, lo
         }
     }
 }
+
+/// `down` : supprime ce que le plan décrit et que la plateforme porte avec
+/// le tag du projet ; les addons (données) seulement avec `confirm`.
+pub async fn down<P: Platform>(plan: &Plan, platform: &P, dry_run: bool, confirm: bool, log: &mut Log) -> Result<(), String> {
+    let project_tag = format!("compose-project={}", plan.project);
+    let existing_apps = platform.list_apps().await?;
+    // Toutes les applications du projet, y compris les tâches d'init/seed
+    // absentes du plan courant : par tag.
+    let mut to_delete: Vec<(String, String)> = Vec::new();
+    for x in &existing_apps {
+        if !x.name.starts_with(&format!("{}-", plan.project)) {
+            continue;
+        }
+        let tags = platform.get_tags(&x.id).await?;
+        if tags.iter().any(|t| t == &project_tag) {
+            to_delete.push((x.name.clone(), x.id.clone()));
+        }
+    }
+    for (name, id) in &to_delete {
+        if dry_run {
+            log(&format!("application {name} ({id}) : à supprimer"));
+        } else {
+            platform.delete_app(id).await?;
+            log(&format!("application {name} ({id}) : supprimée"));
+        }
+    }
+    let addons: Vec<&Addon> = plan.resources.iter().filter_map(|r| if let Resource::Addon(a) = r { Some(a) } else { None }).collect();
+    if !addons.is_empty() {
+        let existing = platform.list_addons().await?;
+        for a in &addons {
+            let Some(x) = existing.iter().find(|x| x.name == a.name && x.provider == a.provider) else { continue };
+            if dry_run {
+                log(&format!("addon {} ({}) : à supprimer (données perdues)", a.name, x.id));
+            } else if !confirm {
+                log(&format!("addon {} ({}) : conservé (données) ; `--yes` pour le supprimer", a.name, x.id));
+            } else {
+                platform.delete_addon(&x.id).await?;
+                log(&format!("addon {} ({}) : supprimé", a.name, x.id));
+            }
+        }
+    }
+    let ngs = platform.list_ngs().await?;
+    for r in &plan.resources {
+        let Resource::NetworkGroup(ng) = r else { continue };
+        let Some(x) = ngs.iter().find(|x| x.label == ng.name) else { continue };
+        if dry_run {
+            log(&format!("network group {} ({}) : à supprimer", ng.name, x.id));
+        } else {
+            platform.delete_ng(&x.id).await?;
+            log(&format!("network group {} ({}) : supprimé", ng.name, x.id));
+        }
+    }
+    Ok(())
+}

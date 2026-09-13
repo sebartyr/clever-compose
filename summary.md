@@ -148,9 +148,11 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Scripts d'initialisation pour Redis, MongoDB, Elasticsearch : non
   supportés (erreur explicite).
 - Latence du proxy / hôte direct (§6.4) : non proposé.
-- Noms des variables injectées pour Redis (`REDIS_HOST`, `REDIS_PORT`,
-  `REDIS_PASSWORD`, `REDIS_URL`), MongoDB et Elasticsearch : à confirmer sur
-  un addon réel (seul MySQL a été exercé).
+- Noms des variables injectées confirmés par la page de référence de la
+  documentation (`environment-variables/reference.md`) et le test e2e Redis
+  d'Axo (`REDIS_URL` = `redis://:pass@host:port`) : `MONGODB_ADDON_*`,
+  `ES_ADDON_*`, `REDIS_*`. MongoDB et Elasticsearch sont des fournisseurs
+  hors OVD/Axo (API à part). Non exercés sur un addon réel.
 - SDK Rust : PR #81 (mai 2025, approuvée, en conflit) apporte les network
   groups ; à rebaser plutôt qu'à refaire. Bug de désérialisation de
   `v2::plan::list`.

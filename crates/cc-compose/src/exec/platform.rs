@@ -142,6 +142,9 @@ pub trait Platform: Send + Sync {
     fn add_domain(&self, app: &str, fqdn: &str) -> impl Future<Output = PResult<()>> + Send;
     fn redeploy(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
     fn last_deployment(&self, app: &str) -> impl Future<Output = PResult<Option<DeploymentState>>> + Send;
+    fn delete_app(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
+    fn delete_addon(&self, addon: &str) -> impl Future<Output = PResult<()>> + Send;
+    fn delete_ng(&self, ng: &str) -> impl Future<Output = PResult<()>> + Send;
     /// Identifiants pour le push git HTTPS (`user`, `password`).
     fn git_credentials(&self) -> (String, String);
 }
@@ -369,6 +372,20 @@ impl Platform for Api {
     async fn last_deployment(&self, app: &str) -> PResult<Option<DeploymentState>> {
         let v: Vec<DeploymentState> = self.client.get(&format!("{}/deployments?limit=1", self.app_path(app))).await.map_err(|e| Self::e("deployments", e))?;
         Ok(v.into_iter().next())
+    }
+
+    async fn delete_app(&self, app: &str) -> PResult<()> {
+        self.send(reqwest::Method::DELETE, &self.app_path(app), None).await?;
+        Ok(())
+    }
+
+    async fn delete_addon(&self, addon: &str) -> PResult<()> {
+        clevercloud_sdk::v2::addon::delete(&self.client, &self.owner, addon).await.map_err(|e| e.to_string())
+    }
+
+    async fn delete_ng(&self, ng: &str) -> PResult<()> {
+        self.send(reqwest::Method::DELETE, &format!("{}/v4/networkgroups/organisations/{}/networkgroups/{ng}", self.base(), self.owner), None).await?;
+        Ok(())
     }
 
     fn git_credentials(&self) -> (String, String) {

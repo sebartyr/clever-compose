@@ -12,6 +12,7 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose export [terraform|script|all] -o DIR [options de plan]");
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("        clever-compose seed --service SVC --file DUMP.sql [mêmes options que up]");
+    eprintln!("        clever-compose down --org ORG [--dry-run] [--yes] [options de plan]   (--yes supprime aussi les addons)");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
     ExitCode::from(2)
 }
@@ -23,6 +24,11 @@ fn main() -> ExitCode {
         Some("plan") => config(&args[1..], true),
         Some("export") => export(&args[1..]),
         Some("up") => up(&args[1..], None),
+        Some("down") => {
+            let mut rest: Vec<String> = vec!["--down".into()];
+            rest.extend(args[1..].iter().cloned());
+            up(&rest, None)
+        }
         Some("seed") => {
             // clever-compose seed --service SVC --file DUMP [options de up]
             let mut rest: Vec<String> = Vec::new();
@@ -97,9 +103,11 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let mut dry_run = false;
     let mut no_wait = false;
     let mut confirm_addons = false;
+    let mut is_down = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--down" => is_down = true,
             "--org" | "-o" => {
                 i += 1;
                 org = args.get(i).cloned();
@@ -168,6 +176,15 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let api = cc_compose::exec::platform::Api::new(org, creds);
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
+    if is_down {
+        return match rt.block_on(cc_compose::exec::reconcile::down(&plan, &api, dry_run, confirm_addons, &mut log)) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("erreur : {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
     let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons }, &mut log));
     match result {
         Ok(_) => ExitCode::SUCCESS,
