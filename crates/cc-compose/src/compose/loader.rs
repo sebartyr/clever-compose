@@ -13,7 +13,7 @@ use indexmap::IndexMap;
 
 use super::dotenv::{self, Vars};
 use super::node::{Node, Path, Value};
-use super::{interpolate, merge, paths, transform, yaml};
+use super::{interpolate, merge, paths, schema, transform, yaml};
 use crate::diagnostic::{Diagnostic, Files};
 
 pub struct Config {
@@ -60,7 +60,8 @@ impl<'a> Loader<'a> {
 
         let merged = merge::merge(dict, cfg)?;
         let merged = merge::enforce_unicity(merged)?;
-        // TODO(schéma) : validation par le schéma JSON ici.
+        schema::validate(&merged)?;
+        let merged = strip_version(merged);
         let merged = transform::canonical(merged)?;
         let merged = transform::omit_empty(merged);
         merge::enforce_unicity(merged)
@@ -264,6 +265,14 @@ impl<'a> Loader<'a> {
     }
 }
 
+/// `version` est obsolète : ignorée (compose-go avertit puis la retire).
+fn strip_version(mut node: Node) -> Node {
+    if let Some(m) = node.as_map_mut() {
+        m.shift_remove("version");
+    }
+    node
+}
+
 fn abs_join(base: &FsPath, p: &str) -> PathBuf {
     let p = paths::expand_user(p);
     if p.starts_with('/') {
@@ -310,7 +319,9 @@ pub struct ResetPaths(Vec<Path>);
 impl ResetPaths {
     pub fn collect(node: &mut Node) -> Self {
         let mut out = Vec::new();
-        collect_resets(node, &Path::root(), &mut out);
+        if collect_resets(node, &Path::root(), &mut out) {
+            node.value = Value::Map(IndexMap::new());
+        }
         ResetPaths(out)
     }
 
@@ -337,13 +348,13 @@ impl ResetPaths {
     }
 }
 
-fn collect_resets(node: &mut Node, p: &Path, out: &mut Vec<Path>) {
+/// Renvoie `true` si le nœud est `!reset` : son chemin est enregistré et le
+/// parent le retire (compose-go `resolveContainer`).
+fn collect_resets(node: &mut Node, p: &Path, out: &mut Vec<Path>) -> bool {
     match node.tag.as_deref() {
         Some("!reset") => {
             out.push(p.clone());
-            node.value = Value::Null;
-            node.tag = None;
-            return;
+            return true;
         }
         Some("!override") => {
             out.push(p.clone());
@@ -353,17 +364,27 @@ fn collect_resets(node: &mut Node, p: &Path, out: &mut Vec<Path>) {
     }
     match &mut node.value {
         Value::Map(m) => {
+            let mut removed = Vec::new();
             for (k, v) in m.iter_mut() {
-                collect_resets(v, &p.child(k), out);
+                if collect_resets(v, &p.child(k), out) {
+                    removed.push(k.clone());
+                }
+            }
+            for k in removed {
+                m.shift_remove(&k);
             }
         }
         Value::Seq(s) => {
+            let mut keep = Vec::with_capacity(s.len());
             for (i, v) in s.iter_mut().enumerate() {
-                collect_resets(v, &p.index(i), out);
+                keep.push(!collect_resets(v, &p.index(i), out));
             }
+            let mut it = keep.into_iter();
+            s.retain(|_| it.next().unwrap_or(true));
         }
         _ => {}
     }
+    false
 }
 
 fn apply_resets(node: Node, p: &Path, resets: &[Path]) -> Node {

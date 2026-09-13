@@ -20,6 +20,7 @@ indexmap = { version = "2", features = ["serde"] }
 saphyr = "0.0.12"
 saphyr-parser = "0.0.12"
 thiserror = "2"
+jsonschema = { version = "0.56", default-features = false }
 
 # Profil dédié au shim : binaire statique musl, minimal, sans unwinding.
 # `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`

@@ -38,10 +38,11 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
     match load_inner(opts) {
         Ok((project, warnings)) => {
             diags.items.extend(warnings);
+            diags.files = project.files.clone();
             Some(project)
         }
         Err((d, files)) => {
-            let _ = files;
+            diags.files = files;
             diags.push(d);
             None
         }

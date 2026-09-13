@@ -62,9 +62,8 @@ fn config(args: &[String]) -> ExitCode {
 
     let mut diags = diagnostic::Diagnostics::default();
     let project = compose::project::load(&opts, &mut diags);
-    let files = project.as_ref().map(|p| p.files.clone()).unwrap_or_default();
-    for d in &diags.items {
-        eprintln!("{}", files.render(d));
+    for line in diags.render_all() {
+        eprintln!("{line}");
     }
     let Some(project) = project else {
         return ExitCode::from(1);

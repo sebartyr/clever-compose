@@ -56,8 +56,8 @@ fn ours(dir: &Path) -> J {
     let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
     let mut diags = Diagnostics::default();
     let project = load(&opts, &mut diags);
-    for d in &diags.items {
-        eprintln!("{}", project.as_ref().map(|p| p.files.render(d)).unwrap_or_else(|| d.to_string()));
+    for line in diags.render_all() {
+        eprintln!("{line}");
     }
     let project = project.expect("chargement en échec");
     assert!(!diags.has_errors());

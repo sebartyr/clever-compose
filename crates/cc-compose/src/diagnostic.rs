@@ -75,6 +75,8 @@ impl Files {
 #[derive(Debug, Default)]
 pub struct Diagnostics {
     pub items: Vec<Diagnostic>,
+    /// Table des fichiers lus, pour rendre les positions.
+    pub files: Files,
 }
 
 impl Diagnostics {
@@ -88,6 +90,10 @@ impl Diagnostics {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    pub fn render_all(&self) -> Vec<String> {
+        self.items.iter().map(|d| self.files.render(d)).collect()
     }
 }
 

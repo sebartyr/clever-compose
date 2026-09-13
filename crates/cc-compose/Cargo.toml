@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 cc-compose-model.workspace = true
 indexmap.workspace = true
+jsonschema.workspace = true
 saphyr.workspace = true
 saphyr-parser.workspace = true
 serde.workspace = true

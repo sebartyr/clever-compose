@@ -14,6 +14,7 @@ pub mod node;
 pub mod normalize;
 pub mod paths;
 pub mod project;
+pub mod schema;
 pub mod template;
 pub mod transform;
 pub mod typed;
