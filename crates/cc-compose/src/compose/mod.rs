@@ -5,6 +5,7 @@
 //! schéma JSON, `extends`, `include`, canonicalisation, fusion des overrides.
 //! Tout se fait sur l'arbre brut ; le typage vient en dernier.
 
+pub mod consistency;
 pub mod dotenv;
 pub mod envfile;
 pub mod interpolate;

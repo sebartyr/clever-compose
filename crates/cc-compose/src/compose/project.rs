@@ -89,6 +89,11 @@ fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic,
         m.shift_remove("name");
         m.shift_insert(0, "name".into(), Node::new(span, Value::Str(name.clone())));
     }
+    // Cohérence (compose-go `checkConsistency`), sur le modèle typé.
+    match super::model::Project::from_tree(&tree) {
+        Ok(typed) => super::consistency::check(&typed).map_err(|d| fail(d, &files))?,
+        Err(e) => return Err(fail(Diagnostic::error("model", format!("modèle Compose inattendu : {e}")), &files)),
+    }
     Ok((Project { name, files, tree }, warnings))
 }
 

@@ -92,6 +92,11 @@ pub struct App {
     pub depends_on: Vec<ResourceId>,
     /// `CC_HEALTH_CHECK_PATH`, si `healthcheck` est HTTP.
     pub health_check_path: Option<String>,
+    /// Secrets Compose montés dans ce service. La valeur vient de `source`
+    /// et alimente la variable [`Reference::Secret`] de `env` ; le shim
+    /// écrit le fichier (`shim.secrets`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<SecretBinding>,
     /// Tags plateforme (`compose-project`, `compose-service`, empreinte).
     pub tags: Vec<String>,
 }
@@ -202,6 +207,36 @@ pub enum Reference {
     /// Variable injectée par la liaison d'un addon (`POSTGRESQL_ADDON_HOST`
     /// ...). Expansée au démarrage par le shim, jamais figée (§6.2).
     AddonEnv { addon: ResourceId, var: String },
+    /// Valeur d'un secret Compose (`App.secrets`), lue par le backend depuis
+    /// sa source au moment de poser l'environnement : jamais dans le plan,
+    /// ni en littéral dans un export (§10).
+    Secret { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretBinding {
+    /// Nom du secret de premier niveau.
+    pub name: String,
+    pub source: SecretSource,
+    /// Variable de l'application qui porte la valeur.
+    pub env: String,
+    /// Fichier dans le conteneur.
+    pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gid: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SecretSource {
+    /// Fichier sur le poste, relatif au répertoire du projet.
+    File { path: String },
+    /// Variable de l'environnement du poste au moment du `up`.
+    Environment { var: String },
 }
 
 /// Addon managé substitué à un service stateful (§6).

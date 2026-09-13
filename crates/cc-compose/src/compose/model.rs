@@ -255,7 +255,7 @@ pub struct SecretMount {
     pub target: Option<String>,
     pub uid: Option<String>,
     pub gid: Option<String>,
-    pub mode: Option<J>,
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

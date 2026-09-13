@@ -10,6 +10,7 @@
 
 mod child;
 mod relay;
+mod secrets;
 
 use std::process::ExitCode;
 
@@ -55,7 +56,8 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     // L'enfant démarre avant le relais : le relais n'ouvre 8080 qu'une fois le
     // port réel joignable, pour que le succès du déploiement vu par la
     // plateforme reflète la disponibilité réelle du service.
-    let child = child::spawn(&config)?;
+    let consumed = secrets::materialize(&config.secrets)?;
+    let child = child::spawn(&config, &consumed)?;
 
     tokio::spawn(relay::serve(config.port.clone()));
     if let Some(tcp) = config.tcp.clone() {

@@ -1,5 +1,7 @@
-compose.yaml:46:5: erreur [network-external] networks.default: le réseau externe `default` n'a pas d'équivalent : un network group est créé par réseau du projet
-compose.yaml:46:13: avertissement [network-driver-ignored] networks.default.driver: driver `overlay` ignoré : un réseau devient un network group WireGuard
+compose.yaml:52:5: erreur [network-external] networks.default: le réseau externe `default` n'a pas d'équivalent : un network group est créé par réseau du projet
+compose.yaml:52:13: avertissement [network-driver-ignored] networks.default.driver: driver `overlay` ignoré : un réseau devient un network group WireGuard
+compose.yaml:58:5: erreur [secret-external] secrets.ext: le secret externe `ext` n'a pas d'équivalent : déclarez-le avec `file:` ou `environment:`
+compose.yaml:56:11: erreur [secret-file-missing] secrets.missing.file: le fichier du secret `missing` n'existe pas : ./nope.txt
 compose.yaml:3:5: avertissement [worker] services.bad: `bad` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
 compose.yaml:6:14: erreur [unsupported-key] services.bad.cap_add: `cap_add` n'a pas d'équivalent sur Clever Cloud : aucune capacité supplémentaire n'est accordée
 compose.yaml:12:21: avertissement [key-ignored] services.bad.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
@@ -14,6 +16,7 @@ compose.yaml:20:9: erreur [bind-missing] services.bad.volumes[0]: le chemin `/da
 compose.yaml:21:9: erreur [volume-unsupported] services.bad.volumes[1]: le volume `named` monté sur `/var/lib/data` n'a pas d'équivalent : pas de volume persistant sur le runtime Docker ; utilisez un addon managé, ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données
 compose.yaml:24:7: erreur [x-clever-invalid] services.bad.x-clever: extension x-clever invalide : unknown field `bogus`, expected one of `region`, `flavor`, `min_instances`, `max_instances`, `task`, `http_port`, `protocol`, `domain`, `domains`, `ephemeral`, `plan`, `private`, `tcp_namespace`
 compose.yaml:22:16: avertissement [extension-ignored] services.bad.x-unknown: extension `x-unknown` ignorée
-compose.yaml:40:9: avertissement [redirection-tcp] services.twotcp.ports[1]: `twotcp` : le port TCP 9002 publié devient une redirection TCP (port externe attribué par la plateforme), relayée depuis 4040 par le shim
-compose.yaml:41:9: erreur [redirection-tcp-multiple] services.twotcp.ports[2]: `twotcp` : un seul port TCP peut être relayé depuis 4040 ; 9003 ne sera pas exposé publiquement (joignable dans le network group)
+compose.yaml:36:5: avertissement [worker] services.secretive: `secretive` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:46:9: avertissement [redirection-tcp] services.twotcp.ports[1]: `twotcp` : le port TCP 9002 publié devient une redirection TCP (port externe attribué par la plateforme), relayée depuis 4040 par le shim
+compose.yaml:47:9: erreur [redirection-tcp-multiple] services.twotcp.ports[2]: `twotcp` : un seul port TCP peut être relayé depuis 4040 ; 9003 ne sera pas exposé publiquement (joignable dans le network group)
 compose.yaml:27:5: avertissement [worker] services.worker: `worker` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080

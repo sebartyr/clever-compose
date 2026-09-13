@@ -32,6 +32,12 @@ services:
   migrate:
     image: busybox:1.36
     command: echo migrated
+  secretive:
+    image: busybox:1.36
+    command: sleep infinity
+    secrets:
+      - missing
+      - ext
   twotcp:
     image: busybox:1.36
     command: nc -l
@@ -44,4 +50,9 @@ volumes:
 networks:
   default:
     driver: overlay
+    external: true
+secrets:
+  missing:
+    file: ./nope.txt
+  ext:
     external: true

@@ -1,0 +1,1 @@
+service "app" refers to undefined secret undeclared: invalid compose project

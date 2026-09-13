@@ -160,6 +160,18 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
   déploiements, scaling), network groups, redirections TCP/UDP, domaines.
   À contribuer par PR au fil de l'eau, derrière un trait (§2).
 
+- **Secrets** (13/09/2026) : un secret Compose (`file:` ou
+  `environment:` ; `external` refusé) devient une variable
+  `CC_COMPOSE_SECRET_<NOM>` de l'application, référence `Reference::Secret`
+  dans le plan (jamais la valeur), et le shim l'écrit dans le fichier cible
+  (`/run/secrets/<nom>` par défaut, mode 0444, `uid`/`gid` numériques) puis
+  la retire de l'environnement de l'enfant. Testé dans un conteneur.
+  Évolution du plan : `App.secrets`, `SecretBinding`, `SecretSource`,
+  `Reference::Secret` ; `ShimConfig.secrets`.
+- **Cohérence** portée de `checkConsistency` (références non déclarées,
+  clés exclusives, valeurs contradictoires) ; le harnais différentiel
+  compare aussi les refus (`expected.error` : l'oracle refuse, nous aussi).
+
 *Questions ouvertes restantes :*
 
 - Validation du plan intermédiaire par le propriétaire du projet.
@@ -176,9 +188,8 @@ sources de Compose dans `~/cc-compose/compose`, Axo dans `~/axo`, OVD dans
   port puis ~17 min de tentatives ; en port mapping, `-p 8080:<http>
   -p 4040:<tcp>` sans `/udp`. Le répondeur de santé du shim renvoie 200,
   donc compatible dans les deux cas.
-- Lecteur de registre (`oci-client`) pour la configuration des images.
-- `secrets` (matérialisation par le shim) et bind mounts de répertoires :
-  refusés pour l'instant.
+- Bind mounts de répertoires : refusés (phase 5 pour les données, à
+  discuter pour les répertoires de configuration).
 - Les messages du validateur de schéma sont en anglais (crate `jsonschema`).
 
 ---

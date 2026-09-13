@@ -288,6 +288,46 @@ fn plan_service(
         };
         env.push(EnvVar { key: k.clone(), value: env::rewrite(k, v, name, s, project, memberships, &ep, diags) });
     }
+    // Secrets : une variable par secret, le fichier écrit par le shim.
+    let mut secrets: Vec<SecretBinding> = Vec::new();
+    let mut shim_secrets: Vec<cc_compose_model::shim::SecretFile> = Vec::new();
+    for (i, sm) in s.secrets.iter().enumerate() {
+        let sp = p.child("secrets").index(i);
+        let Some(def) = project.secrets.get(&sm.source) else {
+            diags.push(Diagnostic::error("secret-unknown", format!("le secret `{}` n'est pas déclaré au premier niveau", sm.source)).with_path(&sp));
+            continue;
+        };
+        let source = if def.external == Some(true) {
+            diags.push(Diagnostic::error("secret-external", format!("le secret externe `{}` n'a pas d'équivalent : déclarez-le avec `file:` ou `environment:`", sm.source)).with_path(&Path::root().child("secrets").child(&sm.source)));
+            continue;
+        } else if let Some(f) = &def.file {
+            if !FsPath::new(f).is_file() {
+                diags.push(Diagnostic::error("secret-file-missing", format!("le fichier du secret `{}` n'existe pas : {}", sm.source, ctx.display(f))).with_path(&Path::root().child("secrets").child(&sm.source).child("file")));
+                continue;
+            }
+            SecretSource::File { path: ctx.display(f) }
+        } else if let Some(var) = &def.environment {
+            SecretSource::Environment { var: var.clone() }
+        } else {
+            diags.push(Diagnostic::error("secret-invalid", format!("le secret `{}` n'a ni `file` ni `environment`", sm.source)).with_path(&Path::root().child("secrets").child(&sm.source)));
+            continue;
+        };
+        let env_name = format!("CC_COMPOSE_SECRET_{}", sm.source.to_ascii_uppercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect::<String>());
+        let target = match &sm.target {
+            Some(t) if t.starts_with('/') => t.clone(),
+            Some(t) => format!("/run/secrets/{t}"),
+            None => format!("/run/secrets/{}", sm.source),
+        };
+        let mode = sm.mode.as_ref().and_then(|m| u32::from_str_radix(m, 8).ok());
+        let uid = sm.uid.as_ref().and_then(|u| u.parse().ok());
+        let gid = sm.gid.as_ref().and_then(|g| g.parse().ok());
+        if (sm.uid.is_some() && uid.is_none()) || (sm.gid.is_some() && gid.is_none()) {
+            diags.push(Diagnostic::warning("secret-owner-ignored", format!("`uid`/`gid` du secret `{}` doivent être numériques ; ignorés", sm.source)).with_path(&sp));
+        }
+        env.push(EnvVar { key: env_name.clone(), value: Template(vec![Segment::Ref(Reference::Secret { name: sm.source.clone() })]) });
+        shim_secrets.push(cc_compose_model::shim::SecretFile { env: env_name.clone(), target: target.clone(), mode, uid, gid });
+        secrets.push(SecretBinding { name: sm.source.clone(), source, env: env_name, target, mode, uid, gid });
+    }
     let dns_map = env::dns_map(name, s, memberships);
     if !dns_map.0.is_empty() {
         env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map });
@@ -323,10 +363,11 @@ fn plan_service(
         scaling,
         source,
         image: intrinsics,
-        shim: ShimConfig { argv, workdir, user, port, tcp, udp },
+        shim: ShimConfig { argv, workdir, user, port, tcp, udp, secrets: shim_secrets },
         env,
         depends_on,
         health_check_path: None,
+        secrets,
         tags: Vec::new(),
     }, redirections))
 }

@@ -18,7 +18,9 @@ fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus")
 }
 
-fn regen_oracle(dir: &Path) -> String {
+/// Sortie de l'oracle ; `Err` avec son message quand il refuse le projet
+/// (figé dans `expected.error`).
+fn regen_oracle(dir: &Path) -> Result<String, String> {
     let out = Command::new("docker")
         .args(["compose", "--project-directory"])
         .arg(dir)
@@ -26,8 +28,11 @@ fn regen_oracle(dir: &Path) -> String {
         .env_remove("COMPOSE_PROJECT_NAME")
         .output()
         .expect("docker compose introuvable");
-    assert!(out.status.success(), "oracle en échec sur {} :\n{}", dir.display(), String::from_utf8_lossy(&out.stderr));
-    String::from_utf8(out.stdout).unwrap()
+    if out.status.success() {
+        Ok(String::from_utf8(out.stdout).unwrap())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).to_string())
+    }
 }
 
 /// Canonicalisation avant comparaison. Chaque règle ici est une divergence
@@ -52,16 +57,15 @@ fn unescape_dollars(v: J) -> J {
     }
 }
 
-fn ours(dir: &Path) -> J {
+fn ours(dir: &Path) -> Result<J, String> {
     let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
     let mut diags = Diagnostics::default();
     let project = load(&opts, &mut diags);
-    for line in diags.render_all() {
-        eprintln!("{line}");
+    let rendered = diags.render_all().join("\n");
+    match project {
+        Some(p) if !diags.has_errors() => Ok(canonical(p.tree.to_json())),
+        _ => Err(rendered),
     }
-    let project = project.expect("chargement en échec");
-    assert!(!diags.has_errors());
-    canonical(project.tree.to_json())
 }
 
 #[test]
@@ -77,12 +81,30 @@ fn corpus_matches_docker_compose_config() {
     let mut failures = Vec::new();
     for dir in entries {
         let expected_path = dir.join("expected.yaml");
-        if regen || !expected_path.exists() {
-            std::fs::write(&expected_path, regen_oracle(&dir)).unwrap();
+        let error_path = dir.join("expected.error");
+        if regen || (!expected_path.exists() && !error_path.exists()) {
+            match regen_oracle(&dir) {
+                Ok(out) => {
+                    std::fs::write(&expected_path, out).unwrap();
+                    let _ = std::fs::remove_file(&error_path);
+                }
+                Err(msg) => {
+                    std::fs::write(&error_path, msg).unwrap();
+                    let _ = std::fs::remove_file(&expected_path);
+                }
+            }
+        }
+        let actual = ours(&dir);
+        if error_path.exists() {
+            // L'oracle refuse : nous devons refuser aussi.
+            if let Ok(_) = actual {
+                eprintln!("=== {} : l'oracle refuse ({}), pas nous", dir.display(), std::fs::read_to_string(&error_path).unwrap().trim());
+                failures.push(dir.display().to_string());
+            }
+            continue;
         }
         let expected = yaml::load(&std::fs::read_to_string(&expected_path).unwrap(), 0).unwrap();
         let expected = canonical(unescape_dollars(expected.to_json()));
-        let actual = std::panic::catch_unwind(|| ours(&dir));
         match actual {
             Ok(actual) if actual == expected => {}
             Ok(actual) => {
@@ -92,7 +114,7 @@ fn corpus_matches_docker_compose_config() {
                     failures.push(dir.display().to_string());
                 }
             }
-            Err(_) => failures.push(format!("{} (chargement en échec)", dir.display())),
+            Err(msg) => failures.push(format!("{} (chargement en échec : {msg})", dir.display())),
         }
     }
     assert!(failures.is_empty(), "cas divergents : {failures:?}");

@@ -18,9 +18,12 @@ pub struct Child {
     exited: oneshot::Receiver<i32>,
 }
 
-pub fn spawn(config: &ShimConfig) -> Result<Child, String> {
+pub fn spawn(config: &ShimConfig, env_remove: &[String]) -> Result<Child, String> {
     let mut cmd = Command::new(&config.argv[0]);
     cmd.args(&config.argv[1..]);
+    for var in env_remove {
+        cmd.env_remove(var);
+    }
     if let Some(dir) = &config.workdir {
         cmd.current_dir(dir);
     }

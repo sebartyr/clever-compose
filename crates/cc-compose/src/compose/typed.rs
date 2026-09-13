@@ -69,6 +69,19 @@ fn at(node: Node, p: &Path) -> Result<Node, Diagnostic> {
     if p.matches("services.*.extra_hosts") {
         return hosts_list(node, p);
     }
+    if p.matches("services.*.secrets.[].mode") || p.matches("services.*.configs.[].mode") || p.matches("services.*.build.secrets.[].mode") {
+        // `FileMode` : entier (YAML `0400` est déjà octal) ou chaîne octale,
+        // rendu `0%o`.
+        let value = match &node.value {
+            Value::Int(i) => Some(*i),
+            Value::Str(st) => i64::from_str_radix(st, 8).ok(),
+            _ => None,
+        };
+        return match value {
+            Some(v) => Ok(str_node(node.span, format!("0{v:o}"))),
+            None => Err(Diagnostic::error("mode-invalid", format!("{p} : mode de fichier invalide")).at(p, node.span)),
+        };
+    }
     if p.matches("services.*.healthcheck.test") {
         return Ok(match node.value {
             Value::Str(s) => Node::new(node.span, Value::Seq(vec![str_node(node.span, "CMD-SHELL"), str_node(node.span, s)])),

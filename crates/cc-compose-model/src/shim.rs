@@ -57,6 +57,29 @@ pub struct ShimConfig {
     /// TCP) vers le port réel, pour une redirection UDP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub udp: Option<UdpRelay>,
+
+    /// Secrets Compose : chacun est lu dans une variable d'environnement au
+    /// démarrage, écrit dans son fichier cible, puis retiré de
+    /// l'environnement de l'enfant. Le secret ne traverse jamais une couche
+    /// d'image (CLAUDE.md §6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<SecretFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecretFile {
+    /// Variable qui porte la valeur (`CC_COMPOSE_SECRET_<NOM>`).
+    pub env: String,
+    /// Chemin du fichier dans le conteneur (`/run/secrets/<nom>` par défaut).
+    pub target: String,
+    /// Mode octal (0444 par défaut).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gid: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
