@@ -99,4 +99,4 @@ secrets:
     external: true
   missing:
     name: refusals_missing
-    file: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/refusals/nope.txt
+    file: <project>/nope.txt

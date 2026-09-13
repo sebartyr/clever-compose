@@ -16,7 +16,7 @@ services:
     shm_size: "268435456"
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/mastodon/postgres14
+        source: <project>/postgres14
         target: /var/lib/postgresql/data
         bind: {}
   redis:
@@ -31,7 +31,7 @@ services:
     restart: always
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/mastodon/redis
+        source: <project>/redis
         target: /data
         bind: {}
   sidekiq:
@@ -86,7 +86,7 @@ services:
     restart: always
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/mastodon/public/system
+        source: <project>/public/system
         target: /mastodon/public/system
         bind: {}
   streaming:
@@ -206,7 +206,7 @@ services:
     restart: always
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/mastodon/public/system
+        source: <project>/public/system
         target: /mastodon/public/system
         bind: {}
 networks:

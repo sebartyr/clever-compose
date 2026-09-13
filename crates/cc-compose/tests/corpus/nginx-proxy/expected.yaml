@@ -24,7 +24,7 @@ services:
         protocol: tcp
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/nginx-proxy/default.conf
+        source: <project>/default.conf
         target: /etc/nginx/conf.d/default.conf
         read_only: true
         bind: {}

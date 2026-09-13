@@ -24,7 +24,7 @@ services:
       default: null
   web:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/override-rules/web
+      context: <project>/web
       dockerfile: Dockerfile
       args:
         X: "1"
@@ -90,7 +90,7 @@ services:
         hard: 20
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/override-rules/html2
+        source: <project>/html2
         target: /usr/share/nginx/html
         bind: {}
       - type: volume

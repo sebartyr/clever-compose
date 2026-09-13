@@ -9,7 +9,7 @@ services:
       default: null
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/include/sub/subdata
+        source: <project>/sub/subdata
         target: /subdata
         bind: {}
   main:
@@ -22,7 +22,7 @@ services:
       default: null
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/include/local
+        source: <project>/local
         target: /local
         bind: {}
 networks:

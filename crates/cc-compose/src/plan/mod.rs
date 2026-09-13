@@ -190,7 +190,18 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
         // Falaises sémantiques (§6.4).
         if let Some(cmd) = &s.command {
-            if !cmd.is_empty() {
+            // Redis déclare son mot de passe par `--requirepass` : ce n'est
+            // pas un réglage. Le reste de la commande en est un.
+            let mut rest: Vec<&str> = cmd.iter().map(String::as_str).collect();
+            if rec.provider == "redis-addon" {
+                if rest.first().is_some_and(|a| a.ends_with("redis-server")) {
+                    rest.remove(0);
+                }
+                if let Some(i) = rest.iter().position(|a| *a == "--requirepass") {
+                    rest.drain(i..(i + 2).min(rest.len()));
+                }
+            }
+            if !rest.is_empty() {
                 diags.push(Diagnostic::error("addon-tuning-args", format!("`{name}` : `command: {}` n'a pas d'équivalent sur un addon managé (pas d'arguments de réglage) ; retirez-la ou gardez un conteneur", cmd.join(" "))).with_path(&p.child("command")));
             }
         }

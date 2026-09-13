@@ -2,7 +2,7 @@ name: sentry-self-hosted
 services:
   attachments-consumer:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -88,22 +88,22 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
   clickhouse:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse
+      context: <project>/clickhouse
       dockerfile: Dockerfile
       args:
         BASE_IMAGE: altinity/clickhouse-server:25.8.28.10001.altinitystable
@@ -136,16 +136,16 @@ services:
         target: /var/log/clickhouse-server
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse/config.xml
+        source: <project>/clickhouse/config.xml
         target: /etc/clickhouse-server/config.d/sentry.xml
         read_only: true
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/clickhouse/default-password.xml
+        source: <project>/clickhouse/default-password.xml
         target: /etc/clickhouse-server/users.d/default-password.xml
         read_only: true
   events-consumer:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -231,16 +231,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -248,7 +248,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -334,16 +334,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -351,7 +351,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -437,16 +437,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -454,7 +454,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -540,16 +540,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -557,7 +557,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -643,16 +643,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -770,7 +770,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -856,16 +856,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -873,7 +873,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -959,16 +959,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -976,7 +976,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -1062,16 +1062,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1105,7 +1105,7 @@ services:
     restart: unless-stopped
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/nginx.conf
+        source: <project>/nginx.conf
         target: /etc/nginx/nginx.conf
         read_only: true
       - type: volume
@@ -1143,7 +1143,7 @@ services:
     restart: unless-stopped
   post-process-forwarder-errors:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -1231,16 +1231,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1248,7 +1248,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -1337,16 +1337,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1354,7 +1354,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -1443,16 +1443,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1483,7 +1483,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -1569,16 +1569,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1608,7 +1608,7 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/redis.conf
+        source: <project>/redis.conf
         target: /usr/local/etc/redis/redis.conf
         read_only: true
   relay:
@@ -1631,11 +1631,11 @@ services:
     restart: unless-stopped
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/relay
+        source: <project>/relay
         target: /work/.relay
         read_only: true
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
   seaweedfs:
@@ -1679,7 +1679,7 @@ services:
         volume: {}
   sentry-cleanup:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/cron
+      context: <project>/cron
       dockerfile: Dockerfile
       args:
         BASE_IMAGE: sentry-self-hosted-local
@@ -1739,16 +1739,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -1806,7 +1806,7 @@ services:
     restart: unless-stopped
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/snuba/api_healthcheck.py
+        source: <project>/snuba/api_healthcheck.py
         target: /usr/src/snuba/api_healthcheck.py
         read_only: true
         bind: {}
@@ -2929,7 +2929,7 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/symbolicator
+        source: <project>/symbolicator
         target: /etc/symbolicator
         read_only: true
   symbolicator-cleanup:
@@ -2951,7 +2951,7 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/symbolicator
+        source: <project>/symbolicator
         target: /etc/symbolicator
         read_only: true
   taskbroker:
@@ -2978,12 +2978,12 @@ services:
         target: /opt/sqlite
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/taskbroker
+        source: <project>/taskbroker
         target: /etc/taskbroker
         read_only: true
   taskscheduler:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -3044,22 +3044,22 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
   taskworker:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -3140,16 +3140,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -3157,7 +3157,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -3243,16 +3243,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -3283,7 +3283,7 @@ services:
     profiles:
       - feature-complete
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -3369,16 +3369,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}
@@ -3419,7 +3419,7 @@ services:
         volume: {}
   web:
     build:
-      context: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+      context: <project>/sentry
       dockerfile: Dockerfile
       args:
         SENTRY_IMAGE: ghcr.io/getsentry/sentry:nightly
@@ -3495,16 +3495,16 @@ services:
         target: /data
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/sentry
+        source: <project>/sentry
         target: /etc/sentry
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/geoip
+        source: <project>/geoip
         target: /geoip
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/sentry/certificates
+        source: <project>/certificates
         target: /usr/local/share/ca-certificates
         read_only: true
         bind: {}

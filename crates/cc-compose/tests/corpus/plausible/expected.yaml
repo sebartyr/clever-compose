@@ -100,17 +100,17 @@ services:
         target: /var/log/clickhouse-server
         volume: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/logs.xml
+        source: <project>/clickhouse/logs.xml
         target: /etc/clickhouse-server/config.d/logs.xml
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/ipv4-only.xml
+        source: <project>/clickhouse/ipv4-only.xml
         target: /etc/clickhouse-server/config.d/ipv4-only.xml
         read_only: true
         bind: {}
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/plausible/clickhouse/low-resources.xml
+        source: <project>/clickhouse/low-resources.xml
         target: /etc/clickhouse-server/config.d/low-resources.xml
         read_only: true
         bind: {}

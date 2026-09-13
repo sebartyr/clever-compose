@@ -15,7 +15,7 @@ services:
     shm_size: "134217728"
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/immich/postgres
+        source: <project>/postgres
         target: /var/lib/postgresql/data
         bind: {}
   immich-machine-learning:
@@ -65,7 +65,7 @@ services:
     restart: always
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/immich/library
+        source: <project>/library
         target: /data
         bind: {}
       - type: bind

@@ -46,6 +46,18 @@ fn canonical(v: J) -> J {
     }
 }
 
+/// Les chemins absolus du poste (sources de bind mounts, contextes) sont
+/// ramenés au projet, des deux côtés, pour que les `expected.yaml` figés
+/// soient comparables partout (CI).
+fn relativize(v: J, prefix: &str) -> J {
+    match v {
+        J::String(s) => J::String(s.replace(prefix, "<project>")),
+        J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, relativize(v, prefix))).collect()),
+        J::Array(a) => J::Array(a.into_iter().map(|x| relativize(x, prefix)).collect()),
+        other => other,
+    }
+}
+
 /// Côté oracle seulement : `docker compose config` double les `$` de sa
 /// sortie (`cmd/compose/config.go`) pour qu'elle reste réinterpolable.
 fn unescape_dollars(v: J) -> J {
@@ -85,7 +97,9 @@ fn corpus_matches_docker_compose_config() {
         if regen || (!expected_path.exists() && !error_path.exists()) {
             match regen_oracle(&dir) {
                 Ok(out) => {
-                    std::fs::write(&expected_path, out).unwrap();
+                    // Le fichier figé ne porte pas le chemin du poste.
+                    let prefix = std::fs::canonicalize(&dir).unwrap().to_string_lossy().to_string();
+                    std::fs::write(&expected_path, out.replace(&prefix, "<project>")).unwrap();
                     let _ = std::fs::remove_file(&error_path);
                 }
                 Err(msg) => {
@@ -104,7 +118,9 @@ fn corpus_matches_docker_compose_config() {
             continue;
         }
         let expected = yaml::load(&std::fs::read_to_string(&expected_path).unwrap(), 0).unwrap();
-        let expected = canonical(unescape_dollars(expected.to_json()));
+        let prefix = std::fs::canonicalize(&dir).unwrap().to_string_lossy().to_string();
+        let expected = relativize(canonical(unescape_dollars(expected.to_json())), &prefix);
+        let actual = actual.map(|a| relativize(a, &prefix));
         match actual {
             Ok(actual) if actual == expected => {}
             Ok(actual) => {

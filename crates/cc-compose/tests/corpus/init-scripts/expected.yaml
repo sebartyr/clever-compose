@@ -25,7 +25,7 @@ services:
       default: null
     volumes:
       - type: bind
-        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/init-scripts/initdb
+        source: <project>/initdb
         target: /docker-entrypoint-initdb.d
         bind: {}
       - type: volume
