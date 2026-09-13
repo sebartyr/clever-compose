@@ -11,6 +11,7 @@ pub mod env;
 pub mod flavors;
 pub mod images;
 pub mod policy;
+pub mod registry;
 pub mod xclever;
 
 use std::collections::BTreeSet;
@@ -34,6 +35,17 @@ pub struct Context<'a> {
     pub spec_json: &'a serde_json::Value,
     /// Accepte les volumes nommés comme stockage éphémère.
     pub allow_ephemeral: bool,
+}
+
+impl Context<'_> {
+    /// Chemin affiché relativement au projet, pour des diagnostics portables.
+    pub fn display(&self, path: &str) -> String {
+        let prefix = self.project_dir.to_string_lossy().trim_end_matches('/').to_string();
+        match path.strip_prefix(&prefix) {
+            Some(rest) => format!(".{rest}"),
+            None => path.to_string(),
+        }
+    }
 }
 
 /// Empreinte de la spécification traduite, les chemins absolus du poste
@@ -178,11 +190,11 @@ fn plan_service(
             let intr = match images::from_dockerfile(FsPath::new(&context), &dockerfile, ctx.images) {
                 Ok(i) => i,
                 Err(e) => {
-                    diags.push(Diagnostic::error("image-unresolved", format!("{name} : {e}")).with_path(&p.child("build")));
+                    diags.push(Diagnostic::error("image-unresolved", format!("{name} : {}", ctx.display(&e))).with_path(&p.child("build")));
                     return None;
                 }
             };
-            (Source::Context { context, dockerfile, files: Vec::new() }, intr)
+            (Source::Context { context: ctx.display(&context), dockerfile, files: Vec::new() }, intr)
         }
         (None, Some(image)) => {
             let intr = match ctx.images.resolve(image) {
@@ -209,14 +221,15 @@ fn plan_service(
         match v.kind.as_str() {
             "bind" => {
                 let src = v.source.clone().unwrap_or_default();
+                let shown = ctx.display(&src);
                 let meta = std::fs::metadata(&src);
                 match meta {
-                    Ok(m) if m.is_file() => files.push(CopiedFile { source: src, target: v.target.clone(), read_only: v.read_only }),
+                    Ok(m) if m.is_file() => files.push(CopiedFile { source: shown.clone(), target: v.target.clone(), read_only: v.read_only }),
                     Ok(_) => {
-                        diags.push(Diagnostic::error("bind-directory", format!("le montage de répertoire `{src}` vers `{}` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image", v.target)).with_path(&vp));
+                        diags.push(Diagnostic::error("bind-directory", format!("le montage de répertoire `{shown}` vers `{}` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image", v.target)).with_path(&vp));
                     }
                     Err(_) => {
-                        diags.push(Diagnostic::error("bind-missing", format!("le chemin `{src}` monté vers `{}` n'existe pas sur ce poste", v.target)).with_path(&vp));
+                        diags.push(Diagnostic::error("bind-missing", format!("le chemin `{shown}` monté vers `{}` n'existe pas sur ce poste", v.target)).with_path(&vp));
                     }
                 }
             }

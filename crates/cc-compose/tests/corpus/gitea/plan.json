@@ -1,0 +1,240 @@
+{
+  "project": "gitea",
+  "spec_hash": "68a37ba677359e09018f300954276e41",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "gitea-default",
+      "tags": [
+        "compose-project=gitea",
+        "compose-network=default",
+        "compose-spec=68a37ba677359e09018f300954276e41"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/db",
+      "service": "db",
+      "name": "gitea-db",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "postgres:alpine",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "postgres"
+        ],
+        "user": null,
+        "workdir": "/",
+        "exposed_ports": [
+          5432
+        ]
+      },
+      "shim": {
+        "argv": [
+          "docker-entrypoint.sh",
+          "postgres"
+        ],
+        "workdir": "/",
+        "port": {
+          "mode": "health",
+          "ready_port": 5432
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "gitea="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/gitea@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_DB",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_PASSWORD",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_USER",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=gitea",
+        "compose-service=db",
+        "compose-spec=68a37ba677359e09018f300954276e41"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/gitea",
+      "service": "gitea",
+      "name": "gitea-gitea",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "gitea/gitea:latest",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/usr/bin/entrypoint"
+        ],
+        "cmd": [
+          "/usr/bin/s6-svscan",
+          "/etc/s6"
+        ],
+        "user": null,
+        "workdir": "/",
+        "exposed_ports": [
+          22,
+          3000
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/usr/bin/entrypoint",
+          "/usr/bin/s6-svscan",
+          "/etc/s6"
+        ],
+        "workdir": "/",
+        "port": {
+          "mode": "forward",
+          "target_port": 3000
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "DB_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            },
+            {
+              "literal": ":5432"
+            }
+          ]
+        },
+        {
+          "key": "DB_NAME",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        },
+        {
+          "key": "DB_PASSWD",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        },
+        {
+          "key": "DB_TYPE",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "DB_USER",
+          "value": [
+            {
+              "literal": "gitea"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=gitea",
+        "compose-service=gitea",
+        "compose-spec=68a37ba677359e09018f300954276e41"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "app/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/gitea@default",
+      "member": "app/gitea",
+      "group": "ng/default",
+      "aliases": [
+        "gitea"
+      ]
+    }
+  ]
+}

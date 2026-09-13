@@ -1,0 +1,203 @@
+{
+  "confluentinc/cp-kafka:7.6.13": {
+    "entrypoint": [],
+    "cmd": [
+      "/etc/confluent/docker/run"
+    ],
+    "user": "appuser",
+    "workdir": "/home/appuser",
+    "exposed_ports": [
+      9092
+    ]
+  },
+  "ghcr.io/getsentry/launchpad:nightly": {
+    "entrypoint": [
+      "launchpad"
+    ],
+    "cmd": [
+      "worker"
+    ],
+    "user": "app",
+    "workdir": "/app",
+    "exposed_ports": []
+  },
+  "memcached:1.6.45-alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "memcached"
+    ],
+    "user": "memcache",
+    "workdir": "/",
+    "exposed_ports": [
+      11211
+    ]
+  },
+  "nginx:1.31.5-alpine": {
+    "entrypoint": [
+      "/docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "nginx",
+      "-g",
+      "daemon off;"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      80
+    ]
+  },
+  "edoburu/pgbouncer:v1.25.2-p0": {
+    "entrypoint": [
+      "/entrypoint.sh"
+    ],
+    "cmd": [
+      "/usr/bin/pgbouncer",
+      "/etc/pgbouncer/pgbouncer.ini"
+    ],
+    "user": "postgres",
+    "workdir": "/",
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "postgres:14.24-bookworm": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "user": null,
+    "workdir": null,
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "valkey/valkey:8.1.10-alpine": {
+    "entrypoint": [
+      "tini",
+      "--",
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "valkey-server"
+    ],
+    "user": null,
+    "workdir": "/data",
+    "exposed_ports": [
+      6379
+    ]
+  },
+  "ghcr.io/getsentry/relay:nightly": {
+    "entrypoint": [
+      "/bin/relay"
+    ],
+    "cmd": [
+      "run"
+    ],
+    "user": "65532",
+    "workdir": "/work",
+    "exposed_ports": [
+      3000
+    ]
+  },
+  "chrislusf/seaweedfs:4.40_large_disk@sha256:d07aa1dae03c687e0737b86130ded1b18474211a09e85d737fbe5508b8805139": {
+    "entrypoint": [
+      "/entrypoint.sh"
+    ],
+    "cmd": [
+      "mini",
+      "-dir=/data"
+    ],
+    "user": null,
+    "workdir": "/data",
+    "exposed_ports": [
+      7333,
+      8080,
+      8333,
+      8888,
+      9333,
+      18080,
+      18888,
+      19333
+    ]
+  },
+  "registry.gitlab.com/egos-tech/smtp": {
+    "entrypoint": [
+      "/bin/entrypoint.sh"
+    ],
+    "cmd": [
+      "exim",
+      "-bd",
+      "-q15m",
+      "-v"
+    ],
+    "user": null,
+    "workdir": null,
+    "exposed_ports": [
+      25
+    ]
+  },
+  "ghcr.io/getsentry/snuba:nightly": {
+    "entrypoint": [
+      "python3",
+      "/usr/src/snuba/docker_entrypoint.py"
+    ],
+    "cmd": [
+      "api"
+    ],
+    "user": "1000",
+    "workdir": "/usr/src/snuba",
+    "exposed_ports": [
+      1218,
+      1219
+    ]
+  },
+  "ghcr.io/getsentry/symbolicator:nightly": {
+    "entrypoint": [
+      "/bin/symbolicator"
+    ],
+    "cmd": [],
+    "user": "65532",
+    "workdir": "/home/nonroot",
+    "exposed_ports": [
+      3021
+    ]
+  },
+  "ghcr.io/getsentry/taskbroker:nightly": {
+    "entrypoint": [],
+    "cmd": [
+      "/opt/taskbroker"
+    ],
+    "user": null,
+    "workdir": "/opt",
+    "exposed_ports": [
+      50051
+    ]
+  },
+  "ghcr.io/getsentry/uptime-checker:nightly": {
+    "entrypoint": [
+      "/sbin/tini",
+      "--",
+      "/usr/local/bin/uptime-checker"
+    ],
+    "cmd": [],
+    "user": "app",
+    "workdir": "/",
+    "exposed_ports": []
+  },
+  "ghcr.io/getsentry/vroom:nightly": {
+    "entrypoint": [
+      "/bin/vroom"
+    ],
+    "cmd": [],
+    "user": "vroom",
+    "workdir": "/var/vroom",
+    "exposed_ports": [
+      8080
+    ]
+  }
+}

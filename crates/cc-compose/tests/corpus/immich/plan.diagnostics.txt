@@ -1,0 +1,15 @@
+compose.yaml:58:5: avertissement [memory-tuning-ignored] services.database: réglages mémoire fins (`mem_reservation`, `memswap_limit`, `shm_size`, `oom_*`) ignorés : seule la flavor compte
+compose.yaml:58:5: avertissement [port-assumed-tcp] services.database: `database` : le port 5432 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
+compose.yaml:58:21: avertissement [key-ignored] services.database.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
+compose.yaml:73:7: avertissement [healthcheck-ignored] services.database.healthcheck: `database` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
+compose.yaml:69:9: erreur [bind-missing] services.database.volumes[0]: le chemin `./postgres` monté vers `/var/lib/postgresql/data` n'existe pas sur ce poste
+compose.yaml:35:5: avertissement [worker] services.immich-machine-learning: `immich-machine-learning` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:35:21: avertissement [key-ignored] services.immich-machine-learning.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
+compose.yaml:48:7: avertissement [healthcheck-ignored] services.immich-machine-learning.healthcheck: `immich-machine-learning` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
+compose.yaml:43:9: avertissement [volume-ephemeral] services.immich-machine-learning.volumes[0]: le volume `model-cache` monté sur `/cache` sera éphémère : les données sont perdues à chaque redéploiement
+compose.yaml:14:21: avertissement [key-ignored] services.immich-server.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
+compose.yaml:32:7: avertissement [healthcheck-ignored] services.immich-server.healthcheck: `immich-server` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)
+compose.yaml:21:9: erreur [bind-missing] services.immich-server.volumes[0]: le chemin `./library` monté vers `/data` n'existe pas sur ce poste
+compose.yaml:51:5: avertissement [port-assumed-tcp] services.redis: `redis` : le port 6379 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
+compose.yaml:51:21: avertissement [key-ignored] services.redis.container_name: `container_name` est ignoré : le nom du conteneur est celui de l'instance
+compose.yaml:54:7: avertissement [healthcheck-ignored] services.redis.healthcheck: `redis` : le healthcheck n'est pas une requête HTTP, il est ignoré (la plateforme ne connaît que `CC_HEALTH_CHECK_PATH`)

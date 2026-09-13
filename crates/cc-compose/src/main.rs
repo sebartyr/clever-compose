@@ -7,7 +7,8 @@ use std::process::ExitCode;
 
 fn usage() -> ExitCode {
     eprintln!("usage : clever-compose config [--project-directory DIR] [-f FILE]... [-p NAME] [--env-file F] [--profile P] [--format json]");
-    eprintln!("        clever-compose plan   [mêmes options] --images FIXTURE.json [--allow-ephemeral]");
+    eprintln!("        clever-compose plan   [mêmes options] [--images FIXTURE.json] [--allow-ephemeral]");
+    eprintln!("        clever-compose images --project-directory DIR");
     ExitCode::from(2)
 }
 
@@ -16,7 +17,44 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("config") => config(&args[1..], false),
         Some("plan") => config(&args[1..], true),
+        Some("images") => images(&args[1..]),
         _ => usage(),
+    }
+}
+
+/// `clever-compose images --project-directory DIR` : fixture d'images du
+/// projet, lue sur les registres, au format de `--images`.
+fn images(args: &[String]) -> ExitCode {
+    let mut opts = compose::project::Options { project_dir: PathBuf::from("."), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--project-directory" => {
+                i += 1;
+                opts.project_dir = PathBuf::from(args.get(i).cloned().unwrap_or_default());
+            }
+            _ => return usage(),
+        }
+        i += 1;
+    }
+    let registry = match cc_compose::plan::registry::Registry::new() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut diags = diagnostic::Diagnostics::default();
+    let fixture = cc_compose::plan::cli::images_fixture(&opts, &registry, &mut diags);
+    for line in diags.render_all() {
+        eprintln!("{line}");
+    }
+    match fixture {
+        Some(f) if !diags.has_errors() => {
+            println!("{}", serde_json::to_string_pretty(&f).unwrap());
+            ExitCode::SUCCESS
+        }
+        _ => ExitCode::from(1),
     }
 }
 
@@ -71,19 +109,25 @@ fn config(args: &[String], plan: bool) -> ExitCode {
 
     let mut diags = diagnostic::Diagnostics::default();
     if plan {
-        let Some(images) = images else {
-            eprintln!("clever-compose plan : --images FIXTURE.json est requis pour l'instant (lecture du registre à venir)");
-            return ExitCode::from(2);
-        };
-        let fixture = match cc_compose::plan::cli::fixture_from_file(&images) {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("{e}");
-                return ExitCode::from(1);
-            }
+        // `--images FIXTURE.json` remplace le registre (tests hors ligne).
+        let resolver: Box<dyn cc_compose::plan::images::ImageResolver> = match images {
+            Some(path) => match cc_compose::plan::cli::fixture_from_file(&path) {
+                Ok(f) => Box::new(f),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(1);
+                }
+            },
+            None => match cc_compose::plan::registry::Registry::new() {
+                Ok(r) => Box::new(r),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(1);
+                }
+            },
         };
         let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral };
-        let result = cc_compose::plan::cli::run(&popts, &fixture, &mut diags);
+        let result = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
         for line in diags.render_all() {
             eprintln!("{line}");
         }

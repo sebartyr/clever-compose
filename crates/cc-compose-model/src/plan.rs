@@ -126,7 +126,8 @@ pub enum Source {
     /// Contexte de build de l'utilisateur, poussé tel quel avec le shim
     /// ajouté par une étape finale.
     Context {
-        /// Chemin absolu du contexte.
+        /// Chemin du contexte, relatif au répertoire du projet (`./web`),
+        /// pour que le plan soit le même sur tout poste.
         context: String,
         /// Dockerfile relatif au contexte.
         dockerfile: String,
@@ -137,7 +138,7 @@ pub enum Source {
 /// Fichier de l'utilisateur figé dans l'image (bind mount d'un fichier).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CopiedFile {
-    /// Chemin absolu sur le poste.
+    /// Chemin sur le poste, relatif au répertoire du projet.
     pub source: String,
     /// Chemin dans le conteneur.
     pub target: String,

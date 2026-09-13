@@ -1,0 +1,41 @@
+{
+  "ghcr.io/plausible/community-edition:v3.0.1": {
+    "entrypoint": [
+      "/entrypoint.sh"
+    ],
+    "cmd": [
+      "run"
+    ],
+    "user": "999",
+    "workdir": "/app",
+    "exposed_ports": [
+      8000
+    ]
+  },
+  "postgres:16-alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "clickhouse/clickhouse-server:24.12-alpine": {
+    "entrypoint": [
+      "/entrypoint.sh"
+    ],
+    "cmd": [],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      8123,
+      9000,
+      9009
+    ]
+  }
+}

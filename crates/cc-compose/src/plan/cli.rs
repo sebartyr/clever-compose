@@ -53,3 +53,24 @@ pub fn fixture_from_file(path: &FsPath) -> Result<Fixture, String> {
     let content = std::fs::read_to_string(path).map_err(|e| format!("{} : {e}", path.display()))?;
     serde_json::from_str(&content).map_err(|e| format!("{} : {e}", path.display()))
 }
+
+/// Fixture d'images d'un projet : chaque `image:` résolue par `resolver`.
+/// Les services `build:` n'en font pas partie (leur Dockerfile est lu).
+pub fn images_fixture(opts: &Options, resolver: &dyn ImageResolver, diags: &mut Diagnostics) -> Option<Fixture> {
+    let loaded = project::load(opts, diags)?;
+    let typed = Project::from_tree(&loaded.tree).ok()?;
+    let mut out = Fixture::default();
+    for s in typed.services.values() {
+        let Some(image) = &s.image else { continue };
+        if s.build.is_some() || out.0.contains_key(image) {
+            continue;
+        }
+        match resolver.resolve(image) {
+            Ok(i) => {
+                out.0.insert(image.clone(), i);
+            }
+            Err(e) => diags.push(Diagnostic::error("image-unresolved", format!("{image} : {e}"))),
+        }
+    }
+    Some(out)
+}

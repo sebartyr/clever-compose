@@ -1,0 +1,30 @@
+{
+  "postgres:alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "gitea/gitea:latest": {
+    "entrypoint": [
+      "/usr/bin/entrypoint"
+    ],
+    "cmd": [
+      "/usr/bin/s6-svscan",
+      "/etc/s6"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      22,
+      3000
+    ]
+  }
+}

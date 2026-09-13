@@ -1,0 +1,28 @@
+{
+  "postgres:alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "nextcloud:apache": {
+    "entrypoint": [
+      "/entrypoint.sh"
+    ],
+    "cmd": [
+      "apache2-foreground"
+    ],
+    "user": null,
+    "workdir": "/var/www/html",
+    "exposed_ports": [
+      80
+    ]
+  }
+}

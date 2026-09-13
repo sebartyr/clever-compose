@@ -74,10 +74,10 @@ pub fn service(name: &str, s: &Service, p: &Path, diags: &mut Diagnostics) {
         refuse_at(diags, p, "configs", "pas encore supporté (les `secrets` le seront via le shim)");
     }
     if s.ulimits.is_some() {
-        refuse_at(diags, p, "ulimits", "limites de ressources non configurables");
+        ignore_at(diags, p, "ulimits", "le déployeur fixe lui-même `nofile=1024:524288`");
     }
     if s.pids_limit.is_some() {
-        refuse_at(diags, p, "pids_limit", "limites de processus non configurables");
+        ignore_at(diags, p, "pids_limit", "limites de processus non configurables");
     }
     if !s.tmpfs.is_empty() {
         diags.push(Diagnostic::warning("tmpfs-ignored", "`tmpfs` est ignoré : le système de fichiers du conteneur est déjà éphémère").with_path(&p.child("tmpfs")));

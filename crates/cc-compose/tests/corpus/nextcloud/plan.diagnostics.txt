@@ -1,0 +1,3 @@
+compose.yaml:15:5: avertissement [port-assumed-tcp] services.db: `db` : le port 5432 est supposé non HTTP ; le shim répondra au contrôle de santé sur 8080 dès qu'il écoute. `x-clever.protocol: http` s'il l'est
+compose.yaml:22:9: avertissement [volume-ephemeral] services.db.volumes[0]: le volume `db_data` monté sur `/var/lib/postgresql/data` sera éphémère : les données sont perdues à chaque redéploiement
+compose.yaml:13:9: avertissement [volume-ephemeral] services.nc.volumes[0]: le volume `nc_data` monté sur `/var/www/html` sera éphémère : les données sont perdues à chaque redéploiement

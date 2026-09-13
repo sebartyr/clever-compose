@@ -1,0 +1,54 @@
+{
+  "postgres:14-alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "user": null,
+    "workdir": "/",
+    "exposed_ports": [
+      5432
+    ]
+  },
+  "redis:7-alpine": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "redis-server"
+    ],
+    "user": null,
+    "workdir": "/data",
+    "exposed_ports": [
+      6379
+    ]
+  },
+  "ghcr.io/mastodon/mastodon:v4.7.1": {
+    "entrypoint": [
+      "/usr/bin/tini",
+      "--"
+    ],
+    "cmd": [],
+    "user": "mastodon",
+    "workdir": "/opt/mastodon",
+    "exposed_ports": [
+      3000
+    ]
+  },
+  "ghcr.io/mastodon/mastodon-streaming:v4.7.1": {
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "node",
+      "./streaming/index.js"
+    ],
+    "user": "mastodon",
+    "workdir": "/opt/mastodon",
+    "exposed_ports": [
+      4000
+    ]
+  }
+}
