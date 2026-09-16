@@ -97,7 +97,7 @@ pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: Option<Oaut
     if o.ui {
         eprintln!("interface : {url}  (Ctrl-C pour arrêter)");
     } else {
-        eprintln!("API : {url}api/  (Ctrl-C pour arrêter){}", if state.origins.is_empty() { "\n  aucune origine CORS : passez --cors https://<hôte de l'interface> pour une interface déployée à part" } else { "" });
+        eprintln!("API : {url}api/  (Ctrl-C pour arrêter){}", if state.origins.is_empty() { "\n  (sans --cors : interface attendue sur la même origine, par ex. derrière le proxy Vite ; --cors https://<hôte> pour une interface servie ailleurs)" } else { "" });
     }
     if o.open_browser && o.ui {
         let _ = std::process::Command::new("xdg-open").arg(&url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
