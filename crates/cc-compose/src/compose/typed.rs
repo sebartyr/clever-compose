@@ -270,8 +270,8 @@ pub fn shellwords(line: &str) -> Result<Vec<String>, String> {
         buf.clear();
         *got = 0;
     };
-    let mut chars = line.chars().peekable();
-    while let Some(r) = chars.next() {
+    let chars = line.chars();
+    for r in chars {
         if escaped {
             escaped = false;
             let r = match r {
@@ -347,11 +347,7 @@ pub fn shellwords(line: &str) -> Result<Vec<String>, String> {
                     continue;
                 }
             }
-            ';' | '&' | '|' | '<' | '>' => {
-                if !(sq || dq || dollar) {
-                    break;
-                }
-            }
+            ';' | '&' | '|' | '<' | '>' if !(sq || dq || dollar) => break,
             _ => {}
         }
         got = 1;
@@ -510,40 +506,6 @@ fn fmt_frac(v: u128, div: u128) -> String {
     format!("{int}.{}", f.trim_end_matches('0'))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shellwords_basics() {
-        assert_eq!(shellwords("echo yes").unwrap(), vec!["echo", "yes"]);
-        assert_eq!(shellwords("sh -c 'a && b'").unwrap(), vec!["sh", "-c", "a && b"]);
-        assert_eq!(shellwords(r#"x "a b" c\ d"#).unwrap(), vec!["x", "a b", "c d"]);
-        assert_eq!(shellwords("a ''").unwrap(), vec!["a", ""]);
-        assert_eq!(shellwords("--default-authentication-plugin=mysql_native_password").unwrap().len(), 1);
-        assert_eq!(shellwords("a && b").unwrap(), vec!["a"]);
-        assert!(shellwords("a 'b").is_err());
-    }
-
-    #[test]
-    fn bytes_and_durations() {
-        assert_eq!(parse_ram_in_bytes("512m"), Some(536870912));
-        assert_eq!(parse_ram_in_bytes("1g"), Some(1073741824));
-        assert_eq!(parse_ram_in_bytes("1.5k"), Some(1536));
-        assert_eq!(parse_ram_in_bytes("100"), Some(100));
-        assert_eq!(parse_ram_in_bytes("2GiB"), Some(2147483648));
-        assert_eq!(parse_ram_in_bytes("x"), None);
-        let d = |s: &str| go_duration_string(parse_duration(s).unwrap());
-        assert_eq!(d("1m30s"), "1m30s");
-        assert_eq!(d("90s"), "1m30s");
-        assert_eq!(d("1h"), "1h0m0s");
-        assert_eq!(d("500ms"), "500ms");
-        assert_eq!(d("1.5s"), "1.5s");
-        assert_eq!(d("0"), "0s");
-        assert_eq!(d("2d"), "48h0m0s");
-        assert!(parse_duration("abc").is_none());
-    }
-}
 
 /// `omitempty` de la sérialisation Go : dans une structure, un champ à sa
 /// valeur zéro (null, `false`, `0`, `""`, liste vide) disparaît. Les
@@ -671,5 +633,40 @@ fn omit_zero_at(node: Node, p: &Path) -> Node {
         }
         Value::Seq(s) => Node { span: node.span, tag: node.tag, value: Value::Seq(s.into_iter().enumerate().map(|(i, v)| omit_zero_at(v, &p.index(i))).collect()) },
         _ => node,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shellwords_basics() {
+        assert_eq!(shellwords("echo yes").unwrap(), vec!["echo", "yes"]);
+        assert_eq!(shellwords("sh -c 'a && b'").unwrap(), vec!["sh", "-c", "a && b"]);
+        assert_eq!(shellwords(r#"x "a b" c\ d"#).unwrap(), vec!["x", "a b", "c d"]);
+        assert_eq!(shellwords("a ''").unwrap(), vec!["a", ""]);
+        assert_eq!(shellwords("--default-authentication-plugin=mysql_native_password").unwrap().len(), 1);
+        assert_eq!(shellwords("a && b").unwrap(), vec!["a"]);
+        assert!(shellwords("a 'b").is_err());
+    }
+
+    #[test]
+    fn bytes_and_durations() {
+        assert_eq!(parse_ram_in_bytes("512m"), Some(536870912));
+        assert_eq!(parse_ram_in_bytes("1g"), Some(1073741824));
+        assert_eq!(parse_ram_in_bytes("1.5k"), Some(1536));
+        assert_eq!(parse_ram_in_bytes("100"), Some(100));
+        assert_eq!(parse_ram_in_bytes("2GiB"), Some(2147483648));
+        assert_eq!(parse_ram_in_bytes("x"), None);
+        let d = |s: &str| go_duration_string(parse_duration(s).unwrap());
+        assert_eq!(d("1m30s"), "1m30s");
+        assert_eq!(d("90s"), "1m30s");
+        assert_eq!(d("1h"), "1h0m0s");
+        assert_eq!(d("500ms"), "500ms");
+        assert_eq!(d("1.5s"), "1.5s");
+        assert_eq!(d("0"), "0s");
+        assert_eq!(d("2d"), "48h0m0s");
+        assert!(parse_duration("abc").is_none());
     }
 }

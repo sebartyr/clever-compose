@@ -164,13 +164,10 @@ pub struct LogsOptions {
 pub async fn logs<P: Platform>(project: &str, platform: &P, opts: &LogsOptions, log: &mut Log) -> Result<(), String> {
     let inv = discover(project, platform).await?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    let since = match &opts.since {
-        None => None,
-        Some(s) => Some(match parse_duration(s) {
-            Some(d) => rfc3339(now.saturating_sub(d.as_secs())),
-            None => s.clone(),
-        }),
-    };
+    let since = opts.since.as_ref().map(|s| match parse_duration(s) {
+        Some(d) => rfc3339(now.saturating_sub(d.as_secs())),
+        None => s.clone(),
+    });
     let query = LogQuery { since, until: if opts.follow { None } else { Some(rfc3339(now)) }, limit: opts.limit };
     let wanted = |service: &str| opts.services.is_empty() || opts.services.iter().any(|s| s == service);
     let mut targets: Vec<(String, String, bool)> = Vec::new();

@@ -237,6 +237,7 @@ impl<'a> Loader<'a> {
     /// `getExtendsBaseFromFile` + `loadExtendsBase` : les services bruts
     /// (interpolés, chemins résolus, ni canonicalisés ni normalisés) du
     /// fichier de base.
+    #[allow(clippy::too_many_arguments)]
     fn extends_base(&mut self, abs: &FsPath, config: &Config, name: &str, reference: &str, from: &FsPath, span: super::node::Span, p: &Path) -> LoadResult<IndexMap<String, Node>> {
         if !self.extends_cache.contains_key(abs) {
             // Comme `loadYamlFile` avec include, extends, validation et

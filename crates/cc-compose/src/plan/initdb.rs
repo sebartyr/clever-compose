@@ -276,6 +276,7 @@ case "$CODE" in 2*) ;; *) echo "cc-compose init : témoin non écrit (HTTP $CODE
 echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
 "#;
 
+#[allow(clippy::too_many_arguments)]
 /// La tâche d'initialisation d'un addon.
 pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str>, scripts: &[Script], hash: &str, region: &str, tags: Vec<String>, intrinsics: ImageIntrinsics, image: String, script: String) -> App {
     let _ = rec;

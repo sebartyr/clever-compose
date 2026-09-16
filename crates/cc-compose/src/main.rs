@@ -502,7 +502,7 @@ fn config(args: &[String], plan: bool) -> ExitCode {
         }
         i += 1;
     }
-    if opts.project_dir == PathBuf::from(".") {
+    if opts.project_dir == std::path::Path::new(".") {
         if let Some(f) = opts.files.first() {
             opts.project_dir = compose::project::project_dir_of(f);
             let dir = opts.project_dir.clone();

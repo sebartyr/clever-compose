@@ -247,7 +247,12 @@ redirections UDP, tags d'application.
 cargo test                       # différentiel (expected.yaml figés), goldens du plan, exports, terraform validate
 CC_REGEN_ORACLE=1 cargo test     # régénère les expected.yaml avec docker compose (oracle, jamais dépendance runtime)
 CC_REGEN_GOLDEN=1 cargo test     # régénère plan.json, plan.diagnostics.txt, export/
+cargo clippy --workspace --all-targets -- -D warnings   # doit passer sans rien (règle depuis le 16/09/2026)
 ```
+
+Les `#[allow]` sont rares et justifiés en commentaire (`large_enum_variant`
+sur `Resource`, `too_many_arguments` sur les fonctions de plan qui portent
+tout le contexte, `result_large_err` sur le chargeur).
 
 Corpus dans `crates/cc-compose/tests/corpus/<cas>/` : `compose.yaml`,
 `expected.yaml` ou `expected.error`, `images.json` (fixture des configs

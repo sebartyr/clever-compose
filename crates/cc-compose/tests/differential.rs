@@ -111,7 +111,7 @@ fn corpus_matches_docker_compose_config() {
         let actual = ours(&dir);
         if error_path.exists() {
             // L'oracle refuse : nous devons refuser aussi.
-            if let Ok(_) = actual {
+            if actual.is_ok() {
                 eprintln!("=== {} : l'oracle refuse ({}), pas nous", dir.display(), std::fs::read_to_string(&error_path).unwrap().trim());
                 failures.push(dir.display().to_string());
             }

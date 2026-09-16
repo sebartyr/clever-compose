@@ -49,6 +49,7 @@ pub fn load(opts: &Options, diags: &mut Diagnostics) -> Option<Project> {
     }
 }
 
+#[allow(clippy::result_large_err)] // l'échec porte la table des fichiers, pour rendre la position
 fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic, Files)> {
     let mut files = Files::default();
     let fail = |d: Diagnostic, files: &Files| (d, files.clone());
@@ -175,8 +176,7 @@ fn apply_profiles(tree: &mut Node, active: &[String], warnings: &mut Vec<Diagnos
     let enabled = |s: &Node| -> bool {
         match s.as_map().and_then(|m| m.get("profiles")).and_then(Node::as_seq) {
             None => true,
-            Some(profiles) if profiles.is_empty() => true,
-            Some(profiles) => active.iter().any(|a| a == "*") || profiles.iter().filter_map(Node::as_str).any(|p| active.iter().any(|a| a == p)),
+            Some(profiles) => profiles.is_empty() || active.iter().any(|a| a == "*") || profiles.iter().filter_map(Node::as_str).any(|p| active.iter().any(|a| a == p)),
         }
     };
     let disabled: Vec<String> = services.iter().filter(|(_, s)| !enabled(s)).map(|(k, _)| k.clone()).collect();

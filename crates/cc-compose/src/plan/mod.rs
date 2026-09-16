@@ -60,7 +60,7 @@ pub fn spec_hash(spec: &serde_json::Value, project_dir: &FsPath) -> String {
     use sha2::{Digest, Sha256};
     fn relativize(v: &serde_json::Value, prefix: &str) -> serde_json::Value {
         match v {
-            serde_json::Value::String(s) => serde_json::Value::String(if s.starts_with(prefix) { format!(".{}", &s[prefix.len()..]) } else { s.clone() }),
+            serde_json::Value::String(s) => serde_json::Value::String(match s.strip_prefix(prefix) { Some(rest) => format!(".{rest}"), None => s.clone() }),
             serde_json::Value::Array(a) => serde_json::Value::Array(a.iter().map(|x| relativize(x, prefix)).collect()),
             serde_json::Value::Object(m) => serde_json::Value::Object(m.iter().map(|(k, x)| (k.clone(), relativize(x, prefix))).collect()),
             other => other.clone(),
@@ -266,7 +266,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         // `8.10.1`, `4.0` pour `4.0.3`) désigne la seule qui la prolonge :
         // même version, pas un rabattement. Plusieurs candidates = ambigu.
         let version = match version {
-            Some(v) if !provider.versions.is_empty() && !provider.versions.iter().any(|av| *av == v) => {
+            Some(v) if !provider.versions.is_empty() && !provider.versions.contains(&v) => {
                 let candidates: Vec<&String> = provider.versions.iter().filter(|av| av.starts_with(&format!("{v}."))).collect();
                 match candidates.as_slice() {
                     [one] => Some((*one).clone()),
@@ -490,7 +490,7 @@ fn plan_service(
             // Registre privé = le poste a des identifiants pour cet hôte (une
             // image privée peut vivre sur ghcr.io comme sur un registre interne).
             let host = registry::registry_host(image);
-            let private_registry = ctx.private_registries.iter().any(|h| *h == host);
+            let private_registry = ctx.private_registries.contains(&host);
             (Source::Synthetic { image: image.clone(), private_registry, files: Vec::new(), generated: Vec::new() }, intr)
         }
         (None, None) => {

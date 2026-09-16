@@ -43,6 +43,9 @@ pub struct ResourceId(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "resource", rename_all = "snake_case")]
+// Quelques dizaines de ressources par plan : la lisibilité des motifs
+// `Resource::App(a)` vaut mieux qu'une indirection.
+#[allow(clippy::large_enum_variant)]
 pub enum Resource {
     App(App),
     Addon(Addon),

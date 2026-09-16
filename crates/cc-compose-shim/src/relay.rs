@@ -133,13 +133,9 @@ pub async fn serve_udp(relay: UdpRelay) {
                     let (inbound, table, s2) = (inbound.clone(), table.clone(), s.clone());
                     tokio::spawn(async move {
                         let mut rbuf = vec![0u8; 65535];
-                        loop {
-                            match tokio::time::timeout(Duration::from_secs(120), s2.recv(&mut rbuf)).await {
-                                Ok(Ok(n)) => {
-                                    let _ = inbound.send_to(&rbuf[..n], from).await;
-                                }
-                                _ => break,
-                            }
+                        // Réponses vers le client d'origine, jusqu'à 2 min sans trafic.
+                        while let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(120), s2.recv(&mut rbuf)).await {
+                            let _ = inbound.send_to(&rbuf[..n], from).await;
                         }
                         table.lock().await.remove(&from);
                     });

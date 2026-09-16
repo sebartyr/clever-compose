@@ -70,6 +70,7 @@ fn key_names_a_host(key: &str) -> bool {
     ["HOST", "SERVER", "ADDR", "ENDPOINT", "HOSTNAME"].iter().any(|h| k.contains(h))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, addons: &Addons, p: &Path, diags: &mut Diagnostics, referenced: &mut std::collections::BTreeSet<String>) -> Template {
     let mut segments: Vec<Segment> = Vec::new();
     let mut literal = String::new();
@@ -201,6 +202,7 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
     Template(segments)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, addons: &Addons, p: &Path, diags: &mut Diagnostics) -> Option<Target> {
     if host == consumer {
         return None;
@@ -224,6 +226,7 @@ fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Proj
     None
 }
 
+#[allow(clippy::too_many_arguments)]
 /// `CC_COMPOSE_DNS_MAP=alias=<fqdn>,...` : les alias des services que ce
 /// service référence (`depends_on`, hôtes de son environnement) et qu'il
 /// atteint par un réseau commun, triés. Restreindre aux références rend le
