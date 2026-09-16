@@ -137,7 +137,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                     .filter_map(|d| d.0.strip_prefix("addon/"))
                     .filter_map(|svc| {
                         let provider = plan.resources.iter().find_map(|r| match r {
-                            Resource::Addon(a) if a.service == svc => Some(a.provider.clone()),
+                            Resource::Addon(a) if a.service == svc && a.options.is_empty() => Some(a.provider.clone()),
                             _ => None,
                         })?;
                         let resource = addon_resource_type(&provider)?;
@@ -151,6 +151,13 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 dockers.insert(ident(&app.service), J::Object(res));
             }
             Resource::Addon(a) => {
+                // Options de création sans attribut dans le provider 2.2.0
+                // (`documentdb`) : la ressource est omise plutôt qu'émise sans
+                // l'option, ce qui donnerait un addon différent.
+                if !a.options.is_empty() {
+                    diags.push(Diagnostic::warning("terraform-addon-options", format!("addon `{}` : l'option {} n'a pas d'attribut dans le provider 2.2.0 ; ressource omise (à créer hors Terraform, `bootstrap.sh` sait le faire)", a.name, a.options.iter().map(|(k, v)| format!("`{k}={v}`")).collect::<Vec<_>>().join(", "))));
+                    continue;
+                }
                 let Some(resource) = addon_resource_type(&a.provider) else {
                     diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : pas de ressource Terraform pour `{}` dans le provider 2.2.0", a.name, a.provider)));
                     continue;

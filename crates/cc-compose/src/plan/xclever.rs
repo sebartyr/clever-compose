@@ -41,6 +41,10 @@ pub struct XClever {
     /// Version de l'addon (`16`, `8.0`) si le tag ne la donne pas ou pour
     /// la forcer.
     pub version: Option<String>,
+    /// Service `mongo` : `documentdb` (PostgreSQL dédié avec l'option, API
+    /// MongoDB 7.0 ; défaut pour un tag 5+ ou absent) ou `mongodb` (addon
+    /// MongoDB 4.0.3 ; défaut pour un tag 4.x).
+    pub engine: Option<String>,
     /// Service substitué par un addon : où s'exécutent ses scripts
     /// d'initialisation. `task` (défaut : une Clever Task) ou `local`
     /// (depuis le poste qui lance `up`).
@@ -75,6 +79,12 @@ fn parse(v: &serde_json::Value, p: &Path, diags: &mut Diagnostics) -> XClever {
                 if !["per-network", "single", "none"].contains(&ng.as_str()) {
                     diags.push(Diagnostic::error("x-clever-invalid", format!("`network_groups` vaut `per-network`, `single` ou `none`, pas `{ng}`")).with_path(&p.child("network_groups")));
                     x.network_groups = None;
+                }
+            }
+            if let Some(e) = &x.engine {
+                if e != "documentdb" && e != "mongodb" {
+                    diags.push(Diagnostic::error("x-clever-invalid", format!("`engine` vaut `documentdb` ou `mongodb`, pas `{e}`")).with_path(&p.child("engine")));
+                    x.engine = None;
                 }
             }
             if let Some(init) = &x.init {

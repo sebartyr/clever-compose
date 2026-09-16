@@ -298,6 +298,10 @@ pub struct Addon {
     /// hôte public.
     #[serde(default)]
     pub private: bool,
+    /// Options de création propres au fournisseur (`documentdb: true` sur un
+    /// PostgreSQL dédié : endpoint compatible MongoDB).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub options: std::collections::BTreeMap<String, String>,
 }
 
 /// Port sur lequel un addon membre d'un network group sert son protocole

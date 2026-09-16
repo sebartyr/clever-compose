@@ -27,7 +27,7 @@ pub struct Script {
 pub fn accepted_extensions(provider: &str) -> &'static [&'static str] {
     match provider {
         "postgresql-addon" | "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
-        "mongodb-addon" => &[".js", ".sh"],
+        "mongodb-addon" | "documentdb" => &[".js", ".sh"],
         _ => &[],
     }
 }
@@ -36,7 +36,7 @@ pub fn accepted_extensions(provider: &str) -> &'static [&'static str] {
 pub fn seed_extensions(provider: &str) -> &'static [&'static str] {
     match provider {
         "postgresql-addon" | "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
-        "mongodb-addon" => &[".js", ".archive", ".sh"],
+        "mongodb-addon" | "documentdb" => &[".js", ".archive", ".sh"],
         "redis-addon" => &[".redis", ".resp", ".sh"],
         "es-addon" => &[".ndjson", ".sh"],
         _ => &[],
@@ -101,6 +101,7 @@ pub fn client(provider: &str) -> &'static str {
         "postgresql-addon" => "psql",
         "mysql-addon" => "mysql",
         "mongodb-addon" => "mongo",
+        "documentdb" => "mongosh",
         "redis-addon" => "redis-cli",
         "es-addon" => "curl",
         _ => "sh",
@@ -115,6 +116,8 @@ pub fn runner(rec: &Recognized, version: Option<&str>) -> Option<(String, String
         // Le shell `mongo` de l'image de la version servie (4.0 : pas de
         // mongosh, et un mongosh récent ne parle plus à un 4.0).
         "mongodb-addon" => Some((format!("mongo:{}", version.map(|v| v.split('.').take(2).collect::<Vec<_>>().join(".")).unwrap_or_else(|| "4.0".into())), MONGO_RUNNER.to_string())),
+        // DocumentDB parle MongoDB 7.0 : mongosh et les outils de l'image `mongo:7`.
+        "documentdb" => Some(("mongo:7".to_string(), DOCUMENTDB_RUNNER.to_string())),
         // Pas d'image `redis` complète : redis-cli suffit, celle-ci est légère.
         "redis-addon" => Some((format!("redis:{}", version.unwrap_or("8")), REDIS_RUNNER.to_string())),
         // L'image elasticsearch pèse plus d'un gigaoctet pour un curl.
@@ -188,6 +191,31 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
     *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
     *.archive) echo "cc-compose init : $f"; mongorestore --quiet --uri="$MONGODB_ADDON_URI" --archive="$f" --nsFrom='*.*' --nsTo="$MONGODB_ADDON_DB.*" ;;
+    *)         echo "cc-compose init : $f ignoré" ;;
+  esac
+done
+$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})"
+echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+"#;
+
+const DOCUMENTDB_RUNNER: &str = r#"#!/bin/sh
+# Généré par clever-compose : rejoue les scripts d'initialisation contre
+# l'endpoint DocumentDB de l'addon, une fois par contenu (collection témoin
+# cc_compose_init). TLS imposé, certificat hors des autorités publiques.
+set -eu
+URI="$DOCUMENTDB_ADDON_URI"
+MONGO="mongosh --quiet --tls --tlsAllowInvalidCertificates $URI"
+if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+  exit 0
+fi
+# Variables de l'image officielle mongo, pour les scripts .sh qui les lisent.
+export MONGO_INITDB_DATABASE="$POSTGRESQL_ADDON_DB" MONGO_INITDB_ROOT_USERNAME="$POSTGRESQL_ADDON_USER" MONGO_INITDB_ROOT_PASSWORD="$POSTGRESQL_ADDON_PASSWORD"
+for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+  case "$f" in
+    *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
+    *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
+    *.archive) echo "cc-compose init : $f"; mongorestore --quiet --ssl --sslAllowInvalidCertificates --uri="$URI" --archive="$f" --nsFrom='*.*' --nsTo="$POSTGRESQL_ADDON_DB.*" ;;
     *)         echo "cc-compose init : $f ignoré" ;;
   esac
 done
@@ -287,7 +315,8 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
             _ => None,
         })
         .ok_or_else(|| format!("`{service}` n'est pas un service substitué par un addon dans ce plan"))?;
-    let rec = super::addons::recognize(match addon.provider.as_str() {
+    let mut rec = super::addons::recognize(match addon.provider.as_str() {
+        "postgresql-addon" if addon.options.get("documentdb").is_some_and(|v| v == "true") => "mongo",
         "postgresql-addon" => "postgres",
         "mysql-addon" => "mysql",
         "mongodb-addon" => "mongo",
@@ -296,6 +325,9 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
         other => return Err(format!("seed non supporté pour {other}")),
     })
     .ok_or("fournisseur non reconnu")?;
+    if addon.options.get("documentdb").is_some_and(|v| v == "true") {
+        rec.provider = super::addons::DOCUMENTDB;
+    }
     let abs = std::fs::canonicalize(dump).map_err(|e| format!("{} : {e}", dump.display()))?;
     let rel = match abs.strip_prefix(project_dir) {
         Ok(r) => format!("./{}", r.display()),

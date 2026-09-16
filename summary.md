@@ -251,6 +251,29 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   sans changement. Effet de bord : le plan dédié par défaut sert la version
   demandée, Mastodon/Plausible/Sentry ne sont plus bloqués par
   `addon-version-shared`.
+- **DocumentDB (16/09/2026, demande du propriétaire : « au moins le support
+  partiel via API, tant pis pour Terraform »).** Source : la doc
+  (`~/documentation/content/doc/deploy/databases/documentdb.md`) et
+  clever-tools (`--option documentdb=true` → `options.documentdb: "true"`
+  de `POST /addons`). Moteur interne `documentdb` (`addons::DOCUMENTDB`) :
+  fournisseur plateforme `postgresql-addon`, plan dédié imposé, version
+  PostgreSQL 17+ (`x-clever.version` = version PG), `Addon.options`
+  (nouveau champ additif). Un service `mongo` 5+ ou sans tag y va par défaut
+  (l'addon MongoDB n'existe qu'en 4.0.3, DocumentDB annonce 7.0), un 4.x
+  vers MongoDB ; `x-clever.engine` force. Câblage : hôte/port
+  `DOCUMENTDB_ADDON_*`, user/password/db `POSTGRESQL_ADDON_*`, URL
+  reconstruite avec `tls=true&tlsAllowInvalidCertificates=true` (certificat
+  hors autorités publiques). Init/seed : image `mongo:7`, `mongosh --tls
+  --tlsAllowInvalidCertificates`, mongorestore `--ssl`. Exécuteur : création
+  par requête brute (le SDK ne porte pas d'options libres), attente de
+  `DOCUMENTDB_ADDON_URI` (apparaît après la création : lier avant, c'est
+  déployer sans l'URI, constaté). Script : `--addon-version` (l'ancien
+  `--version` était faux) et `--option documentdb=true`. Terraform : pas
+  d'attribut d'option dans le provider 2.2.0 → ressource omise et
+  dépendances retirées, `terraform-addon-options` ; manque suivi en issue.
+  Vérifié en réel (`ccddb`, détruit) : `db.version()` = 7.0.0, script
+  d'init rejoué, documents lus par l'URL réécrite. Non vérifié : accès par
+  le network group (port du gateway inconnu, `private` forcé faux).
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.

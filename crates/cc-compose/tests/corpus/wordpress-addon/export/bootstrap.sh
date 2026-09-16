@@ -12,7 +12,7 @@ clever ng create 'wordpress-addon-default' -o "$ORG" --tags 'compose-project=wor
 NG_default="$(clever ng get 'wordpress-addon-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'mysql-addon' 'wordpress-addon-db' --plan 'xxs_sml' --region 'par' --version '8.4' -o "$ORG"
+clever addon create 'mysql-addon' 'wordpress-addon-db' --plan 'xxs_sml' --region 'par' --addon-version '8.4' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "wordpress-addon-db") | .addonId')"
 ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "wordpress-addon-db") | .realId')"
 

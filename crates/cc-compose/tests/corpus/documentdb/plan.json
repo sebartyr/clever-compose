@@ -1,0 +1,260 @@
+{
+  "project": "documentdb",
+  "spec_hash": "790298eb6b1b53ea0cead4a4ea536960",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "documentdb-default",
+      "tags": [
+        "compose-project=documentdb",
+        "compose-network=default",
+        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/mongo",
+      "service": "mongo",
+      "name": "documentdb-mongo",
+      "provider": "postgresql-addon",
+      "plan": "xxs_sml",
+      "region": "par",
+      "version": "17",
+      "tags": [
+        "compose-project=documentdb",
+        "compose-service=mongo",
+        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+      ],
+      "private": false,
+      "options": {
+        "documentdb": "true"
+      }
+    },
+    {
+      "resource": "app",
+      "id": "app/mongo-init",
+      "service": "mongo-init",
+      "name": "documentdb-mongo-init",
+      "kind": "task",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "mongo:7",
+        "private_registry": false,
+        "files": [
+          {
+            "source": "./initdb/01-users.js",
+            "target": "/cc-init/01-users.js",
+            "read_only": true
+          }
+        ],
+        "generated": [
+          {
+            "target": "/cc-init.sh",
+            "content": "#!/bin/sh\n# Généré par clever-compose : rejoue les scripts d'initialisation contre\n# l'endpoint DocumentDB de l'addon, une fois par contenu (collection témoin\n# cc_compose_init). TLS imposé, certificat hors des autorités publiques.\nset -eu\nURI=\"$DOCUMENTDB_ADDON_URI\"\nMONGO=\"mongosh --quiet --tls --tlsAllowInvalidCertificates $URI\"\nif [ \"$($MONGO --eval \"print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)\")\" = \"1\" ]; then\n  echo \"cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)\"\n  exit 0\nfi\n# Variables de l'image officielle mongo, pour les scripts .sh qui les lisent.\nexport MONGO_INITDB_DATABASE=\"$POSTGRESQL_ADDON_DB\" MONGO_INITDB_ROOT_USERNAME=\"$POSTGRESQL_ADDON_USER\" MONGO_INITDB_ROOT_PASSWORD=\"$POSTGRESQL_ADDON_PASSWORD\"\nfor f in \"${CC_INIT_DIR:-/cc-init}\"/*; do\n  case \"$f\" in\n    *.sh)      echo \"cc-compose init : $f\"; sh \"$f\" ;;\n    *.js)      echo \"cc-compose init : $f\"; $MONGO \"$f\" ;;\n    *.archive) echo \"cc-compose init : $f\"; mongorestore --quiet --ssl --sslAllowInvalidCertificates --uri=\"$URI\" --archive=\"$f\" --nsFrom='*.*' --nsTo=\"$POSTGRESQL_ADDON_DB.*\" ;;\n    *)         echo \"cc-compose init : $f ignoré\" ;;\n  esac\ndone\n$MONGO --eval \"db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})\"\necho \"cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)\"\n",
+            "executable": true
+          }
+        ]
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "mongod"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          27017
+        ]
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "/cc-init.sh"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_INIT_HASH",
+          "value": [
+            {
+              "literal": "965bdbffd89e76fcb0544c283a25b57e"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/mongo"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=documentdb",
+        "compose-service=mongo-init",
+        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/api",
+      "service": "api",
+      "name": "documentdb-api",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "busybox:1.36",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [],
+        "cmd": [
+          "sh"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": []
+      },
+      "shim": {
+        "argv": [
+          "sh",
+          "-c",
+          "while true; do sleep 30; done"
+        ],
+        "port": {
+          "mode": "health"
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "MONGO_URL,MONGO_HOST,MONGO_PASSWORD"
+            }
+          ]
+        },
+        {
+          "key": "MONGO_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "DOCUMENTDB_ADDON_HOST"
+              }
+            }
+          ]
+        },
+        {
+          "key": "MONGO_PASSWORD",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            }
+          ]
+        },
+        {
+          "key": "MONGO_URL",
+          "value": [
+            {
+              "literal": "mongodb://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            },
+            {
+              "literal": "@"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "DOCUMENTDB_ADDON_HOST"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "DOCUMENTDB_ADDON_PORT"
+              }
+            },
+            {
+              "literal": "/"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/mongo",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
+            },
+            {
+              "literal": "?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/mongo",
+        "app/mongo-init"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=documentdb",
+        "compose-service=api",
+        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/api@default",
+      "member": "app/api",
+      "group": "ng/default",
+      "aliases": [
+        "api"
+      ]
+    }
+  ]
+}

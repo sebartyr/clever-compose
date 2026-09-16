@@ -12,7 +12,7 @@ clever ng create 'init-scripts-local-default' -o "$ORG" --tags 'compose-project=
 NG_default="$(clever ng get 'init-scripts-local-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'init-scripts-local-db' --plan 'xxs_sml' --region 'par' --version '15' -o "$ORG"
+clever addon create 'postgresql-addon' 'init-scripts-local-db' --plan 'xxs_sml' --region 'par' --addon-version '15' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-local-db") | .addonId')"
 ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-local-db") | .realId')"
 

@@ -21,7 +21,7 @@ variable "repository" {
 
 resource "clevercloud_networkgroup" "default" {
   name = "init-scripts-mongo-default"
-  tags = ["compose-project=init-scripts-mongo", "compose-network=default", "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"]
+  tags = ["compose-project=init-scripts-mongo", "compose-network=default", "compose-spec=384c4a34423c33de5c04e4446cf23a01"]
 }
 
 resource "clevercloud_mongodb" "mongo" {

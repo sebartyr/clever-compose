@@ -58,8 +58,23 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                     return Err(format!("l'addon `{}` ({} plan `{}`) serait créé et facturé : relancez avec `--yes` pour confirmer (coût dans la sortie de `plan`)", a.name, a.provider, a.plan));
                 }
                 None => {
-                    let created = platform.create_addon(&NewAddon { name: a.name.clone(), provider: a.provider.clone(), plan: a.plan.clone(), region: a.region.clone(), version: a.version.clone() }).await?;
+                    let created = platform.create_addon(&NewAddon { name: a.name.clone(), provider: a.provider.clone(), plan: a.plan.clone(), region: a.region.clone(), version: a.version.clone(), options: a.options.clone() }).await?;
                     log(&format!("addon {} : créé ({})", a.name, created.id));
+                    // L'endpoint DocumentDB apparaît quelques secondes après la
+                    // création : lier avant, c'est déployer sans son URI.
+                    if a.options.get("documentdb").is_some_and(|v| v == "true") {
+                        let deadline = std::time::Instant::now() + Duration::from_secs(180);
+                        loop {
+                            if platform.addon_env(&created.id).await?.iter().any(|e| e.name == "DOCUMENTDB_ADDON_URI") {
+                                log(&format!("addon {} : endpoint DocumentDB prêt", a.name));
+                                break;
+                            }
+                            if std::time::Instant::now() > deadline {
+                                return Err(format!("addon {} : l'endpoint DocumentDB (DOCUMENTDB_ADDON_URI) n'est pas apparu en 3 minutes", a.name));
+                            }
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                        }
+                    }
                     state.addon_ids.insert(a.service.clone(), created.id);
                     state.addon_real_ids.insert(a.service.clone(), created.real_id);
                 }

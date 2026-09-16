@@ -9,6 +9,7 @@ services:
   mongo:
     image: mongo:7
     x-clever:
+      engine: mongodb
       version: "4.0"
     environment:
       MONGO_INITDB_ROOT_USERNAME: app

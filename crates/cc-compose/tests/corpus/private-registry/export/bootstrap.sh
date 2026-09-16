@@ -12,7 +12,7 @@ clever ng create 'private-registry-default' -o "$ORG" --tags 'compose-project=pr
 NG_default="$(clever ng get 'private-registry-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'es-addon' 'private-registry-search' --plan 'xs' --region 'par' --version '8' -o "$ORG"
+clever addon create 'es-addon' 'private-registry-search' --plan 'xs' --region 'par' --addon-version '8' -o "$ORG"
 ADDON_search="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "private-registry-search") | .addonId')"
 
 # Applications, créées sans déploiement

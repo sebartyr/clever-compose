@@ -59,7 +59,7 @@ Au niveau projet ou service : `region`, `flavor` (ou `min_flavor` /
 `task` (service one-shot), `http_port` (port HTTP réel de
 l'image), `protocol` (`http` ou `tcp`), `domains`, `ephemeral`, `plan` et
 `version` (addon), `tcp_namespace` (`default` ou `cleverapps`), `private`
-(addon membre du network group, vrai par défaut ; `false` = hôte public), `init` (`task`, défaut : les scripts
+(addon membre du network group, vrai par défaut ; `false` = hôte public), `engine` (`documentdb`, défaut pour un `mongo` 5+ ou sans tag, ou `mongodb`), `init` (`task`, défaut : les scripts
 d'initialisation d'un addon sont rejoués par une Clever Task ; `local` :
 depuis le poste qui lance `up`, avec Docker s'il répond, sinon le client
 `psql`/`mysql`/`mongo`/`redis-cli`/`curl` du poste).
@@ -81,7 +81,7 @@ segmentation qu'en local), `single` (un seul groupe pour le projet) ou
 | `healthcheck` HTTP | `CC_HEALTH_CHECK_PATH` (2xx exigé) |
 | `deploy.replicas`, `resources.limits.{memory,cpus}` | instances fixes (avertissement : pas d'autoscaling sans `x-clever`), plus petite flavor couvrant mémoire et vCPU |
 | réseaux | network groups selon `x-clever.network_groups`, table DNS `CC_COMPOSE_DNS_MAP` + stub DNS du shim |
-| postgres, mysql/mariadb, redis/valkey, mongo, elasticsearch | addon managé, identifiants expansés au démarrage ; PostgreSQL, MySQL et Redis membres du network group par défaut (plan dédié, joints sur le port 8080) ; scripts d'init rejoués par une tâche (postgres, mysql, mongo), `seed` pour tous |
+| postgres, mysql/mariadb, redis/valkey, mongo (DocumentDB : PostgreSQL dédié avec l'option, API MongoDB 7.0 ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3), elasticsearch | addon managé, identifiants expansés au démarrage ; PostgreSQL, MySQL et Redis membres du network group par défaut (plan dédié, joints sur le port 8080) ; scripts d'init rejoués par une tâche (postgres, mysql, mongo), `seed` pour tous |
 | `privileged`, `cap_add`, `devices`, `network_mode`, `sysctls`, volumes nommés… | refus avec diagnostic |
 
 ## Tests

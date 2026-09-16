@@ -72,6 +72,28 @@ pub struct Recognized {
     pub port: u16,
 }
 
+/// Moteur interne : un PostgreSQL dédié (17+) créé avec l'option
+/// `documentdb`, qui expose un endpoint compatible MongoDB 7.0
+/// (`DOCUMENTDB_ADDON_*`, identifiants de `POSTGRESQL_ADDON_*`, TLS
+/// obligatoire avec certificat non public). Fournisseur plateforme :
+/// `postgresql-addon`.
+pub const DOCUMENTDB: &str = "documentdb";
+
+/// Fournisseur plateforme derrière un moteur interne.
+pub fn platform_provider(provider: &str) -> &str {
+    if provider == DOCUMENTDB { "postgresql-addon" } else { provider }
+}
+
+/// Paramètres de connexion que l'endpoint DocumentDB impose.
+pub const DOCUMENTDB_URI_PARAMS: &str = "tls=true&tlsAllowInvalidCertificates=true";
+
+/// Un service `mongo` va vers DocumentDB sauf choix contraire : l'addon
+/// MongoDB n'existe qu'en 4.0.3, DocumentDB annonce 7.0 et accepte les
+/// pilotes 5.0+. Un tag 4.x désigne l'addon MongoDB.
+pub fn documentdb_by_default(rec: &Recognized) -> bool {
+    rec.provider == "mongodb-addon" && rec.version.as_deref().and_then(|v| v.split('.').next()?.parse::<u32>().ok()).is_none_or(|major| major >= 5)
+}
+
 /// Reconnaissance d'une image. Jamais un service `build:` (§6.1).
 pub fn recognize(image: &str) -> Option<Recognized> {
     let (name, tag) = image.rsplit_once('@').map(|(n, _)| (n, None)).unwrap_or_else(|| match image.rsplit_once(':') {
@@ -117,7 +139,9 @@ pub struct Declared {
 pub fn declared(r: &Recognized, s: &Service) -> Declared {
     let get = |k: &str| s.environment.get(k).and_then(|v| v.clone()).filter(|v| !v.is_empty());
     let mut d = Declared::default();
-    match (r.provider, r.dialect) {
+    // DocumentDB remplace un service `mongo` : mêmes variables déclarées.
+    let provider = if r.provider == DOCUMENTDB { "mongodb-addon" } else { r.provider };
+    match (provider, r.dialect) {
         ("postgresql-addon", Dialect::Official) => {
             d.user = get("POSTGRES_USER").or_else(|| Some("postgres".into()));
             d.password = get("POSTGRES_PASSWORD");
@@ -195,6 +219,12 @@ pub fn addon_var(provider: &str, role: Role) -> Option<&'static str> {
         ("mongodb-addon", Role::Password) => "MONGODB_ADDON_PASSWORD",
         ("mongodb-addon", Role::Database) => "MONGODB_ADDON_DB",
         ("mongodb-addon", Role::Uri) => "MONGODB_ADDON_URI",
+        (DOCUMENTDB, Role::Host) => "DOCUMENTDB_ADDON_HOST",
+        (DOCUMENTDB, Role::Port) => "DOCUMENTDB_ADDON_PORT",
+        (DOCUMENTDB, Role::User) => "POSTGRESQL_ADDON_USER",
+        (DOCUMENTDB, Role::Password) => "POSTGRESQL_ADDON_PASSWORD",
+        (DOCUMENTDB, Role::Database) => "POSTGRESQL_ADDON_DB",
+        (DOCUMENTDB, Role::Uri) => "DOCUMENTDB_ADDON_URI",
         ("es-addon", Role::Host) => "ES_ADDON_HOST",
         ("es-addon", Role::User) => "ES_ADDON_USER",
         ("es-addon", Role::Password) => "ES_ADDON_PASSWORD",
@@ -263,11 +293,21 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Opt
             lit(&mut segs, "@");
             host_port(&mut segs);
             // Le chemin est la base : celle de l'addon.
-            let query = tail.find(['?', '#']).map(|i| &tail[i..]).unwrap_or("");
+            let mut query = tail.find(['?', '#']).map(|i| tail[i..].to_string()).unwrap_or_default();
+            if provider == DOCUMENTDB {
+                // TLS obligatoire, certificat hors des autorités publiques.
+                for param in DOCUMENTDB_URI_PARAMS.split('&') {
+                    let key = param.split('=').next().unwrap_or("");
+                    if !query.to_ascii_lowercase().contains(&format!("{}=", key.to_ascii_lowercase())) {
+                        query.push(if query.is_empty() { '?' } else { '&' });
+                        query.push_str(param);
+                    }
+                }
+            }
             lit(&mut segs, "/");
             push(&mut segs, seg(addon, provider, Role::Database));
             if !query.is_empty() {
-                lit(&mut segs, query);
+                lit(&mut segs, &query);
             }
         }
     }

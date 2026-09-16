@@ -136,6 +136,13 @@ s'exécute sur la plateforme ou depuis le poste.
   que soit la version demandée (PostgreSQL 15 en par/mtl, MySQL 8.0 en par) :
   refus `addon-version-shared` avec les sorties (`x-clever.version` ou plan
   dédié). MongoDB n'existe qu'en 4.0.3, Redis en 8.10.1.
+- **DocumentDB** : option `documentdb=true` d'un PostgreSQL dédié 17+
+  (créée via `options` de l'API, pas dans le provider Terraform) ; endpoint
+  compatible MongoDB 7.0 (`DOCUMENTDB_ADDON_{HOST,PORT,URI}`, user/password/db
+  de `POSTGRESQL_ADDON_*`, TLS imposé avec certificat non public :
+  `tls=true&tlsAllowInvalidCertificates=true`) ; l'URI apparaît quelques
+  secondes après la création (l'exécuteur attend). Un `mongo` 5+ ou sans tag
+  y va par défaut, un `mongo:4.x` vers l'addon MongoDB.
 - Addon Elasticsearch : hôte nu servi en HTTPS seul, `ES_ADDON_URI` embarque
   les identifiants.
 - **Addon membre d'un network group** : déclaré avec son **id réel**
@@ -171,8 +178,9 @@ s'exécute sur la plateforme ou depuis le poste.
 Niveau service : `region`, `flavor` (ou `min_flavor`/`max_flavor` :
 scaling vertical), `min_instances`/`max_instances` (horizontal), `task`,
 `http_port`, `protocol`, `domains`, `ephemeral`, `plan`, `version`,
-`tcp_namespace`, `init` (`task` par défaut, `local`), `private` (vrai par
-défaut : addon membre du groupe ; `false` : hôte public). Niveau projet : `network_groups` (`per-network` | `single` |
+`tcp_namespace`, `engine` (`documentdb` | `mongodb`), `init` (`task` par
+défaut, `local`), `private` (vrai par défaut : addon membre du groupe ;
+`false` : hôte public). Niveau projet : `network_groups` (`per-network` | `single` |
 `none`). Les clés `x-*` sont ignorées par Compose : le fichier reste
 utilisable en local.
 
@@ -181,7 +189,8 @@ utilisable en local.
 `addon-substitution`, `addon-version-unavailable`, `addon-version-shared`,
 `addon-version-ambiguous`, `addon-init-task`, `addon-init-local`,
 `addon-init-scripts`, `addon-tuning-args`, `addon-multiple-databases`,
-`addon-no-superuser`, `addon-connections`, `addon-private-shared`,
+`addon-no-superuser`, `addon-connections`, `addon-documentdb-shared`,
+`addon-documentdb-version`, `terraform-addon-options`, `addon-private-shared`,
 `addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,
 `network-groups-unspecified`, `network-groups-merged`, `service-unreachable`,
 `proxy-resolver`, `port-assumed-http`, `redirection-tcp-multiple`,
@@ -264,9 +273,9 @@ clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
 
 ## 10. Ouvert, reporté, décidé
 
-- Reporté : DocumentDB sur PostgreSQL comme alternative à l'addon MongoDB
-  4.0.3 (pas dans le provider Terraform, mis de côté) ; accès par le groupe
-  pour Mongo et ES (à vérifier) ; les autres points
+- Reporté : DocumentDB dans l'export Terraform (pas d'attribut d'option
+  dans le provider : ressource omise, `terraform-addon-options`) ; accès par
+  le groupe pour Mongo, DocumentDB et ES (à vérifier) ; les autres points
   « choix vs défaut » proposés et non retenus (service à service par domaine
   public, protocole exigé, addon public ou groupe).
 - SDK Rust : PR #81 (network groups) à rebaser, bug `v2::plan::list` sur

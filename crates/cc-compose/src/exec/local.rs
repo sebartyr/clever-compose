@@ -79,6 +79,7 @@ fn provider_of(image: &str) -> &'static str {
     match name {
         "postgres" => "postgresql-addon",
         "mysql" => "mysql-addon",
+        "mongo" if image.starts_with("mongo:7") => "documentdb",
         "mongo" => "mongodb-addon",
         "redis" => "redis-addon",
         "curlimages/curl" => "es-addon",

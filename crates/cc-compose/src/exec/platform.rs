@@ -224,6 +224,8 @@ pub struct NewAddon {
     pub plan: String,
     pub region: String,
     pub version: Option<String>,
+    /// Options de création du fournisseur (`documentdb: true`...).
+    pub options: std::collections::BTreeMap<String, String>,
 }
 
 /// Ce que l'exécuteur demande à la plateforme.
@@ -354,14 +356,18 @@ impl Platform for Api {
         let providers: Vec<J> = self.client.get(&format!("{}/v2/products/addonproviders", self.base())).await.map_err(|e| Self::e("products/addonproviders", e))?;
         let provider = providers.iter().find(|p| p["id"] == addon.provider.as_str()).ok_or_else(|| format!("fournisseur `{}` inconnu", addon.provider))?;
         let plan_id = provider["plans"].as_array().and_then(|ps| ps.iter().find(|p| p["slug"] == addon.plan.as_str())).and_then(|p| p["id"].as_str()).ok_or_else(|| format!("plan `{}` inconnu pour {}", addon.plan, addon.provider))?;
-        let opts = clevercloud_sdk::v2::addon::CreateOpts {
-            name: addon.name.clone(),
-            region: addon.region.clone(),
-            provider_id: addon.provider.clone(),
-            plan: plan_id.to_string(),
-            options: clevercloud_sdk::v2::addon::Opts { version: addon.version.clone(), encryption: None, services: None },
-        };
-        let a = clevercloud_sdk::v2::addon::create(&self.client, &self.owner, &opts).await.map_err(|e| e.to_string())?;
+        // `CreateOpts` du SDK ne porte que version/encryption/services : les
+        // options libres (`documentdb`) passent par la requête brute.
+        let mut options = serde_json::Map::new();
+        if let Some(v) = &addon.version {
+            options.insert("version".into(), json!(v));
+        }
+        for (k, v) in &addon.options {
+            options.insert(k.clone(), json!(v));
+        }
+        let body = json!({ "name": addon.name, "region": addon.region, "providerId": addon.provider, "plan": plan_id, "options": options });
+        let text = self.send(reqwest::Method::POST, &format!("{}/addons", self.owner_path()), Some(&body)).await?;
+        let a: clevercloud_sdk::v2::addon::Addon = serde_json::from_str(&text).map_err(|e| format!("création d'addon : réponse illisible : {e}"))?;
         Ok(AddonInfo { id: a.id, real_id: a.real_id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug })
     }
 

@@ -1,6 +1,6 @@
 {
   "project": "init-scripts-mongo",
-  "spec_hash": "3909e8e24f11e2d03b03f848ab3f283c",
+  "spec_hash": "384c4a34423c33de5c04e4446cf23a01",
   "resources": [
     {
       "resource": "network_group",
@@ -10,7 +10,7 @@
       "tags": [
         "compose-project=init-scripts-mongo",
         "compose-network=default",
-        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+        "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ]
     },
     {
@@ -25,7 +25,7 @@
       "tags": [
         "compose-project=init-scripts-mongo",
         "compose-service=mongo",
-        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+        "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ],
       "private": false
     },
@@ -41,7 +41,7 @@
       "tags": [
         "compose-project=init-scripts-mongo",
         "compose-service=cache",
-        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+        "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ],
       "private": true
     },
@@ -116,7 +116,7 @@
       "tags": [
         "compose-project=init-scripts-mongo",
         "compose-service=mongo-init",
-        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+        "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ]
     },
     {
@@ -230,7 +230,7 @@
       "tags": [
         "compose-project=init-scripts-mongo",
         "compose-service=api",
-        "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
+        "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ]
     },
     {

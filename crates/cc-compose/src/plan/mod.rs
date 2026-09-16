@@ -120,7 +120,21 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         if s.build.is_some() {
             continue;
         }
-        let Some(rec) = s.image.as_deref().and_then(addons::recognize) else { continue };
+        let Some(mut rec) = s.image.as_deref().and_then(addons::recognize) else { continue };
+        // `mongo` : DocumentDB (PostgreSQL dédié + option) sauf tag 4.x ou
+        // `x-clever.engine: mongodb` ; la version du tag est celle de
+        // MongoDB, elle ne désigne pas une version de PostgreSQL.
+        if rec.provider == "mongodb-addon" {
+            let documentdb = match x.engine.as_deref() {
+                Some("documentdb") => true,
+                Some(_) => false,
+                None => addons::documentdb_by_default(&rec),
+            };
+            if documentdb {
+                rec.provider = addons::DOCUMENTDB;
+                rec.version = None;
+            }
+        }
         if x.ephemeral == Some(true) {
             diags.push(Diagnostic::warning("addon-declined", format!("`{name}` ({}) reste un conteneur éphémère (`x-clever.ephemeral: true`) ; un addon `{}` managé est possible", rec.kind, rec.provider)).with_path(&p.child("image")));
             continue;
@@ -211,18 +225,26 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         let p = Path::root().child("services").child(name);
         let x = XClever::service(s, &p, &mut Diagnostics::default());
         let region = x.region.clone().or_else(|| project_x.region.clone()).unwrap_or_else(|| "par".into());
-        let Some(provider) = catalog.providers.get(rec.provider) else {
-            diags.push(Diagnostic::error("addon-provider-unknown", format!("fournisseur `{}` absent du catalogue embarqué", rec.provider)).with_path(&p));
+        let platform_provider = addons::platform_provider(rec.provider);
+        let Some(provider) = catalog.providers.get(platform_provider) else {
+            diags.push(Diagnostic::error("addon-provider-unknown", format!("fournisseur `{}` absent du catalogue embarqué", platform_provider)).with_path(&p));
             continue;
         };
         let private = addons[name].private;
-        let plan = match addons::choose_plan(provider, &region, x.plan.as_deref(), private) {
+        let documentdb = rec.provider == addons::DOCUMENTDB;
+        // DocumentDB n'existe que sur un plan dédié.
+        let plan = match addons::choose_plan(provider, &region, x.plan.as_deref(), private || documentdb) {
             Ok(pl) => pl.clone(),
             Err(e) => {
                 diags.push(Diagnostic::error("addon-plan", e).with_path(&p.child("x-clever").child("plan")));
                 continue;
             }
         };
+        if documentdb && addons::is_shared(&plan) {
+            let cheapest = addons::choose_plan(provider, &region, None, true).ok();
+            diags.push(Diagnostic::error("addon-documentdb-shared", format!("`{name}` : DocumentDB n'existe que sur un plan PostgreSQL dédié, pas sur `{}`{}", plan.slug, cheapest.map(|c| format!(" ; `x-clever.plan: {}` ({} €/mois HT)", c.slug, c.price)).unwrap_or_default())).with_path(&p.child("x-clever").child("plan")));
+            continue;
+        }
         // Un plan partagé n'a pas de VM, donc pas de peer dans le groupe.
         if private && addons::is_shared(&plan) {
             let cheapest = addons::choose_plan(provider, &region, None, true).ok();
@@ -260,6 +282,12 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             }
             other => other,
         };
+        if documentdb {
+            if let Some(v) = version.as_deref().and_then(|v| v.split('.').next()?.parse::<u32>().ok()).filter(|v| *v < 17) {
+                diags.push(Diagnostic::error("addon-documentdb-version", format!("`{name}` : DocumentDB demande PostgreSQL 17 ou plus, pas {v} (`x-clever.version` est ici la version de PostgreSQL)")).with_path(&p.child("x-clever").child("version")));
+                continue;
+            }
+        }
         // Un plan partagé (`dev`) sert la version de son cluster, quoi qu'on
         // demande (constaté le 16/09/2026 : 16 demandé, 15 servi) : jamais en
         // silence (§6.1).
@@ -281,7 +309,9 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         };
         // Coût annoncé (§6) : la substitution est facturée.
         let access = if private { format!(", membre du network group (joint sur le port {ADDON_NG_PORT}, `x-clever.private: false` pour l'hôte public)") } else { ", joint par son hôte public".to_string() };
-        diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}{access}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
+        let engine = if documentdb { " avec l'option DocumentDB (API MongoDB 7.0, pilotes 5.0+, TLS imposé ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3)" } else { "" };
+        let shown_version = if documentdb { version.clone().unwrap_or_default() } else { version.clone().unwrap_or_else(|| "latest".into()) };
+        diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}) devient un addon {} {shown_version}{engine} plan `{}` ({}) : {} €/mois HT{}{access}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", s.image.as_deref().unwrap_or(rec.kind), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
         // Falaises sémantiques (§6.4).
         if let Some(cmd) = &s.command {
             // Redis déclare son mot de passe par `--requirepass` : ce n'est
@@ -334,12 +364,13 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             id: ResourceId(format!("addon/{name}")),
             service: name.clone(),
             name: format!("{}-{name}", project.name),
-            provider: rec.provider.to_string(),
+            provider: platform_provider.to_string(),
             plan: plan.slug.clone(),
             region,
             version,
             tags: tags(name),
             private,
+            options: if documentdb { std::collections::BTreeMap::from([("documentdb".to_string(), "true".to_string())]) } else { Default::default() },
         }));
     }
     if diags.has_errors() {
@@ -566,7 +597,8 @@ fn plan_service(
                     _ => addons::seg(&addon_name, provider, role),
                 };
                 if let Some(seg) = seg {
-                    t = Template(vec![seg]);
+                    // L'URI DocumentDB doit porter les paramètres TLS.
+                    t = if provider == addons::DOCUMENTDB && role == addons::Role::Uri { Template(vec![seg, Segment::Literal(format!("?{}", addons::DOCUMENTDB_URI_PARAMS))]) } else { Template(vec![seg]) };
                     referenced.insert(addon_name);
                 }
             }

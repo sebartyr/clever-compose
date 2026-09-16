@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `init-scripts-mongo` (spec 3909e8e24f11e2d03b03f848ab3f283c).
+# Bootstrap généré par clever-compose pour le projet `init-scripts-mongo` (spec 384c4a34423c33de5c04e4446cf23a01).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,13 +8,13 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'init-scripts-mongo-default' -o "$ORG" --tags 'compose-project=init-scripts-mongo,compose-network=default,compose-spec=3909e8e24f11e2d03b03f848ab3f283c'
+clever ng create 'init-scripts-mongo-default' -o "$ORG" --tags 'compose-project=init-scripts-mongo,compose-network=default,compose-spec=384c4a34423c33de5c04e4446cf23a01'
 NG_default="$(clever ng get 'init-scripts-mongo-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'mongodb-addon' 'init-scripts-mongo-mongo' --plan 'xs_sml' --region 'par' --version '4.0.3' -o "$ORG"
+clever addon create 'mongodb-addon' 'init-scripts-mongo-mongo' --plan 'xs_sml' --region 'par' --addon-version '4.0.3' -o "$ORG"
 ADDON_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-mongo") | .addonId')"
-clever addon create 'redis-addon' 'init-scripts-mongo-cache' --plan 's_mono' --region 'par' --version '8.10.1' -o "$ORG"
+clever addon create 'redis-addon' 'init-scripts-mongo-cache' --plan 's_mono' --region 'par' --addon-version '8.10.1' -o "$ORG"
 ADDON_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .addonId')"
 ADDON_REAL_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .realId')"
 
@@ -23,12 +23,12 @@ APP_mongo_init="$(clever create -t docker 'init-scripts-mongo-mongo-init' -o "$O
 clever scale --app "$APP_mongo_init" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts-mongo
 # tag : compose-service=mongo-init
-# tag : compose-spec=3909e8e24f11e2d03b03f848ab3f283c
+# tag : compose-spec=384c4a34423c33de5c04e4446cf23a01
 APP_api="$(clever create -t docker 'init-scripts-mongo-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts-mongo
 # tag : compose-service=api
-# tag : compose-spec=3909e8e24f11e2d03b03f848ab3f283c
+# tag : compose-spec=384c4a34423c33de5c04e4446cf23a01
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'init-scripts-mongo-default' -o "$ORG"

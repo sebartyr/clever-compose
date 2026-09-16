@@ -77,8 +77,9 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
     if !addons.is_empty() {
         let _ = writeln!(s, "# Addons managés (facturés selon le plan)");
         for a in &addons {
-            let version = a.version.as_ref().map(|v| format!(" --version {}", sq(v))).unwrap_or_default();
-            let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version);
+            let version = a.version.as_ref().map(|v| format!(" --addon-version {}", sq(v))).unwrap_or_default();
+            let options: String = a.options.iter().map(|(k, v)| format!(" --option {}", sq(&format!("{k}={v}")))).collect();
+            let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version, options);
             let _ = writeln!(s, "ADDON_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .addonId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
             if a.private {
                 let _ = writeln!(s, "ADDON_REAL_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .realId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));

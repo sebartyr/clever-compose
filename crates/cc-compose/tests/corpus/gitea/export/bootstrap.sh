@@ -12,7 +12,7 @@ clever ng create 'gitea-default' -o "$ORG" --tags 'compose-project=gitea,compose
 NG_default="$(clever ng get 'gitea-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'gitea-db' --plan 'xxs_sml' --region 'par' --version '17' -o "$ORG"
+clever addon create 'postgresql-addon' 'gitea-db' --plan 'xxs_sml' --region 'par' --addon-version '17' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "gitea-db") | .addonId')"
 ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "gitea-db") | .realId')"
 

@@ -1,0 +1,82 @@
+{
+  "terraform": {
+    "required_providers": {
+      "clevercloud": {
+        "source": "CleverCloud/clevercloud",
+        "version": "~> 2.2"
+      }
+    }
+  },
+  "provider": {
+    "clevercloud": {
+      "organisation": "${var.organisation}"
+    }
+  },
+  "variable": {
+    "organisation": {
+      "type": "string",
+      "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)",
+      "sensitive": true
+    },
+    "repository": {
+      "type": "string",
+      "description": "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
+    }
+  },
+  "resource": {
+    "clevercloud_networkgroup": {
+      "default": {
+        "name": "documentdb-default",
+        "tags": [
+          "compose-project=documentdb",
+          "compose-network=default",
+          "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+        ]
+      }
+    },
+    "clevercloud_docker": {
+      "mongo_init": {
+        "name": "documentdb-mongo-init",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_INIT_HASH": "965bdbffd89e76fcb0544c283a25b57e"
+        },
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/mongo-init"
+        }
+      },
+      "api": {
+        "name": "documentdb-api",
+        "region": "par",
+        "smallest_flavor": "XS",
+        "biggest_flavor": "XS",
+        "min_instance_count": 1,
+        "max_instance_count": 1,
+        "environment": {
+          "CC_COMPOSE_EXPAND": "MONGO_URL,MONGO_HOST,MONGO_PASSWORD",
+          "MONGO_HOST": "$${DOCUMENTDB_ADDON_HOST}",
+          "MONGO_PASSWORD": "$${POSTGRESQL_ADDON_PASSWORD}",
+          "MONGO_URL": "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@$${DOCUMENTDB_ADDON_HOST}:$${DOCUMENTDB_ADDON_PORT}/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
+        },
+        "networkgroups": [
+          {
+            "networkgroup_id": "${clevercloud_networkgroup.default.id}",
+            "fqdn": "api.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+          }
+        ],
+        "deployment": {
+          "repository": "${var.repository}",
+          "commit": "refs/heads/clever-compose/api"
+        },
+        "depends_on": [
+          "clevercloud_docker.mongo_init"
+        ]
+      }
+    }
+  }
+}
