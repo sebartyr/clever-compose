@@ -273,6 +273,9 @@ clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
   `/v2/products/addonproviders`, routes applications à contribuer.
 - Provider Terraform : PR candidates ci-dessus (§7). Pas de contribution
   externe pour le moment (décision du 16/09/2026).
+- Le backlog vit dans les issues GitHub du dépôt (`gh issue list`), labels
+  `reporté`, `plateforme`, `validation`, `produit` ; ce document et
+  `summary.md` n'en gardent que la synthèse.
 - Résolution du `domainName` par le DNS des network groups : commentaire
   posté sur axo#3168 ; si elle aboutit, le stub DNS devient inutile au profit
   d'un `search` dans `resolv.conf`.
