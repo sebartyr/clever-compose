@@ -25,16 +25,19 @@ Le shim (PID 1 des conteneurs) est embarqué dans la CLI par `build.rs` ;
 export CLEVER_TOKEN=… CLEVER_SECRET=…    # jeton OAuth 1.0 (ou CC_API_TOKEN)
 export CC_ORG=orga_xxx                   # ou --org
 
-clever-compose plan   [--project-directory DIR] [-f FILE]... [-p NAME] [--profile P]
-clever-compose up     [mêmes options] [--dry-run] [--no-wait] [--yes] [--allow-ephemeral]
-clever-compose down   [-p PROJET | --all] [--dry-run] [--yes]   (sans plan : par nom de projet et tags ; --all : tout ce que clever-compose a créé dans l'organisation)
-clever-compose ps     [-p PROJET]                        (apps, tâches, addons, réseaux)
-clever-compose logs   [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
-clever-compose seed   --service db --file dump.sql [--local] [mêmes options que up]
-clever-compose export [terraform|script|all] -o DIR [--branches] [mêmes options que plan]
-clever-compose config [mêmes options] --format json   # l'équivalent de `docker compose config`
-clever-compose images --project-directory DIR         # fixture d'images pour les tests hors ligne
+clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
+clever-compose up     [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
+clever-compose down   [--all] [--dry-run] [--yes]  # par nom de projet et tags, sans relire le compose
+clever-compose ps
+clever-compose logs   [SERVICE...] [--since 1h] [-n N] [--follow]
+clever-compose seed   --service db --dump dump.sql [--local]
+clever-compose export [all|terraform|script] -o DIR [--branches]
+clever-compose config --format json               # l'équivalent de `docker compose config`
 ```
+
+Options de projet, avant ou après la commande, comme `docker compose` :
+`-f FICHIER` (répétable), `-p NOM`, `--project-directory DIR`, `--env-file`,
+`--profile`. `--help` sur chaque commande.
 
 - `plan` est un dry-run pur : il lit les images sur leur registre (cache
   local), produit le plan intermédiaire en JSON et tous les diagnostics, avec

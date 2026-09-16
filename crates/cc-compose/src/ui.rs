@@ -9,7 +9,7 @@ use std::io::{IsTerminal, Write};
 pub const PROGRESS: &str = "\u{1}";
 
 pub struct Ui {
-    color: bool,
+    pub color: bool,
     tty: bool,
     /// Ligne de progression affichée, à effacer avant la suivante.
     in_progress: bool,
@@ -137,6 +137,85 @@ impl Ui {
         let mut out = std::io::stderr().lock();
         self.clear_progress(&mut out);
         let _ = writeln!(out);
+    }
+
+    /// Décompte des diagnostics, après leur liste.
+    pub fn summary(&mut self, errors: usize, warnings: usize) {
+        let mut out = std::io::stderr().lock();
+        self.clear_progress(&mut out);
+        let e = format!("{errors} erreur{}", if errors > 1 { "s" } else { "" });
+        let w = format!("{warnings} avertissement{}", if warnings > 1 { "s" } else { "" });
+        let _ = writeln!(out, "{}, {}", if errors > 0 { self.paint("1;31", &e) } else { self.paint("2", &e) }, if warnings > 0 { self.paint("1;33", &w) } else { self.paint("2", &w) });
+    }
+
+    /// Le plan en clair : une ligne par ressource, et le coût mensuel.
+    pub fn plan_summary(&mut self, plan: &cc_compose_model::plan::Plan) {
+        use cc_compose_model::plan::*;
+        let mut out = std::io::stdout().lock();
+        let catalog = crate::plan::addons::catalog();
+        let _ = writeln!(out, "{} {}", self.paint("1", "Projet"), plan.project);
+        let mut rows: Vec<[String; 3]> = Vec::new();
+        let mut monthly = 0.0f64;
+        for r in &plan.resources {
+            match r {
+                Resource::App(a) => {
+                    let kind = match (&a.kind, a.run) {
+                        (AppKind::Task, RunWhere::Local) => "tâche (locale)",
+                        (AppKind::Task, _) => "tâche",
+                        _ => "application",
+                    };
+                    let image = match &a.source {
+                        Source::Synthetic { image, .. } => image.clone(),
+                        Source::Context { context, .. } => format!("build {context}"),
+                    };
+                    let scale = if a.scaling.min_flavor == a.scaling.max_flavor && a.scaling.min_instances == a.scaling.max_instances {
+                        format!("{} ×{}", a.scaling.min_flavor, a.scaling.min_instances)
+                    } else {
+                        format!("{}..{} ×{}..{}", a.scaling.min_flavor, a.scaling.max_flavor, a.scaling.min_instances, a.scaling.max_instances)
+                    };
+                    let extras: Vec<String> = plan
+                        .resources
+                        .iter()
+                        .filter_map(|x| match x {
+                            Resource::Domain(d) if d.app == a.id => Some(d.fqdn.clone()),
+                            Resource::Redirection(x) if x.app == a.id => Some(format!("{:?} {} → 4040", x.protocol, x.target_port).to_lowercase()),
+                            _ => None,
+                        })
+                        .collect();
+                    let mut detail = format!("{image}, {scale}");
+                    if !extras.is_empty() {
+                        detail.push_str(&format!(", {}", extras.join(", ")));
+                    }
+                    rows.push([a.service.clone(), kind.into(), detail]);
+                }
+                Resource::Addon(a) => {
+                    let price = catalog.providers.get(&a.provider).and_then(|p| p.plans.iter().find(|pl| pl.slug == a.plan)).map(|pl| pl.price).unwrap_or(0.0);
+                    monthly += price;
+                    let engine = a.options.get("documentdb").map(|_| " + DocumentDB").unwrap_or("");
+                    let access = if a.private { "network group" } else { "hôte public" };
+                    rows.push([a.service.clone(), "addon".into(), format!("{}{engine} {} plan {} ({price} €/mois HT), {access}", a.provider.trim_end_matches("-addon"), a.version.clone().unwrap_or_default(), a.plan)]);
+                }
+                Resource::NetworkGroup(ng) => {
+                    let members: Vec<String> = plan.resources.iter().filter_map(|x| match x {
+                        Resource::Membership(m) if m.group == ng.id => m.member.0.split('/').nth(1).map(str::to_string),
+                        _ => None,
+                    }).collect();
+                    rows.push([ng.network.clone(), "réseau".into(), format!("network group {} : {}", ng.name, members.join(", "))]);
+                }
+                _ => {}
+            }
+        }
+        let w0 = rows.iter().map(|r| r[0].chars().count()).max().unwrap_or(0);
+        let w1 = rows.iter().map(|r| r[1].chars().count()).max().unwrap_or(0);
+        for r in &rows {
+            let _ = writeln!(out, "  {:<w0$}  {:<w1$}  {}", self.paint("1", &r[0]), self.paint("2", &r[1]), r[2], w0 = w0 + if self.color { 8 } else { 0 }, w1 = w1 + if self.color { 8 } else { 0 });
+        }
+        let count = |kind: &str, sing: &str, plur: &str| {
+            let n = rows.iter().filter(|r| r[1].starts_with(kind)).count();
+            (n > 0).then(|| format!("{n} {}", if n > 1 { plur } else { sing }))
+        };
+        let parts: Vec<String> = [count("application", "application", "applications"), count("tâche", "tâche", "tâches"), count("addon", "addon", "addons"), count("réseau", "network group", "network groups")].into_iter().flatten().collect();
+        let _ = writeln!(out, "{} {} ; addons : {monthly} €/mois HT (les applications sont facturées à l'usage)", self.paint("1", "Total"), parts.join(", "));
     }
 
     /// Bilan final.

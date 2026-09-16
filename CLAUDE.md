@@ -275,13 +275,15 @@ usage (`down --yes`, `terraform destroy`).
 ## 9. Commandes
 
 ```
-clever-compose config | plan | images | export [terraform|script|all] -o DIR [--branches]
-clever-compose up   --org ORG [--dry-run] [--no-wait] [--yes] [--allow-ephemeral]
-clever-compose seed --service SVC --file DUMP [--local]
-clever-compose down --org ORG [-p PROJET] [--dry-run] [--yes]
-clever-compose ps   --org ORG [-p PROJET]
-clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
+clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [--profile P] <commande>
+  plan [--json] | config | images | export [all|terraform|script] -o DIR [--branches]
+  up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
+  seed --service SVC --dump FICHIER [--local]
+  down [--all] [--dry-run] [--yes] | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
 ```
+`clap` (aide par commande, `--org` ou `CC_ORG`). `plan` affiche un résumé
+lisible (ressources, coût) puis les diagnostics ; `--json` pour le plan
+brut. Sortie rendue par `ui.rs` (couleurs, progression, bilan ✔/✘).
 
 ---
 
