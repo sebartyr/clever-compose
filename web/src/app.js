@@ -167,7 +167,7 @@ const Detail = defineComponent({
           <dt v-if="node.data.depends_on.length">Dépend de</dt><dd v-if="node.data.depends_on.length">{{ node.data.depends_on.join(', ') }}</dd>
         </dl>
         <h4 v-if="env.length">Environnement</h4>
-        <table v-if="env.length" class="env"><tr v-for="e in env" :key="e.key"><td><code>{{ e.key }}</code></td><td><code>{{ e.value }}</code></td></tr></table>
+        <div v-if="env.length" class="env"><div v-for="e in env" :key="e.key" class="var"><code class="k">{{ e.key }}</code><code class="v">{{ e.value }}</code></div></div>
       </template>
       <template v-else>
         <dl>
