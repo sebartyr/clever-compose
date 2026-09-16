@@ -281,18 +281,6 @@ fn urlencode(s: &str) -> String {
 
 /// Identifiants de l'outil, indépendants de la CLI clever : `CC_API_TOKEN`
 /// (bearer, api-bridge) ou `CLEVER_TOKEN` + `CLEVER_SECRET` (OAuth 1.0).
-/// Identifiants construits depuis une saisie (interface) : jeton d'API, ou
-/// couple OAuth 1.0.
-pub fn credentials_from_input(api_token: Option<&str>, token: Option<&str>, secret: Option<&str>) -> PResult<Credentials> {
-    if let Some(t) = api_token.filter(|t| !t.trim().is_empty()) {
-        return Ok(Credentials::Bearer { token: t.trim().to_string() });
-    }
-    match (token.filter(|t| !t.trim().is_empty()), secret.filter(|s| !s.trim().is_empty())) {
-        (Some(t), Some(s)) => Ok(Credentials::OAuth1 { token: t.trim().to_string(), secret: s.trim().to_string(), consumer_key: clevercloud_sdk::DEFAULT_CONSUMER_KEY.into(), consumer_secret: clevercloud_sdk::DEFAULT_CONSUMER_SECRET.into() }),
-        _ => Err("un jeton d'API, ou un jeton OAuth 1.0 et son secret".into()),
-    }
-}
-
 pub fn credentials_from_env() -> PResult<Credentials> {
     if let Ok(token) = std::env::var("CC_API_TOKEN") {
         return Ok(Credentials::Bearer { token });

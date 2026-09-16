@@ -30,6 +30,8 @@ pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
         .route("/api/session", get(session_get).post(session_set))
+        .route("/api/session/oauth/start", get(oauth_start))
+        .route("/api/session/oauth/callback", get(oauth_callback))
         .route("/api/orgs", get(orgs))
         .route("/api/platform/projects", get(platform_projects))
         .route("/api/platform/projects/{project}/inventory", get(inventory))
@@ -73,39 +75,113 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
     let org = s.session.read().unwrap().as_ref().map(|x| x.org.clone()).unwrap_or_default();
     let stamp = env!("CC_BUILD_STAMP");
     let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
-    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled") }))
+    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok() }))
 }
 
-/// Session courante : identifiants posés ?, organisation choisie.
+/// Session courante : identifiants posés ?, organisation choisie, danse
+/// OAuth disponible ?
 async fn session_get(AxState(s): AxState<Shared>) -> Json<J> {
     let guard = s.session.read().unwrap();
-    Json(json!({ "authenticated": guard.is_some(), "org": guard.as_ref().map(|x| x.org.clone()).unwrap_or_default() }))
+    Json(json!({ "authenticated": guard.is_some(), "org": guard.as_ref().map(|x| x.org.clone()).unwrap_or_default(), "oauth": s.oauth.is_some() }))
 }
 
 #[derive(Deserialize, Default)]
 struct SessionBody {
-    api_token: Option<String>,
-    token: Option<String>,
-    secret: Option<String>,
     org: Option<String>,
 }
 
-/// Pose les identifiants (vérifiés par un appel à `/v2/self`) et/ou
-/// l'organisation. Sans identifiants dans le corps, ceux de la session
-/// sont gardés.
+/// Choisit l'organisation de la session (les identifiants viennent de
+/// l'environnement ou de la danse OAuth, jamais du corps).
 async fn session_set(AxState(s): AxState<Shared>, Json(b): Json<SessionBody>) -> Result<Json<J>, ApiError> {
-    let creds_given = b.api_token.as_deref().is_some_and(|t| !t.trim().is_empty()) || b.token.as_deref().is_some_and(|t| !t.trim().is_empty());
-    let api = if creds_given {
-        let creds = crate::exec::platform::credentials_from_input(b.api_token.as_deref(), b.token.as_deref(), b.secret.as_deref()).map_err(bad)?;
-        crate::exec::platform::Api::new(String::new(), creds)
-    } else {
-        s.api().map_err(bad)?
-    };
+    let api = s.api().map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     let orgs = api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("identifiants refusés : {e}")))?;
     let org = b.org.filter(|o| !o.is_empty()).or_else(|| s.session.read().unwrap().as_ref().map(|x| x.org.clone()).filter(|o| !o.is_empty())).unwrap_or_default();
     let api = api.for_owner(&org);
     *s.session.write().unwrap() = Some(super::Session { api, org: org.clone() });
     Ok(Json(json!({ "authenticated": true, "org": org, "orgs": orgs })))
+}
+
+/// Encodage percent d'OAuth (RFC 3986, non réservés seulement).
+fn oauth_enc(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+fn oauth_nonce() -> String {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
+    format!("{:x}{:x}{:x}", t.as_nanos(), std::process::id(), rand_u64())
+}
+
+fn rand_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new().build_hasher().finish()
+}
+
+/// Paramètres OAuth communs, signature `PLAINTEXT` (le transport est TLS ;
+/// la doc de l'API l'admet).
+fn oauth_params(consumer: &super::OauthConsumer, token_secret: &str) -> Vec<(String, String)> {
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    vec![
+        ("oauth_consumer_key".into(), consumer.key.clone()),
+        ("oauth_signature_method".into(), "PLAINTEXT".into()),
+        ("oauth_signature".into(), format!("{}&{}", oauth_enc(&consumer.secret), oauth_enc(token_secret))),
+        ("oauth_timestamp".into(), ts.to_string()),
+        ("oauth_nonce".into(), oauth_nonce()),
+        ("oauth_version".into(), "1.0".into()),
+    ]
+}
+
+fn parse_form(text: &str) -> std::collections::HashMap<String, String> {
+    text.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.replace('+', " "))).collect()
+}
+
+/// Étape 1 de la danse : request token, puis redirection vers la page
+/// d'autorisation de Clever Cloud.
+async fn oauth_start(AxState(s): AxState<Shared>) -> Result<Response, ApiError> {
+    let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré (CLEVER_CONSUMER_KEY / CLEVER_CONSUMER_SECRET)"))?;
+    let mut params = oauth_params(&consumer, "");
+    params.push(("oauth_callback".into(), format!("{}/api/session/oauth/callback", s.public_base)));
+    let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
+    let url = format!("{}/v2/oauth/request_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
+    let resp = clevercloud_sdk::oauth10a::reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("request_token : {e}")))?;
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(internal(format!("request_token : {status} {text}")));
+    }
+    let form = parse_form(&text);
+    let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("request_token : réponse inattendue : {text}"))) };
+    s.pending.lock().unwrap().insert(token.clone(), secret.clone());
+    Ok(axum::response::Redirect::temporary(&format!("{}/v2/oauth/authorize?oauth_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(token))).into_response())
+}
+
+#[derive(Deserialize)]
+struct OauthCallback {
+    oauth_token: String,
+    oauth_verifier: String,
+}
+
+/// Étape 3 : access token, session ouverte, retour à l'interface.
+async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
+    let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré"))?;
+    let request_secret = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
+    let mut params = oauth_params(&consumer, &request_secret);
+    params.push(("oauth_token".into(), q.oauth_token.clone()));
+    params.push(("oauth_verifier".into(), q.oauth_verifier.clone()));
+    let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
+    let url = format!("{}/v2/oauth/access_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
+    let resp = clevercloud_sdk::oauth10a::reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("access_token : {e}")))?;
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(internal(format!("access_token : {status} {text}")));
+    }
+    let form = parse_form(&text);
+    let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("access_token : réponse inattendue : {text}"))) };
+    let creds = clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key: consumer.key.clone(), consumer_secret: consumer.secret.clone() };
+    let api = crate::exec::platform::Api::new(String::new(), creds);
+    api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("jeton obtenu mais refusé par l'API : {e}")))?;
+    *s.session.write().unwrap() = Some(super::Session { api, org: String::new() });
+    Ok(axum::response::Redirect::temporary("/").into_response())
 }
 
 async fn orgs(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiError> {
@@ -195,20 +271,19 @@ async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -
 }
 
 /// Manifeste, plan et fichiers texte du bucket d'assets du projet.
-async fn assets_get(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s)?;
-    let Some(cellar) = crate::exec::assets::open(&api, &api.owner_id(), &project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false }))) };
-    let (manifest, plan, files) = crate::exec::assets::fetch(&cellar).await.map_err(internal)?;
+async fn assets_get(AxState(_s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
+    let configured = std::env::var(crate::exec::assets::ENV_BUCKET).is_ok();
+    let Some((cellar, manifest)) = crate::exec::assets::open(&project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false, "configured": configured }))) };
+    let (plan, files) = crate::exec::assets::fetch(&cellar, &manifest).await.map_err(internal)?;
     let files: Vec<J> = files.into_iter().map(|(path, bytes)| json!({ "path": path, "size": bytes.len(), "content": std::str::from_utf8(&bytes).ok() })).collect();
-    Ok(Json(json!({ "present": true, "bucket": cellar.bucket_name(), "manifest": manifest, "plan": plan, "files": files })))
+    Ok(Json(json!({ "present": true, "configured": true, "bucket": cellar.bucket_name(), "manifest": manifest, "plan": plan, "files": files })))
 }
 
 /// Rapatrie le bucket d'un projet dans un répertoire temporaire et
 /// l'enregistre comme projet local.
 async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s)?;
-    let Some(cellar) = crate::exec::assets::open(&api, &api.owner_id(), &project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
-    let (_manifest, _plan, files) = crate::exec::assets::fetch(&cellar).await.map_err(internal)?;
+    let Some((cellar, manifest)) = crate::exec::assets::open(&project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
+    let (_plan, files) = crate::exec::assets::fetch(&cellar, &manifest).await.map_err(internal)?;
     let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-assets-{project}", std::process::id()));
     let dir = root.join(&project);
     let _ = std::fs::remove_dir_all(&root);

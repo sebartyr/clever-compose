@@ -362,11 +362,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     // Assets : les fichiers du projet et le plan dans le bucket Cellar du
     // projet, pour une relecture depuis la plateforme.
     if plan.assets || opts.assets {
-        let region = plan.resources.iter().find_map(|r| match r {
-            Resource::App(a) => Some(a.region.clone()),
-            _ => None,
-        }).unwrap_or_else(|| "par".into());
-        super::assets::sync(plan, opts.project_dir, platform, &region, opts, log).await?;
+        super::assets::sync(plan, opts.project_dir, opts, log).await?;
     }
     Ok(state)
 }
@@ -592,8 +588,8 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
             log(&format!("network group {} ({}) : supprimé", x.label, x.id));
         }
     }
-    // Le bucket d'assets du projet, s'il existe (l'addon Cellar partagé reste).
-    super::assets::remove(platform, &platform.owner_id(), project, dry_run, log).await?;
+    // Les assets du projet dans le bucket configuré, s'il y en a.
+    super::assets::remove(project, dry_run, log).await?;
     if !inv.apps.iter().any(|a| a.tagged) {
         log(&format!("aucune application taguée `compose-project={project}` : rien à faire ?"));
     }

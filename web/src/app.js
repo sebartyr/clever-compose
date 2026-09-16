@@ -15,54 +15,31 @@ const SessionPanel = defineComponent({
   props: { session: Object, orgs: Array },
   emits: ['changed'],
   setup(props, { emit }) {
-    const open = ref(false);
-    const form = reactive({ api_token: '', token: '', secret: '' });
     const busy = ref(false);
-    const status = ref('');
     const error = ref('');
-    const submit = async () => {
-      busy.value = true; error.value = '';
-      try {
-        await api.setSession({ api_token: form.api_token, token: form.token, secret: form.secret });
-        // Gardés dans le sessionStorage du navigateur (durée de l'onglet) :
-        // le serveur les perd à son redémarrage, la page les lui renvoie.
-        try { sessionStorage.setItem('clever-compose.session', JSON.stringify({ api_token: form.api_token, token: form.token, secret: form.secret })); } catch { /* stockage indisponible */ }
-        form.api_token = ''; form.token = ''; form.secret = '';
-        open.value = false;
-        emit('changed');
-      } catch (e) { error.value = e.message; } finally { busy.value = false; }
-    };
     const chooseOrg = async (e) => {
       const org = val(e);
       if (!org) return;
       busy.value = true;
       try {
         await api.setSession({ org });
-        try { sessionStorage.setItem('clever-compose.org', org); } catch { /* stockage indisponible */ }
+        try { localStorage.setItem('clever-compose.org', org); } catch { /* stockage indisponible */ }
         emit('changed');
       } catch (err) { error.value = err.message; } finally { busy.value = false; }
     };
-    return { open, form, busy, error, submit, chooseOrg, val };
+    // La danse OAuth se fait par redirection : le serveur obtient le request
+    // token, Clever Cloud demande l'autorisation, le callback ouvre la session.
+    const login = () => { location.href = '/api/session/oauth/start'; };
+    return { busy, error, chooseOrg, login, val };
   },
   template: `
     <div class="session">
       <template v-if="session?.authenticated">
         <cc-select label="Organisation" :hiddenLabel="true" :inline="true" :options="orgs.map(o => ({ label: o.name, value: o.id }))" :value="session.org" placeholder="Choisir une organisation" @cc-select="chooseOrg" :disabled="busy"></cc-select>
-        <cc-button :outlined="true" title="Changer les identifiants" @cc-click="open = true">Jetons</cc-button>
       </template>
-      <cc-button v-else :primary="true" title="Saisir un jeton d'API ou OAuth 1.0" @cc-click="open = true">Se connecter</cc-button>
-      <cc-dialog heading="Identifiants Clever Cloud" :open="open" @cc-close="open = false" closedBy="any">
-        <p class="hint">Un jeton d'API (bearer), ou un jeton OAuth 1.0 et son secret (ceux de la CLI clever conviennent). Ils restent en mémoire du serveur local, jamais sur le disque.</p>
-        <cc-input-text label="Jeton d'API" :secret="true" :value="form.api_token" @cc-input="e => form.api_token = val(e)"></cc-input-text>
-        <p class="hint">— ou —</p>
-        <cc-input-text label="Jeton OAuth 1.0" :secret="true" :value="form.token" @cc-input="e => form.token = val(e)"></cc-input-text>
-        <cc-input-text label="Secret OAuth 1.0" :secret="true" :value="form.secret" @cc-input="e => form.secret = val(e)"></cc-input-text>
-        <cc-notice v-if="error" intent="danger" :message="error"></cc-notice>
-        <div class="row-end">
-          <cc-button :outlined="true" @cc-click="open = false">Annuler</cc-button>
-          <cc-button :primary="true" :waiting="busy" @cc-click="submit">Vérifier et utiliser</cc-button>
-        </div>
-      </cc-dialog>
+      <cc-button v-else-if="session?.oauth" :primary="true" title="Autorisation via Clever Cloud (consumer OAuth configuré au lancement)" @cc-click="login">Se connecter</cc-button>
+      <span v-else class="dim">Identifiants absents : lancez l'interface avec CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN, ou un consumer OAuth.</span>
+      <cc-notice v-if="error" intent="danger" :message="error"></cc-notice>
     </div>
   `,
 });
@@ -230,15 +207,25 @@ export const App = defineComponent({
     const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false, tail: false });
     // Une opération (up, down…) bloque les autres ; un suivi de logs, non.
     const opRunning = computed(() => logs.running && !logs.tail);
-    const opts = reactive({ yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, assets: false, branches: false });
-    const seed = reactive({ service: '', dump: '', local: false, uploading: false });
+    // Choix de l'utilisateur gardés dans le localStorage (les jetons, eux,
+    // viennent de l'environnement ou de la danse OAuth) : options, requête de logs, seed local,
+    // dernier projet ouvert, onglet.
+    const remembered = (key, fallback) => { try { return { ...fallback, ...(JSON.parse(localStorage.getItem('clever-compose.' + key) || 'null') || {}) }; } catch { return fallback; } };
+    const remember = (key, value) => { try { localStorage.setItem('clever-compose.' + key, JSON.stringify(value)); } catch { /* stockage indisponible */ } };
+    const opts = reactive(remembered('opts', { yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, assets: false, branches: false }));
+    const seed = reactive({ service: '', dump: '', uploading: false, ...remembered('seed', { local: false }) });
     const uploadDump = async (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
       seed.uploading = true;
       try { const r = await api.uploadDump(current.value.id, f); seed.dump = r.path; files.value = (await api.files(current.value.id)).files; } catch (err) { notify(err); } finally { seed.uploading = false; e.target.value = ''; }
     };
-    const logQuery = reactive({ services: '', since: '1h', follow: true });
+    const logQuery = reactive(remembered('logs', { services: '', since: '1h', follow: true }));
+    watch(opts, (v) => remember('opts', v), { deep: true });
+    watch(() => seed.local, (local) => remember('seed', { local }));
+    watch(logQuery, (v) => remember('logs', v), { deep: true });
+    watch(current, (c) => { if (c) remember('current', { type: c.type, id: c.id, name: c.name, dir: c.dir }); });
+    watch(tab, (t) => remember('tab', { tab: t }));
     const dialog = reactive({ down: false, seed: false, addDir: false, path: '' });
 
     const notify = (e) => { error.value = e?.message || String(e); setTimeout(() => { if (error.value === (e?.message || String(e))) error.value = ''; }, 8000); };
@@ -246,15 +233,14 @@ export const App = defineComponent({
     const loadInfo = async () => { try { info.value = await api.info(); } catch { /* serveur absent */ } };
     const refreshSession = async () => {
       session.value = await api.session();
-      // Jetons et organisation du sessionStorage, si le serveur ne les a pas.
+      // Organisation retenue (localStorage) si la session n'en a pas.
       try {
-        const saved = JSON.parse(sessionStorage.getItem('clever-compose.session') || 'null');
-        const savedOrg = sessionStorage.getItem('clever-compose.org') || '';
-        if ((!session.value.authenticated && saved) || (session.value.authenticated && !session.value.org && savedOrg)) {
-          await api.setSession({ ...(session.value.authenticated ? {} : saved), org: savedOrg || undefined });
+        const savedOrg = localStorage.getItem('clever-compose.org') || '';
+        if (session.value.authenticated && !session.value.org && savedOrg) {
+          await api.setSession({ org: savedOrg });
           session.value = await api.session();
         }
-      } catch { /* jetons refusés ou stockage indisponible : l'utilisateur saisira */ }
+      } catch { /* organisation plus accessible : l'utilisateur choisira */ }
       if (session.value.authenticated) {
         try { orgs.value = (await api.orgs()).orgs; } catch (e) { notify(e); }
         if (session.value.org) await refreshPlatform();
@@ -290,7 +276,7 @@ export const App = defineComponent({
       try { inventory.value = await api.inventory(current.value.name); } catch (e) { inventory.value = null; if (current.value.type === 'platform') notify(e); }
     };
     const openLocal = async (p) => {
-      current.value = { type: 'local', id: p.id, name: p.name };
+      current.value = { type: 'local', id: p.id, name: p.name, dir: p.dir };
       selected.value = null; viewPlatform.value = false; exportResult.value = null; inventory.value = null;
       tab.value = 'diagram';
       const f = await api.files(p.id);
@@ -390,9 +376,15 @@ export const App = defineComponent({
       await loadInfo(); await refreshSession(); await refreshLocals();
       // Liens directs : ?project=<nom> (plateforme) ou ?local=<id>.
       const q = new URLSearchParams(location.search);
+      const last = remembered('current', {});
       if (q.get('project') && session.value.org) await openPlatform(q.get('project'));
       else if (q.get('local') && locals.value.some((p) => p.id === q.get('local'))) await openLocal(locals.value.find((p) => p.id === q.get('local')));
+      else if (last.type === 'local' && last.dir && locals.value.some((p) => p.dir === last.dir)) await openLocal(locals.value.find((p) => p.dir === last.dir));
+      else if (last.type === 'local' && last.dir) { try { const r = await api.addDir(last.dir); await refreshLocals(); const p = locals.value.find((x) => x.id === r.id); if (p) await openLocal(p); } catch { /* répertoire disparu */ } }
+      else if (last.type === 'platform' && last.name && session.value.org && platformProjects.value.includes(last.name)) await openPlatform(last.name);
       else if (locals.value.length) await openLocal(locals.value[0]);
+      const t = remembered('tab', {}).tab;
+      if (t && current.value && ['diagram', 'compose', 'diagnostics'].includes(t)) tab.value = t;
     });
 
     return { assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
@@ -416,7 +408,7 @@ export const App = defineComponent({
         <label class="upload" title="Archive .zip, .tar.gz, .tgz ou .tar contenant le projet ; extraite dans un répertoire temporaire"><input type="file" accept=".zip,.tar,.tgz,.tar.gz" @change="upload"><span>Charger une archive (.zip, .tar.gz)</span></label>
         <cc-button :outlined="true" title="Un répertoire du poste qui contient un compose.yaml" @cc-click="dialog.addDir = true">Ouvrir un répertoire du poste</cc-button>
         <h2>Sur la plateforme <cc-button :outlined="true" :hideText="true" title="Relit les projets de l'organisation" @cc-click="refreshPlatform">Rafraîchir</cc-button></h2>
-        <p v-if="!session.authenticated" class="dim">Connectez-vous pour voir les projets déployés.</p>
+        <p v-if="!session.authenticated" class="dim">Connectez-vous (en haut à droite) pour voir les projets déployés.</p>
         <p v-else-if="!session.org" class="dim">Choisissez une organisation.</p>
         <ul v-else>
           <li v-for="name in platformProjects" :key="name" :class="{ active: current?.type === 'platform' && current.id === name }"><a href="#" @click.prevent="openPlatform(name)">{{ name }}</a></li>
@@ -433,13 +425,7 @@ export const App = defineComponent({
             <h2>{{ current.name }} <cc-badge v-if="current.type === 'local'" weight="dimmed">local</cc-badge><cc-badge v-if="onPlatform" intent="success" weight="dimmed">déployé</cc-badge></h2>
             <span class="grow"></span>
             <template v-if="current.type === 'local'">
-              <span class="options">
-                <label class="switch" title="Confirme la création des addons (facturés) ; sans elle, up s'arrête avant de créer un addon"><input type="checkbox" v-model="opts.yes"> --yes</label>
-                <label class="switch" title="Décrit ce qui serait fait sans rien modifier sur la plateforme"><input type="checkbox" v-model="opts.dry_run"> --dry-run</label>
-                <label class="switch" title="Accepte les volumes nommés des services non substituables comme stockage éphémère (données perdues au redéploiement)"><input type="checkbox" v-model="opts.allow_ephemeral"> --allow-ephemeral</label>
-                <label class="switch" title="N'attend pas la fin des déploiements"><input type="checkbox" v-model="opts.no_wait"> --no-wait</label>
-                <label class="switch" title="Conserve les fichiers du projet et le plan dans un bucket Cellar de l'organisation : le projet reste lisible ici sans son dossier (x-clever.assets: true fait pareil)"><input type="checkbox" v-model="opts.assets"> --assets</label>
-              </span>
+              <cc-toggle legend="Options" :hideText="false" :inline="true" title="--yes : confirme la création des addons (facturés). --dry-run : décrit sans rien modifier. --allow-ephemeral : volumes nommés acceptés comme stockage éphémère. --no-wait : n'attend pas les déploiements. --assets : fichiers et plan conservés dans le bucket Cellar configuré (CC_ASSETS_BUCKET)." :choices="[{label:'--yes', value:'yes'},{label:'--dry-run', value:'dry_run'},{label:'--allow-ephemeral', value:'allow_ephemeral'},{label:'--no-wait', value:'no_wait'},{label:'--assets', value:'assets'}]" :multipleValues="['yes','dry_run','allow_ephemeral','no_wait','assets'].filter(k => opts[k])" @cc-multi-select="e => { const v = val(e) || []; for (const k of ['yes','dry_run','allow_ephemeral','no_wait','assets']) opts[k] = v.includes(k); }"></cc-toggle>
               <cc-button :outlined="true" :waiting="busy" :disabled="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
               <cc-button :primary="true" :disabled="errors > 0 || opRunning" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
               <cc-button :outlined="true" :disabled="!plan || opRunning" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>

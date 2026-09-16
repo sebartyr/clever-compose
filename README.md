@@ -71,10 +71,12 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   id réel attendu dans la variable `addon_<service>_real_id`), UDP.
 - `--assets` (ou `x-clever.assets: true` au niveau projet) conserve les
   fichiers du projet (compose, fichiers montés, scripts) et le plan dans un
-  bucket Cellar de l'organisation (addon `clever-compose-assets`, un bucket
-  par projet, facturé à l'usage) : l'interface lit alors un projet déployé
-  sans son dossier et peut le rapatrier en projet local ; `down` supprime
-  le bucket.
+  bucket Cellar que vous créez vous-même, configuré par `CC_ASSETS_BUCKET`
+  et les variables de l'addon (`CELLAR_ADDON_HOST`, `CELLAR_ADDON_KEY_ID`,
+  `CELLAR_ADDON_KEY_SECRET`) ; un seul bucket, un préfixe `<projet>/` par
+  projet. L'interface lit alors un projet déployé sans son dossier et peut
+  le rapatrier en projet local ; `down` retire les objets du projet, jamais
+  le bucket. L'outil ne crée ni addon ni bucket.
 - Image sur un registre privé : `docker login <hôte>` sur le poste suffit,
   `up` pose `CC_DOCKER_LOGIN_*` depuis la configuration Docker et l'export
   Terraform attend `registry_<hôte>_user`/`_password` en variables.
@@ -89,12 +91,14 @@ ressources (network groups, applications, tâches, addons, dépendances) avec
 le détail au clic, `plan` et diagnostics, éditeur du compose (enregistrer
 replanifie), `up`/`seed`/`down` avec le journal en direct, `logs`, exports
 Terraform et script. Les projets déployés de l'organisation s'y retrouvent
-avec l'état des instances. Identifiants : ceux de l'environnement, ou saisis
-dans l'interface (jeton d'API ou OAuth 1.0, gardés en mémoire du serveur) ;
-l'organisation se choisit dans la liste.
-
-Les jetons saisis dans l'interface sont gardés dans le `sessionStorage` du
-navigateur (le temps de l'onglet) et renvoyés au serveur s'il a redémarré.
+avec l'état des instances. Identifiants : ceux de l'environnement
+(`CLEVER_TOKEN`/`CLEVER_SECRET` ou `CC_API_TOKEN`), ou la danse OAuth 1.0
+avec un consumer que vous créez dans la console (base URL = adresse
+d'écoute, par ex. `http://127.0.0.1:7777`) et passez par
+`CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` : « Se connecter » ouvre la
+page d'autorisation Clever Cloud et le retour ouvre la session. Sans l'un ni
+l'autre, `ui` refuse de démarrer. L'organisation se choisit dans la liste
+(retenue dans le navigateur, comme les options).
 
 Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
 est embarqué dans le binaire, de deux façons choisies au build :

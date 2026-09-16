@@ -26,9 +26,23 @@ pub struct Session {
     pub org: String,
 }
 
+/// Consumer OAuth 1.0 (créé par l'utilisateur dans la console, base URL =
+/// adresse d'écoute) : permet la danse OAuth quand aucun jeton n'est dans
+/// l'environnement.
+#[derive(Clone)]
+pub struct OauthConsumer {
+    pub key: String,
+    pub secret: String,
+}
+
 pub struct State {
     pub session: RwLock<Option<Session>>,
     pub locals: local::Locals,
+    pub oauth: Option<OauthConsumer>,
+    /// `http://<adresse d'écoute>`, base du `oauth_callback`.
+    pub public_base: String,
+    /// Request tokens en attente d'autorisation → leur secret.
+    pub pending: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl State {
@@ -40,14 +54,17 @@ impl State {
 
 /// Lance le serveur et bloque jusqu'à Ctrl-C. `session` peut être absente :
 /// l'interface demandera les identifiants.
-pub async fn serve(listen: SocketAddr, session: Option<Session>, initial_dir: Option<std::path::PathBuf>, open_browser: bool) -> Result<(), String> {
+pub async fn serve(listen: SocketAddr, session: Option<Session>, oauth: Option<OauthConsumer>, initial_dir: Option<std::path::PathBuf>, open_browser: bool) -> Result<(), String> {
+    if session.is_none() && oauth.is_none() {
+        return Err("aucun identifiant : posez CLEVER_TOKEN et CLEVER_SECRET (ou CC_API_TOKEN), ou un consumer OAuth (CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET, base URL = adresse d'écoute) pour vous connecter depuis l'interface".into());
+    }
     let locals = local::Locals::default();
     if let Some(dir) = initial_dir {
         if dir.join("compose.yaml").is_file() || dir.join("compose.yml").is_file() || dir.join("docker-compose.yaml").is_file() || dir.join("docker-compose.yml").is_file() {
             locals.add_dir(dir, false)?;
         }
     }
-    let state = Arc::new(State { session: RwLock::new(session), locals });
+    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base: format!("http://{listen}"), pending: Default::default() });
     let app = api::router(state).fallback(assets::serve);
     let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| format!("écoute sur {listen} : {e}"))?;
     let url = format!("http://{}/", listener.local_addr().map_err(|e| e.to_string())?);
