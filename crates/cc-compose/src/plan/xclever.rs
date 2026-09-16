@@ -49,6 +49,9 @@ pub struct XClever {
     /// d'initialisation. `task` (défaut : une Clever Task) ou `local`
     /// (depuis le poste qui lance `up`).
     pub init: Option<String>,
+    /// Niveau projet : conserver les fichiers du projet et le plan dans un
+    /// bucket Cellar de l'organisation (relecture depuis la plateforme).
+    pub assets: Option<bool>,
     /// Niveau projet : comment les réseaux Compose deviennent des network
     /// groups. `per-network` (un groupe par réseau), `single` (un seul
     /// groupe pour tout le projet), `none` (aucun : les services ne se

@@ -32,6 +32,11 @@ pub struct Plan {
     /// tag sur chaque ressource pour la réconciliation sans état (§7).
     pub spec_hash: String,
     pub resources: Vec<Resource>,
+    /// Conserver les fichiers du projet et ce plan dans un bucket Cellar
+    /// de l'organisation (`x-clever.assets: true` au niveau projet), pour
+    /// relire un projet déployé sans son dossier.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub assets: bool,
 }
 
 /// Identifiant symbolique, stable, dérivé des noms Compose :

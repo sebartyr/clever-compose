@@ -90,6 +90,9 @@ enum Command {
         /// N'attend pas la fin des déploiements
         #[arg(long, help_heading = "Exécution")]
         no_wait: bool,
+        /// Conserve les fichiers du projet et le plan dans un bucket Cellar de l'organisation (relecture depuis la plateforme) ; `x-clever.assets: true` fait pareil
+        #[arg(long, help_heading = "Exécution")]
+        assets: bool,
     },
     /// Charge un dump local dans un addon (une fois par contenu)
     Seed {
@@ -224,8 +227,8 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Plan { plan, json } => cmd_plan(opts, &plan, json),
         Command::Config { format } => cmd_config(opts, format),
-        Command::Up { org, plan, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, None),
-        Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, Some((service, file, local))),
+        Command::Up { org, plan, dry_run, yes, no_wait, assets } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, assets, None),
+        Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, false, Some((service, file, local))),
         Command::Down { org, all, dry_run, yes } => cmd_down(opts, &org.org, all, dry_run, yes),
         Command::Ps { org } => cmd_ps(opts, &org.org),
         Command::Stop { org } => cmd_stop_start(opts, &org.org, false),
@@ -371,7 +374,8 @@ fn api(org: &str) -> Result<cc_compose::exec::platform::Api, String> {
     Ok(cc_compose::exec::platform::Api::new(org.to_string(), creds))
 }
 
-fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: bool, yes: bool, no_wait: bool, seed: Option<(String, PathBuf, bool)>) -> ExitCode {
+#[allow(clippy::too_many_arguments)]
+fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: bool, yes: bool, no_wait: bool, assets: bool, seed: Option<(String, PathBuf, bool)>) -> ExitCode {
     let api = match api(org) {
         Ok(a) => a,
         Err(e) => return fail(&e),
@@ -400,7 +404,7 @@ fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: 
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let ui2 = ui.clone();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(move |line: &str| ui2.lock().unwrap().log(line));
-    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons: yes }, &mut log));
+    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons: yes, assets }, &mut log));
     drop(log);
     let mut ui = ui.lock().unwrap();
     match result {

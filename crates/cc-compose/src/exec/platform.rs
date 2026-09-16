@@ -270,6 +270,8 @@ pub trait Platform: Send + Sync {
     fn delete_ng(&self, ng: &str) -> impl Future<Output = PResult<()>> + Send;
     /// Identifiants pour le push git HTTPS (`user`, `password`).
     fn git_credentials(&self) -> (String, String);
+    /// Propriétaire ciblé (`orga_…` ou `user_…`).
+    fn owner_id(&self) -> String;
 }
 
 /// Segment d'URL (`=` et `/` d'un tag `compose-project=x`).
@@ -617,6 +619,10 @@ impl Platform for Api {
     async fn delete_ng(&self, ng: &str) -> PResult<()> {
         self.send(reqwest::Method::DELETE, &format!("{}/v4/networkgroups/organisations/{}/networkgroups/{ng}", self.base(), self.owner), None).await?;
         Ok(())
+    }
+
+    fn owner_id(&self) -> String {
+        self.owner.clone()
     }
 
     fn git_credentials(&self) -> (String, String) {

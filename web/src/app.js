@@ -24,6 +24,9 @@ const SessionPanel = defineComponent({
       busy.value = true; error.value = '';
       try {
         await api.setSession({ api_token: form.api_token, token: form.token, secret: form.secret });
+        // Gardés dans le sessionStorage du navigateur (durée de l'onglet) :
+        // le serveur les perd à son redémarrage, la page les lui renvoie.
+        try { sessionStorage.setItem('clever-compose.session', JSON.stringify({ api_token: form.api_token, token: form.token, secret: form.secret })); } catch { /* stockage indisponible */ }
         form.api_token = ''; form.token = ''; form.secret = '';
         open.value = false;
         emit('changed');
@@ -33,7 +36,11 @@ const SessionPanel = defineComponent({
       const org = val(e);
       if (!org) return;
       busy.value = true;
-      try { await api.setSession({ org }); emit('changed'); } catch (err) { error.value = err.message; } finally { busy.value = false; }
+      try {
+        await api.setSession({ org });
+        try { sessionStorage.setItem('clever-compose.org', org); } catch { /* stockage indisponible */ }
+        emit('changed');
+      } catch (err) { error.value = err.message; } finally { busy.value = false; }
     };
     return { open, form, busy, error, submit, chooseOrg, val };
   },
@@ -214,6 +221,8 @@ export const App = defineComponent({
     const files = ref([]);
     const file = reactive({ path: '', content: '', dirty: false });
     const exportResult = ref(null);
+    const assets = ref(null);
+    const assetFile = ref('');
     const exportFile = ref('');
     const selected = ref(null);
     const busy = ref(false);
@@ -221,7 +230,7 @@ export const App = defineComponent({
     const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false, tail: false });
     // Une opération (up, down…) bloque les autres ; un suivi de logs, non.
     const opRunning = computed(() => logs.running && !logs.tail);
-    const opts = reactive({ yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, branches: false });
+    const opts = reactive({ yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, assets: false, branches: false });
     const seed = reactive({ service: '', dump: '', local: false, uploading: false });
     const uploadDump = async (e) => {
       const f = e.target.files?.[0];
@@ -237,6 +246,15 @@ export const App = defineComponent({
     const loadInfo = async () => { try { info.value = await api.info(); } catch { /* serveur absent */ } };
     const refreshSession = async () => {
       session.value = await api.session();
+      // Jetons et organisation du sessionStorage, si le serveur ne les a pas.
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('clever-compose.session') || 'null');
+        const savedOrg = sessionStorage.getItem('clever-compose.org') || '';
+        if ((!session.value.authenticated && saved) || (session.value.authenticated && !session.value.org && savedOrg)) {
+          await api.setSession({ ...(session.value.authenticated ? {} : saved), org: savedOrg || undefined });
+          session.value = await api.session();
+        }
+      } catch { /* jetons refusés ou stockage indisponible : l'utilisateur saisira */ }
       if (session.value.authenticated) {
         try { orgs.value = (await api.orgs()).orgs; } catch (e) { notify(e); }
         if (session.value.org) await refreshPlatform();
@@ -283,11 +301,30 @@ export const App = defineComponent({
       await loadPlan();
       await loadInventory();
     };
+    const loadAssets = async () => {
+      assets.value = null;
+      if (!current.value || !session.value.org) return;
+      try {
+        const a = await api.assets(current.value.name);
+        assets.value = a.present ? a : null;
+        if (assets.value) assetFile.value = assets.value.files.find((f) => /compose\.ya?ml$/.test(f.path))?.path || assets.value.files[0]?.path || '';
+      } catch { assets.value = null; }
+    };
     const openPlatform = async (name) => {
       current.value = { type: 'platform', id: name, name };
       selected.value = null; plan.value = null; diagnostics.value = []; exportResult.value = null;
       tab.value = 'diagram';
       await loadInventory();
+      await loadAssets();
+      if (assets.value?.plan) plan.value = assets.value.plan;
+    };
+    const openFromAssets = async () => {
+      try {
+        const r = await api.assetsOpen(current.value.name);
+        await refreshLocals();
+        const p = locals.value.find((x) => x.id === r.id);
+        if (p) await openLocal(p);
+      } catch (e) { notify(e); }
     };
     const openFile = async (path) => {
       const r = await api.readFile(current.value.id, path);
@@ -320,7 +357,7 @@ export const App = defineComponent({
         if (current.value?.type === 'local') viewPlatform.value = !!inventory.value;
       });
     };
-    const doUp = () => run('up ' + current.value.name, (onLog) => api.up(current.value.id, { yes: opts.yes, dry_run: opts.dry_run, allow_ephemeral: opts.allow_ephemeral, no_wait: opts.no_wait }, onLog));
+    const doUp = () => run('up ' + current.value.name, (onLog) => api.up(current.value.id, { yes: opts.yes, dry_run: opts.dry_run, allow_ephemeral: opts.allow_ephemeral, no_wait: opts.no_wait, assets: opts.assets }, onLog));
     const doStop = () => run('stop ' + current.value.name, (onLog) => api.stop(current.value.name, onLog));
     const doStart = () => run('start ' + current.value.name, (onLog) => api.start(current.value.name, onLog));
     const doDown = () => { dialog.down = false; run('down ' + current.value.name, (onLog) => api.down(current.value.name, { yes: opts.yes, dry_run: opts.dry_run }, onLog)); };
@@ -358,7 +395,7 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -401,6 +438,7 @@ export const App = defineComponent({
                 <label class="switch" title="Décrit ce qui serait fait sans rien modifier sur la plateforme"><input type="checkbox" v-model="opts.dry_run"> --dry-run</label>
                 <label class="switch" title="Accepte les volumes nommés des services non substituables comme stockage éphémère (données perdues au redéploiement)"><input type="checkbox" v-model="opts.allow_ephemeral"> --allow-ephemeral</label>
                 <label class="switch" title="N'attend pas la fin des déploiements"><input type="checkbox" v-model="opts.no_wait"> --no-wait</label>
+                <label class="switch" title="Conserve les fichiers du projet et le plan dans un bucket Cellar de l'organisation : le projet reste lisible ici sans son dossier (x-clever.assets: true fait pareil)"><input type="checkbox" v-model="opts.assets"> --assets</label>
               </span>
               <cc-button :outlined="true" :waiting="busy" :disabled="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
               <cc-button :primary="true" :disabled="errors > 0 || opRunning" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
@@ -416,16 +454,20 @@ export const App = defineComponent({
           <nav class="tabs">
             <a :class="{ active: tab === 'diagram' }" href="#" @click.prevent="tab = 'diagram'">Diagramme</a>
             <a v-if="current.type === 'local'" :class="{ active: tab === 'compose' }" href="#" @click.prevent="tab = 'compose'">Compose</a>
+            <a v-if="current.type === 'platform' && assets" :class="{ active: tab === 'assets' }" href="#" @click.prevent="tab = 'assets'">Fichiers (Cellar)</a>
             <a v-if="current.type === 'local'" :class="{ active: tab === 'diagnostics' }" href="#" @click.prevent="tab = 'diagnostics'">Diagnostics <cc-badge v-if="diagnostics.length" :intent="errors ? 'danger' : 'warning'" weight="dimmed" circle>{{ diagnostics.length }}</cc-badge></a>
             <a v-if="exportResult" :class="{ active: tab === 'export' }" href="#" @click.prevent="tab = 'export'">Export</a>
             <span class="grow"></span>
             <label v-if="current.type === 'local' && onPlatform" class="switch" title="Diagramme de ce qui existe sur la plateforme (instances, déploiements) au lieu du plan"><input type="checkbox" v-model="viewPlatform" @change="loadInventory"> état sur la plateforme</label>
+            <cc-button v-if="current.type === 'platform' && assets" :outlined="true" title="Rapatrie les fichiers du bucket Cellar dans un projet local temporaire : plan, édition, up…" @cc-click="openFromAssets">Ouvrir en local</cc-button>
             <cc-button v-if="current.type === 'platform'" :outlined="true" title="Relit l'état des ressources sur la plateforme" @cc-click="loadInventory">Rafraîchir</cc-button>
           </nav>
           <div class="content" v-show="tab === 'diagram'">
             <div class="canvas">
               <diagram :graph="graph" :selected="selected" @select="id => selected = id"></diagram>
               <p v-if="!graph.nodes.length" class="dim">{{ current.type === 'local' ? (errors ? 'Le plan est refusé : voyez les diagnostics.' : 'Aucune ressource.') : 'Aucune ressource sur la plateforme pour ce projet.' }}</p>
+              <p v-if="current.type === 'platform' && assets" class="dim">Assets conservés dans Cellar (bucket {{ assets.bucket }}, {{ assets.manifest.files.length }} fichiers, {{ assets.manifest.uploaded_at }}) : onglet « Fichiers (Cellar) », ou « Ouvrir en local ».</p>
+              <p v-else-if="current.type === 'platform'" class="dim">Pas d'assets dans Cellar pour ce projet : relancez <code>up</code> avec <code>--assets</code> ou <code>x-clever.assets: true</code> pour que le compose et le plan soient lisibles ici.</p>
             </div>
             <detail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" @close="selected = null" @logs="doLogs"></detail>
           </div>
@@ -439,6 +481,13 @@ export const App = defineComponent({
           <div class="content diagnostics" v-show="tab === 'diagnostics'">
             <p v-if="!diagnostics.length" class="dim">Aucun diagnostic : le compose se traduit sans réserve.</p>
             <cc-notice v-for="(d, i) in diagnostics" :key="i" :intent="d.severity === 'error' ? 'danger' : 'warning'" :heading="(d.file ? d.file + ':' + d.line + ':' + d.col + ' ' : '') + '[' + d.code + '] ' + (d.path || '')" :message="d.message"></cc-notice>
+          </div>
+          <div class="content compose" v-show="tab === 'assets' && assets">
+            <aside class="files"><a v-for="f in assets?.files || []" :key="f.path" href="#" :class="{ active: f.path === assetFile }" @click.prevent="assetFile = f.path">{{ f.path }}</a></aside>
+            <div class="editor">
+              <header><code>{{ assetFile }}</code><span class="grow"></span><span class="dim">bucket {{ assets?.bucket }} · {{ assets?.manifest?.uploaded_at }}</span></header>
+              <pre class="json">{{ (assets?.files || []).find(f => f.path === assetFile)?.content ?? '(binaire)' }}</pre>
+            </div>
           </div>
           <div class="content compose" v-show="tab === 'export' && exportResult">
             <aside class="files"><a v-for="f in exportResult?.files || []" :key="f.path" href="#" :class="{ active: f.path === exportFile }" @click.prevent="exportFile = f.path">{{ f.path }}</a></aside>

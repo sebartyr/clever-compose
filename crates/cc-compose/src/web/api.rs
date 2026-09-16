@@ -37,6 +37,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/platform/projects/{project}/down", post(down))
         .route("/api/platform/projects/{project}/stop", post(stop))
         .route("/api/platform/projects/{project}/start", post(start))
+        .route("/api/platform/projects/{project}/assets", get(assets_get))
+        .route("/api/platform/projects/{project}/assets/open", post(assets_open))
         .route("/api/local", get(local_list).post(local_add_dir))
         .route("/api/local/upload", post(local_upload))
         .route("/api/local/{id}", axum::routing::delete(local_remove))
@@ -190,6 +192,35 @@ async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) ->
 
 async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state).map_err(|e| e.1)?, true, &mut log).await })
+}
+
+/// Manifeste, plan et fichiers texte du bucket d'assets du projet.
+async fn assets_get(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s)?;
+    let Some(cellar) = crate::exec::assets::open(&api, &api.owner_id(), &project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false }))) };
+    let (manifest, plan, files) = crate::exec::assets::fetch(&cellar).await.map_err(internal)?;
+    let files: Vec<J> = files.into_iter().map(|(path, bytes)| json!({ "path": path, "size": bytes.len(), "content": std::str::from_utf8(&bytes).ok() })).collect();
+    Ok(Json(json!({ "present": true, "bucket": cellar.bucket_name(), "manifest": manifest, "plan": plan, "files": files })))
+}
+
+/// Rapatrie le bucket d'un projet dans un répertoire temporaire et
+/// l'enregistre comme projet local.
+async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s)?;
+    let Some(cellar) = crate::exec::assets::open(&api, &api.owner_id(), &project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
+    let (_manifest, _plan, files) = crate::exec::assets::fetch(&cellar).await.map_err(internal)?;
+    let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-assets-{project}", std::process::id()));
+    let dir = root.join(&project);
+    let _ = std::fs::remove_dir_all(&root);
+    for (path, bytes) in files {
+        let Some(target) = safe_file(&dir, &path).ok() else { continue };
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| internal(e.to_string()))?;
+        }
+        std::fs::write(&target, bytes).map_err(|e| internal(e.to_string()))?;
+    }
+    let id = s.locals.add_dir(dir, true).map_err(internal)?;
+    Ok(Json(json!({ "id": id })))
 }
 
 /// Lance `f` dans une tâche et diffuse son journal en SSE.
@@ -377,6 +408,8 @@ struct UpBody {
     no_wait: bool,
     #[serde(default)]
     allow_ephemeral: bool,
+    #[serde(default)]
+    assets: bool,
 }
 
 async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
@@ -388,7 +421,7 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, bod
             log(&format!("{}{}", if d["severity"] == "error" { "erreur : " } else { "" }, d["rendered"].as_str().unwrap_or("")));
         }
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
-        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes };
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes, assets: b.assets };
         crate::exec::reconcile::up(&plan, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
@@ -415,7 +448,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, J
         let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
         let resolver = crate::plan::registry::Registry::new()?;
         let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
-        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes };
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
         crate::exec::reconcile::up(&plan, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }

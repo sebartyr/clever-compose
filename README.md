@@ -26,7 +26,7 @@ export CLEVER_TOKEN=… CLEVER_SECRET=…    # jeton OAuth 1.0 (ou CC_API_TOKEN)
 export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
-clever-compose up     [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
+clever-compose up     [--dry-run] [--yes] [--no-wait] [--allow-ephemeral] [--assets]
 clever-compose stop                               # arrête les applications, ne supprime rien (comme docker compose stop)
 clever-compose start                              # relance ce qui est arrêté ; `up` le fait aussi
 clever-compose down   [--all] [--dry-run] [--yes]  # supprime ; par nom de projet et tags, sans relire le compose
@@ -69,6 +69,12 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   provider ne sait pas exprimer sort en avertissement : Clever Task
   (`terraform-task`), options d'addon comme DocumentDB (ressource omise,
   id réel attendu dans la variable `addon_<service>_real_id`), UDP.
+- `--assets` (ou `x-clever.assets: true` au niveau projet) conserve les
+  fichiers du projet (compose, fichiers montés, scripts) et le plan dans un
+  bucket Cellar de l'organisation (addon `clever-compose-assets`, un bucket
+  par projet, facturé à l'usage) : l'interface lit alors un projet déployé
+  sans son dossier et peut le rapatrier en projet local ; `down` supprime
+  le bucket.
 - Image sur un registre privé : `docker login <hôte>` sur le poste suffit,
   `up` pose `CC_DOCKER_LOGIN_*` depuis la configuration Docker et l'export
   Terraform attend `registry_<hôte>_user`/`_password` en variables.
@@ -86,6 +92,9 @@ Terraform et script. Les projets déployés de l'organisation s'y retrouvent
 avec l'état des instances. Identifiants : ceux de l'environnement, ou saisis
 dans l'interface (jeton d'API ou OAuth 1.0, gardés en mémoire du serveur) ;
 l'organisation se choisit dans la liste.
+
+Les jetons saisis dans l'interface sont gardés dans le `sessionStorage` du
+navigateur (le temps de l'onglet) et renvoyés au serveur s'il a redémarré.
 
 Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
 est embarqué dans le binaire, de deux façons choisies au build :

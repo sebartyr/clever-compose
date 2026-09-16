@@ -16,6 +16,8 @@ pub struct Options<'a> {
     pub dry_run: bool,
     /// Ne pas attendre la fin des déploiements.
     pub no_wait: bool,
+    /// Pousser les assets dans Cellar même si le compose ne le demande pas.
+    pub assets: bool,
     /// La substitution par des addons est facturée : elle se confirme.
     pub confirm_addons: bool,
 }
@@ -357,6 +359,15 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
             wait_deployment(platform, app_id, &app.name, log).await?;
         }
     }
+    // Assets : les fichiers du projet et le plan dans le bucket Cellar du
+    // projet, pour une relecture depuis la plateforme.
+    if plan.assets || opts.assets {
+        let region = plan.resources.iter().find_map(|r| match r {
+            Resource::App(a) => Some(a.region.clone()),
+            _ => None,
+        }).unwrap_or_else(|| "par".into());
+        super::assets::sync(plan, opts.project_dir, platform, &region, opts, log).await?;
+    }
     Ok(state)
 }
 
@@ -581,6 +592,8 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
             log(&format!("network group {} ({}) : supprimé", x.label, x.id));
         }
     }
+    // Le bucket d'assets du projet, s'il existe (l'addon Cellar partagé reste).
+    super::assets::remove(platform, &platform.owner_id(), project, dry_run, log).await?;
     if !inv.apps.iter().any(|a| a.tagged) {
         log(&format!("aucune application taguée `compose-project={project}` : rien à faire ?"));
     }

@@ -354,5 +354,5 @@ pub fn seed_plan(plan: &Plan, service: &str, dump: &FsPath, project_dir: &FsPath
     if local {
         task.run = RunWhere::Local;
     }
-    Ok(Plan { project: plan.project.clone(), spec_hash: plan.spec_hash.clone(), resources: vec![Resource::Addon(addon), Resource::App(task)] })
+    Ok(Plan { project: plan.project.clone(), spec_hash: plan.spec_hash.clone(), resources: vec![Resource::Addon(addon), Resource::App(task)], assets: false })
 }

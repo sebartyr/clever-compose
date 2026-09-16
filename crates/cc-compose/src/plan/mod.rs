@@ -440,7 +440,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             }));
         }
     }
-    Some(Plan { project: project.name.clone(), spec_hash: hash, resources })
+    Some(Plan { project: project.name.clone(), spec_hash: hash, resources, assets: project_x.assets.unwrap_or(false) })
 }
 
 #[allow(clippy::too_many_arguments)]
