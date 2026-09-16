@@ -5,6 +5,9 @@ members = [
     "crates/cc-compose-shim",
     "crates/cc-compose",
 ]
+# `cargo build` sans `-p` ne construit que la CLI : le shim est compilé pour
+# musl par son build.rs, la version hôte ne servirait à rien.
+default-members = ["crates/cc-compose"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,7 +27,8 @@ jsonschema = { version = "0.56", default-features = false }
 sha2 = "0.11"
 
 # Profil dédié au shim : binaire statique musl, minimal, sans unwinding.
-# `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`
+# Profil du shim, compilé pour musl par `crates/cc-compose/build.rs` (ou à
+# la main : `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`).
 [profile.shim]
 inherits = "release"
 panic = "abort"

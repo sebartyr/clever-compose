@@ -85,11 +85,15 @@ mêmes commits déployés (vérifié en réel).
 
 - `cc-compose-model` : plan, config du shim, types partagés. Dépendances
   frugales, le shim en hérite.
-- `cc-compose-shim` : binaire statique musl, PID 1 du conteneur. Build :
-  `cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`
-  (`panic = "abort"`, LTO). Embarqué dans la CLI par `include_bytes!`
-  (`build.rs` ; `CC_SHIM_BIN` au build ou `CC_SHIM_PATH` à l'exécution pour
-  en charger un autre).
+- `cc-compose-shim` : binaire statique musl, PID 1 du conteneur, profil
+  `shim` (`panic = "abort"`, LTO, `opt-level = "z"`). Compilé par le
+  `build.rs` de la CLI (`cargo build -p cc-compose-shim --profile shim
+  --target x86_64-unknown-linux-musl --target-dir target/shim-build`,
+  répertoire séparé pour éviter le verrou du build en cours ; relancé sur
+  changement de ses sources, de `cc-compose-model` ou de `Cargo.lock`) et
+  embarqué par `include_bytes!` (`CC_SHIM_BIN` au build ou `CC_SHIM_PATH`
+  à l'exécution pour en charger un autre). `default-members` limite
+  `cargo build` à la CLI (décision du 16/09/2026).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets

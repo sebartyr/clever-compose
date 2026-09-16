@@ -394,6 +394,20 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Shim compilé par `build.rs` (16/09/2026)** : le propriétaire découvrait
+  un `target/release/cc-shim` (version hôte, glibc, inutile) à côté du shim
+  musl de `target/x86_64-unknown-linux-musl/shim/` compilé à la main le
+  13/09 ; entre `justfile` et `build.rs`, choix « build.rs ». Le script de
+  build de la CLI lance lui-même `cargo build -p cc-compose-shim --profile
+  shim --target x86_64-unknown-linux-musl` dans `target/shim-build`
+  (répertoire séparé : un cargo imbriqué sur le même `target` attendrait
+  le verrou du build parent), sans propager `RUSTFLAGS`/`CARGO_BUILD_*`
+  de l'hôte, avec `rerun-if-changed` sur les sources du shim, du modèle et
+  `Cargo.lock`. Cible musl absente : avertissement et shim vide, comme
+  avant. `default-members = ["crates/cc-compose"]` : `cargo build` ne
+  construit plus le shim pour l'hôte. Vérifié : build depuis zéro (30 s),
+  relance après `touch` d'une source du shim, binaire `static-pie`,
+  clippy strict et tests.
 - **Scalabilité depuis l'interface, API seule (16/09/2026)** : demandes
   « configurer la scalabilité, avec édition du compose et possibilité de le
   dl pour remplacer l'existant ou mettre à jour les assets ; si les

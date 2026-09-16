@@ -10,14 +10,16 @@ clever-tools). Cadrage complet dans `CLAUDE.md`, décisions et état dans
 ## Installation
 
 ```sh
-rustup target add x86_64-unknown-linux-musl
-cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl
+rustup target add x86_64-unknown-linux-musl   # une fois : cible du shim
 cargo build --release
-# binaire : target/release/clever-compose
+# binaire : target/release/clever-compose, autonome
 ```
 
-Le shim (PID 1 des conteneurs) est embarqué dans la CLI par `build.rs` ;
-`CC_SHIM_PATH` permet d'en charger un depuis le disque en développement.
+Le shim (PID 1 des conteneurs, crate `cc-compose-shim`) est compilé pour
+musl par le `build.rs` de la CLI (dans `target/shim-build/`, relancé quand
+ses sources changent) et embarqué dans le binaire. Sans la cible musl, le
+build passe avec un avertissement et la CLI demande `CC_SHIM_PATH` à
+l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
 
 ## Usage
 
