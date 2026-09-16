@@ -150,8 +150,12 @@ s'exécute sur la plateforme ou depuis le poste.
   joignable sur `<realId>.m.<ng>.cc-ng.cloud` avec les identifiants de la
   liaison, sur le port interne du service (`rubydeployer/src/deploytypes/*.rb`,
   vérifié le 16/09/2026) : **8080** pour PostgreSQL, MySQL, Redis, MongoDB
-  et Elasticsearch (ES en **HTTP clair** dans le groupe, HTTPS seulement en
-  public), **4040** pour la gateway DocumentDB (TLS ; 8080 est PostgreSQL).
+  et Elasticsearch, **4040** pour la gateway DocumentDB (TLS ; 8080 est
+  PostgreSQL). **Le trafic HTTP dans un network group est sans TLS**
+  (propriétaire, 16/09/2026 ; le tunnel WireGuard chiffre déjà) : ES y est
+  en `http://`, le HTTPS n'existe qu'au proxy public ; les URL entre
+  services gardent leur schéma `http://`. Seule exception constatée : la
+  gateway DocumentDB, qui impose TLS partout.
   Un plan partagé n'a pas d'instance donc pas de peer : en privé le plan
   par défaut est le moins cher dédié. L'instance d'un addon dédié met des
   minutes à rejoindre le groupe : `up` attend son peer avant de déployer

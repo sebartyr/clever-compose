@@ -312,6 +312,12 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   réel avec un homonyme étranger puis un doublon tagué.
 - `down --all` : supprime tout ce que clever-compose a créé dans
   l'organisation (projets retrouvés par le tag), addons avec `--yes`.
+- Fait plateforme (propriétaire, 16/09/2026) : **le trafic HTTP dans un
+  network group est sans TLS** (WireGuard chiffre le tunnel). Cohérent avec
+  ce qui est constaté : ES en `http://…:8080` dans le groupe, HTTPS au proxy
+  public seulement ; DocumentDB reste l'exception (gateway TLS sur 4040).
+  Une URL `https://<service>` entre services du compose garderait son
+  schéma et échouerait : pas de diagnostic dédié aujourd'hui.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.
