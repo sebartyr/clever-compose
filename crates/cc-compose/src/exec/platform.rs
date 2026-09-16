@@ -277,6 +277,18 @@ fn urlencode(s: &str) -> String {
 
 /// Identifiants de l'outil, indépendants de la CLI clever : `CC_API_TOKEN`
 /// (bearer, api-bridge) ou `CLEVER_TOKEN` + `CLEVER_SECRET` (OAuth 1.0).
+/// Identifiants construits depuis une saisie (interface) : jeton d'API, ou
+/// couple OAuth 1.0.
+pub fn credentials_from_input(api_token: Option<&str>, token: Option<&str>, secret: Option<&str>) -> PResult<Credentials> {
+    if let Some(t) = api_token.filter(|t| !t.trim().is_empty()) {
+        return Ok(Credentials::Bearer { token: t.trim().to_string() });
+    }
+    match (token.filter(|t| !t.trim().is_empty()), secret.filter(|s| !s.trim().is_empty())) {
+        (Some(t), Some(s)) => Ok(Credentials::OAuth1 { token: t.trim().to_string(), secret: s.trim().to_string(), consumer_key: clevercloud_sdk::DEFAULT_CONSUMER_KEY.into(), consumer_secret: clevercloud_sdk::DEFAULT_CONSUMER_SECRET.into() }),
+        _ => Err("un jeton d'API, ou un jeton OAuth 1.0 et son secret".into()),
+    }
+}
+
 pub fn credentials_from_env() -> PResult<Credentials> {
     if let Ok(token) = std::env::var("CC_API_TOKEN") {
         return Ok(Credentials::Bearer { token });
@@ -292,11 +304,21 @@ pub fn credentials_from_env() -> PResult<Credentials> {
     }
 }
 
+#[derive(Clone)]
 pub struct Api {
     client: Client,
     owner: String,
     creds: Credentials,
     instance: std::sync::OnceLock<J>,
+}
+
+/// Une organisation (ou l'espace personnel) accessible avec les identifiants.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrgInfo {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub personal: bool,
 }
 
 impl Api {
@@ -307,6 +329,27 @@ impl Api {
 
     fn base(&self) -> String {
         clevercloud_sdk::PUBLIC_ENDPOINT.to_string()
+    }
+
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    /// Une copie visant une autre organisation, mêmes identifiants.
+    pub fn for_owner(&self, owner: &str) -> Api {
+        Api::new(owner.to_string(), self.creds.clone())
+    }
+
+    /// L'espace personnel puis les organisations de l'utilisateur
+    /// (`/v2/self`, `/v2/organisations`). Vérifie aussi les identifiants.
+    pub async fn organisations(&self) -> PResult<Vec<OrgInfo>> {
+        let me: J = self.client.get(&format!("{}/v2/self", self.base())).await.map_err(|e| Self::e("self", e))?;
+        let mut out = vec![OrgInfo { id: me["id"].as_str().unwrap_or_default().to_string(), name: format!("{} (espace personnel)", me["name"].as_str().or(me["email"].as_str()).unwrap_or("moi")), personal: true }];
+        let orgs: Vec<J> = self.client.get(&format!("{}/v2/organisations", self.base())).await.map_err(|e| Self::e("organisations", e))?;
+        for o in orgs {
+            out.push(OrgInfo { id: o["id"].as_str().unwrap_or_default().to_string(), name: o["name"].as_str().unwrap_or_default().to_string(), personal: false });
+        }
+        Ok(out)
     }
 
     fn owner_path(&self) -> String {

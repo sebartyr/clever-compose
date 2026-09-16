@@ -91,7 +91,12 @@ mêmes commits déployés (vérifié en réel).
   (`build.rs` ; `CC_SHIM_BIN` au build ou `CC_SHIM_PATH` à l'exécution pour
   en charger un autre).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
-  émetteurs (`emit/`), CLI (`main.rs`).
+  émetteurs (`emit/`), CLI (`main.rs`), interface web (`web/` : serveur
+  axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
+  locaux et archives ; front Vue 3 + `@clevercloud/components` dans
+  `crates/cc-compose/web/`, sans SFC pour tourner sans build ; embarqué
+  soit en sources ESM + import map CDN, soit en `dist/` Vite avec la
+  feature `ui-bundled`).
 
 Architecture figée à amd64.
 
@@ -280,6 +285,7 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
   seed --service SVC --dump FICHIER [--local]
   down [--all] [--dry-run] [--yes] | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
+  orgs | ui [--listen ADRESSE:PORT] [--no-open]
 ```
 `clap` (aide par commande, `--org` ou `CC_ORG`). `plan` affiche un résumé
 lisible (ressources, coût) puis les diagnostics ; `--json` pour le plan

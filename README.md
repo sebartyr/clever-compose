@@ -33,6 +33,8 @@ clever-compose logs   [SERVICE...] [--since 1h] [-n N] [--follow]
 clever-compose seed   --service db --dump dump.sql [--local]
 clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
+clever-compose orgs                               # organisations accessibles avec les identifiants
+clever-compose ui     [--listen 127.0.0.1:7777] [--no-open]   # interface web locale
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -68,6 +70,30 @@ Options de projet, avant ou après la commande, comme `docker compose` :
 - Image sur un registre privé : `docker login <hôte>` sur le poste suffit,
   `up` pose `CC_DOCKER_LOGIN_*` depuis la configuration Docker et l'export
   Terraform attend `registry_<hôte>_user`/`_password` en variables.
+
+## Interface web
+
+`clever-compose ui` lance un serveur local (adresse et port par `--listen`)
+et ouvre le navigateur. Tout ce que la CLI sait faire y est : projets
+locaux (le répertoire courant, un répertoire du poste, ou une archive
+`.zip`/`.tar.gz` extraite dans un répertoire temporaire), diagramme des
+ressources (network groups, applications, tâches, addons, dépendances) avec
+le détail au clic, `plan` et diagnostics, éditeur du compose (enregistrer
+replanifie), `up`/`seed`/`down` avec le journal en direct, `logs`, exports
+Terraform et script. Les projets déployés de l'organisation s'y retrouvent
+avec l'état des instances. Identifiants : ceux de l'environnement, ou saisis
+dans l'interface (jeton d'API ou OAuth 1.0, gardés en mémoire du serveur) ;
+l'organisation se choisit dans la liste.
+
+Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
+est embarqué dans le binaire, de deux façons choisies au build :
+
+- par défaut, les sources ESM sont servies telles quelles et la page charge
+  Vue, Lit et les composants depuis esm.sh / jsDelivr à l'usage (réseau
+  nécessaire, pas de Node au build) ;
+- `cargo build --features ui-bundled` embarque `crates/cc-compose/web/dist`,
+  produit par `cd crates/cc-compose/web && npm install && npm run build`
+  (Vite) : tout est dans le binaire, utilisable hors ligne.
 
 ## Extension `x-clever`
 

@@ -29,8 +29,21 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net"] }
 clap = { version = "4", features = ["derive", "wrap_help", "env"] }
+axum = { version = "0.8", features = ["json", "multipart"] }
+tokio-stream = "0.1"
+rust-embed = { version = "8", features = ["include-exclude"] }
+mime_guess = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
+
+[features]
+default = []
+# Interface web empaquetée par Vite (`web/dist`, `npm run build`) ; sinon la
+# page charge Vue et @clevercloud/components depuis esm.sh à l'usage.
+ui-bundled = []
 
 [dev-dependencies]
 pretty_assertions = "1"

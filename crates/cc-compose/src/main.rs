@@ -166,6 +166,20 @@ enum Command {
         #[arg(long, help_heading = "Sortie")]
         branches: bool,
     },
+    /// Organisations accessibles avec les identifiants (id et nom)
+    Orgs,
+    /// Interface web locale : diagramme des ressources, plan, up, down, logs, édition du compose
+    Ui {
+        /// Organisation initiale (sinon choisie dans l'interface)
+        #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
+        org: Option<String>,
+        /// Adresse et port d'écoute
+        #[arg(long, default_value = "127.0.0.1:7777", value_name = "ADRESSE:PORT")]
+        listen: std::net::SocketAddr,
+        /// N'ouvre pas le navigateur
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Fixture des configurations d'images du projet, lues sur les registres (tests hors ligne)
     #[command(hide = true)]
     Images,
@@ -197,6 +211,8 @@ fn main() -> ExitCode {
         Command::Logs { org, services, since, limit, follow } => cmd_logs(opts, &org.org, cc_compose::exec::inspect::LogsOptions { services, since, follow, limit }),
         Command::Export { plan, what, output, branches } => cmd_export(opts, &plan, what, &output, branches),
         Command::Images => cmd_images(opts),
+        Command::Ui { org, listen, no_open } => cmd_ui(opts, org.as_deref(), listen, !no_open),
+        Command::Orgs => cmd_orgs(),
     }
 }
 
@@ -478,6 +494,33 @@ fn cmd_logs(opts: compose::project::Options, org: &str, lopts: cc_compose::exec:
     let project = project_name(&opts);
     let mut log = ui_log(true);
     run_stateless(cc_compose::exec::inspect::logs(&project, &api, &lopts, &mut log))
+}
+
+fn cmd_ui(opts: compose::project::Options, org: Option<&str>, listen: std::net::SocketAddr, open: bool) -> ExitCode {
+    // Identifiants et organisation facultatifs : l'interface les demande.
+    let session = match (cc_compose::exec::platform::credentials_from_env(), org) {
+        (Ok(creds), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
+        (Ok(creds), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
+        (Err(_), _) => None,
+    };
+    let dir = std::fs::canonicalize(&opts.project_dir).ok();
+    run_stateless(cc_compose::web::serve(listen, session, dir, open))
+}
+
+fn cmd_orgs() -> ExitCode {
+    let creds = match cc_compose::exec::platform::credentials_from_env() {
+        Ok(c) => c,
+        Err(e) => return fail(&e),
+    };
+    let api = cc_compose::exec::platform::Api::new(String::new(), creds);
+    run_stateless(async {
+        let orgs = api.organisations().await?;
+        let w = orgs.iter().map(|o| o.id.len()).max().unwrap_or(0);
+        for o in orgs {
+            println!("{:<w$}  {}", o.id, o.name);
+        }
+        Ok(())
+    })
 }
 
 fn cmd_export(opts: compose::project::Options, args: &PlanArgs, what: ExportWhat, out: &FsPath, branches: bool) -> ExitCode {

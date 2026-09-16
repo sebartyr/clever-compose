@@ -318,6 +318,34 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   public seulement ; DocumentDB reste l'exception (gateway TLS sur 4040).
   Une URL `https://<service>` entre services du compose garderait son
   schéma et échouerait : pas de diagnostic dédié aujourd'hui.
+- **Interface web (16/09/2026, demande du propriétaire : « très visuel,
+  diagramme des ressources avec les détails dessus, toutes les features de
+  la CLI, modification du compose, chargement d'un projet par archive »,
+  jetons OAuth saisis dans le front, liste des organisations en CLI et en
+  UI).** `clever-compose ui [--listen]` : serveur `axum` embarqué
+  (`src/web/`), API JSON locale sans autre logique que celle de la CLI
+  (`plan::cli::run`, `reconcile::{up,down}`, `inspect`, `emit::export`),
+  opérations longues en SSE (`log` puis `done`), projets locaux
+  (`web/local.rs` : répertoire, ou archive zip/tar extraite dans un temp
+  supprimé au retrait ; chemins d'archive bornés au répertoire), session
+  mutable (identifiants d'environnement au lancement ou saisis, vérifiés
+  par `/v2/self`, jamais écrits ; organisation choisie dans la liste de
+  `Api::organisations()` = `/v2/self` + `/v2/organisations`). CLI :
+  `orgs`. Front `web/` : Vue 3 avec templates de chaînes (pas de SFC, mêmes
+  sources dans les deux modes) + composants Lit `cc-*` (button, badge,
+  block, dialog, input-text, loader, notice, select, toggle ; événements
+  `cc-click`, `cc-input`, `cc-select`, `cc-multi-select`, `cc-close`,
+  `cc-notice-dismiss`) ; diagramme SVG maison (`graph.js` : modèle commun
+  plan/inventaire, boîtes par network group, colonnes par profondeur de
+  dépendance ; `diagram.js`), détail au clic, éditeur, diagnostics, export,
+  journal avec progression remplacée en place, liens directs
+  `?project=`/`?local=`. Deux modes de build : feature `ui-bundled`
+  (`web/dist` de Vite, `rust-embed`) sinon sources ESM + import map (Vue
+  esm.sh, `lit` esm.sh en un seul exemplaire, composants bruts jsDelivr —
+  esm.sh les regroupait et `cc-icon` était défini deux fois). Vérifié :
+  rendu identique dans les deux modes (Chromium headless), `up` par l'API
+  en SSE, inventaire avec instances, upload/extraction/retrait d'archive,
+  clippy strict dans les deux modes.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.
