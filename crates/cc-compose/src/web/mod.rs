@@ -39,10 +39,28 @@ pub struct State {
     pub session: RwLock<Option<Session>>,
     pub locals: local::Locals,
     pub oauth: Option<OauthConsumer>,
-    /// `http://<adresse d'écoute>`, base du `oauth_callback`.
+    /// Base publique du serveur (`http://<adresse d'écoute>` ou
+    /// `--public-url`), base du `oauth_callback`.
     pub public_base: String,
-    /// Request tokens en attente d'autorisation → leur secret.
-    pub pending: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// Origines autorisées en CORS (interface servie ailleurs) ; aussi les
+    /// seules destinations acceptées pour le retour après la danse OAuth.
+    pub origins: Vec<String>,
+    /// Request tokens en attente d'autorisation → (secret, URL de retour).
+    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+}
+
+/// Ce que le serveur sert et d'où l'interface peut l'appeler.
+pub struct ServeOptions {
+    pub listen: SocketAddr,
+    /// Sert aussi l'interface embarquée (`ui`) ; sinon l'API seule (`api`).
+    pub ui: bool,
+    /// Origines (`https://ui.exemple`) autorisées en CORS pour une interface
+    /// déployée à part.
+    pub origins: Vec<String>,
+    /// Base publique si le serveur est derrière un proxy (callback OAuth).
+    pub public_url: Option<String>,
+    pub initial_dir: Option<std::path::PathBuf>,
+    pub open_browser: bool,
 }
 
 impl State {
@@ -54,22 +72,34 @@ impl State {
 
 /// Lance le serveur et bloque jusqu'à Ctrl-C. `session` peut être absente :
 /// l'interface demandera les identifiants.
-pub async fn serve(listen: SocketAddr, session: Option<Session>, oauth: Option<OauthConsumer>, initial_dir: Option<std::path::PathBuf>, open_browser: bool) -> Result<(), String> {
+pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: Option<OauthConsumer>) -> Result<(), String> {
     if session.is_none() && oauth.is_none() {
-        return Err("aucun identifiant : posez CLEVER_TOKEN et CLEVER_SECRET (ou CC_API_TOKEN), ou un consumer OAuth (CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET, base URL = adresse d'écoute) pour vous connecter depuis l'interface".into());
+        return Err("aucun identifiant : posez CLEVER_TOKEN et CLEVER_SECRET (ou CC_API_TOKEN), ou un consumer OAuth (CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET, base URL = adresse publique du serveur) pour vous connecter depuis l'interface".into());
     }
+    let listen = o.listen;
+    let origins: Vec<String> = o.origins.iter().map(|s| s.trim_end_matches('/').to_string()).collect();
+    if let Some(bad) = origins.iter().find(|s| !(s.starts_with("http://") || s.starts_with("https://")) || s[s.find("://").unwrap() + 3..].contains('/')) {
+        return Err(format!("--cors `{bad}` : une origine est `http(s)://hôte[:port]`, sans chemin"));
+    }
+    let public_base = o.public_url.map(|u| u.trim_end_matches('/').to_string()).unwrap_or_else(|| format!("http://{listen}"));
     let locals = local::Locals::default();
-    if let Some(dir) = initial_dir {
+    if let Some(dir) = o.initial_dir {
         if dir.join("compose.yaml").is_file() || dir.join("compose.yml").is_file() || dir.join("docker-compose.yaml").is_file() || dir.join("docker-compose.yml").is_file() {
             locals.add_dir(dir, false)?;
         }
     }
-    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base: format!("http://{listen}"), pending: Default::default() });
-    let app = api::router(state).fallback(assets::serve);
+    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default() });
+    let app = api::router(state.clone());
+    let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "API seule : l'interface est servie ailleurs (clever-compose ui pour l'embarquer)") }) };
+    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::cors));
     let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| format!("écoute sur {listen} : {e}"))?;
     let url = format!("http://{}/", listener.local_addr().map_err(|e| e.to_string())?);
-    eprintln!("interface : {url}  (Ctrl-C pour arrêter)");
-    if open_browser {
+    if o.ui {
+        eprintln!("interface : {url}  (Ctrl-C pour arrêter)");
+    } else {
+        eprintln!("API : {url}api/  (Ctrl-C pour arrêter){}", if state.origins.is_empty() { "\n  aucune origine CORS : passez --cors https://<hôte de l'interface> pour une interface déployée à part" } else { "" });
+    }
+    if o.open_browser && o.ui {
         let _ = std::process::Command::new("xdg-open").arg(&url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }
     axum::serve(listener, app).with_graceful_shutdown(async {

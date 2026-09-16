@@ -192,6 +192,24 @@ enum Command {
         /// N'ouvre pas le navigateur
         #[arg(long)]
         no_open: bool,
+        /// Base publique du serveur si un proxy est devant (callback OAuth), ex. https://compose.exemple
+        #[arg(long, value_name = "URL")]
+        public_url: Option<String>,
+    },
+    /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL)
+    Api {
+        /// Organisation initiale (sinon choisie dans l'interface)
+        #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
+        org: Option<String>,
+        /// Adresse et port d'écoute
+        #[arg(long, default_value = "127.0.0.1:7777", value_name = "ADRESSE:PORT")]
+        listen: std::net::SocketAddr,
+        /// Origine de l'interface autorisée en CORS (répétable), ex. https://ui.exemple
+        #[arg(long, value_name = "ORIGINE")]
+        cors: Vec<String>,
+        /// Base publique de l'API si un proxy est devant (callback OAuth), ex. https://api.exemple
+        #[arg(long, value_name = "URL")]
+        public_url: Option<String>,
     },
     /// Fixture des configurations d'images du projet, lues sur les registres (tests hors ligne)
     #[command(hide = true)]
@@ -236,7 +254,8 @@ fn main() -> ExitCode {
         Command::Logs { org, services, since, limit, follow } => cmd_logs(opts, &org.org, cc_compose::exec::inspect::LogsOptions { services, since, follow, limit }),
         Command::Export { plan, what, output, branches } => cmd_export(opts, &plan, what, &output, branches),
         Command::Images => cmd_images(opts),
-        Command::Ui { org, listen, no_open } => cmd_ui(opts, org.as_deref(), listen, !no_open),
+        Command::Ui { org, listen, no_open, public_url } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: true, origins: Vec::new(), public_url, initial_dir: None, open_browser: !no_open }),
+        Command::Api { org, listen, cors, public_url } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
     }
 }
@@ -536,7 +555,7 @@ fn cmd_logs(opts: compose::project::Options, org: &str, lopts: cc_compose::exec:
     run_stateless(cc_compose::exec::inspect::logs(&project, &api, &lopts, &mut log))
 }
 
-fn cmd_ui(opts: compose::project::Options, org: Option<&str>, listen: std::net::SocketAddr, open: bool) -> ExitCode {
+fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_compose::web::ServeOptions) -> ExitCode {
     // Identifiants de l'environnement, sinon danse OAuth avec un consumer
     // (CLEVER_CONSUMER_KEY / CLEVER_CONSUMER_SECRET) ; sinon refus.
     let session = match (cc_compose::exec::platform::credentials_from_env(), org) {
@@ -548,8 +567,8 @@ fn cmd_ui(opts: compose::project::Options, org: Option<&str>, listen: std::net::
         (Ok(key), Ok(secret)) if !key.is_empty() && !secret.is_empty() => Some(cc_compose::web::OauthConsumer { key, secret }),
         _ => None,
     };
-    let dir = std::fs::canonicalize(&opts.project_dir).ok();
-    run_stateless(cc_compose::web::serve(listen, session, oauth, dir, open))
+    serve.initial_dir = std::fs::canonicalize(&opts.project_dir).ok();
+    run_stateless(cc_compose::web::serve(serve, session, oauth))
 }
 
 fn cmd_orgs() -> ExitCode {

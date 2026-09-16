@@ -2,8 +2,13 @@
 // arrivent en SSE (événements `log` puis `done`), y compris en POST : on lit
 // le corps de la réponse `fetch` en flux.
 
+// URL de l'API : VITE_API_URL au build (interface déployée à part), sinon
+// la même origine que la page (interface servie par `clever-compose ui`).
+export const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL : '').replace(/\/$/, '');
+const u = (path) => API_BASE + path;
+
 async function json(method, url, body) {
-  const res = await fetch(url, {
+  const res = await fetch(u(url), {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
@@ -32,11 +37,16 @@ export const api = {
   writeFile: (id, path, content) => json('PUT', `/api/local/${encodeURIComponent(id)}/file`, { path, content }),
   plan: (id, allowEphemeral) => json('GET', `/api/local/${encodeURIComponent(id)}/plan?allow_ephemeral=${allowEphemeral ? 'true' : 'false'}`),
   exportProject: (id, body) => json('POST', `/api/local/${encodeURIComponent(id)}/export`, body),
+  flavors: () => json('GET', '/api/flavors'),
+  setScaling: (id, body) => json('PUT', `/api/local/${encodeURIComponent(id)}/scaling`, body),
+  syncAssets: (id, onLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/assets/sync`, null, onLog),
+  /** Début de la danse OAuth, avec retour sur cette interface. */
+  oauthStart: () => u('/api/session/oauth/start?return=' + encodeURIComponent(location.origin + location.pathname)),
 
   async uploadDump(id, file) {
     const form = new FormData();
     form.append('file', file, file.name);
-    const res = await fetch(`/api/local/${encodeURIComponent(id)}/seed/upload`, { method: 'POST', body: form });
+    const res = await fetch(u(`/api/local/${encodeURIComponent(id)}/seed/upload`), { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -45,7 +55,7 @@ export const api = {
   async upload(file) {
     const form = new FormData();
     form.append('file', file, file.name);
-    const res = await fetch('/api/local/upload', { method: 'POST', body: form });
+    const res = await fetch(u('/api/local/upload'), { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -56,7 +66,7 @@ export const api = {
   stream(method, url, body, onLog) {
     const controller = new AbortController();
     const done = (async () => {
-      const res = await fetch(url, {
+      const res = await fetch(u(url), {
         method,
         headers: body ? { 'Content-Type': 'application/json' } : {},
         body: body ? JSON.stringify(body) : undefined,

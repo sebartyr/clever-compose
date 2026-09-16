@@ -36,7 +36,8 @@ clever-compose seed   --service db --dump dump.sql [--local]
 clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
 clever-compose orgs                               # organisations accessibles avec les identifiants
-clever-compose ui     [--listen 127.0.0.1:7777] [--no-open]   # interface web locale
+clever-compose ui     [--listen 127.0.0.1:7777] [--no-open] [--public-url URL]   # interface web locale
+clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL]  # API seule, interface déployée à part
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -99,6 +100,33 @@ d'écoute, par ex. `http://127.0.0.1:7777`) et passez par
 page d'autorisation Clever Cloud et le retour ouvre la session. Sans l'un ni
 l'autre, `ui` refuse de démarrer. L'organisation se choisit dans la liste
 (retenue dans le navigateur, comme les options).
+
+Scalabilité : le détail d'une application du diagramme porte un formulaire
+(flavor minimale et maximale, instances minimales et maximales) ;
+« Appliquer au compose » écrit les clés `x-clever` correspondantes dans le
+fichier compose du projet sans toucher au reste (commentaires et ordre
+conservés) et replanifie. L'onglet Compose offre « Télécharger » (le
+fichier tel qu'affiché, pour remplacer celui de votre dépôt) et, quand un
+bucket Cellar est configuré, « Mettre à jour les assets » (pousse compose,
+`.env`, contextes de build, sans déployer). Un `up` ultérieur retrouve les
+applications par nom et tags et leur applique le nouveau scaling sans les
+recréer ; un addon existant n'est jamais recréé, un changement de plan
+d'addon est signalé et reste manuel. Le `.env` du projet (ou `--env-file`)
+est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
+
+### Interface déployée à part
+
+`clever-compose api --listen 0.0.0.0:7777 --cors https://ui.exemple` sert
+l'API seule (les chemins hors `/api` répondent 404) et autorise l'origine
+de l'interface en CORS ; `--public-url https://api.exemple` donne la base
+du callback OAuth quand un proxy est devant (c'est elle qu'on déclare comme
+base URL du consumer). Le front se bâtit avec l'URL de l'API dans une
+variable d'environnement Vite : `cd web && VITE_API_URL=https://api.exemple
+npm run build`, puis `dist/` se sert depuis n'importe quel hôte statique.
+Sans `VITE_API_URL`, le front parle à l'origine qui l'a servie, c'est-à-dire
+`clever-compose ui` (voir `web/.env.example`). Le retour de la danse OAuth
+revient sur l'origine de l'interface, à condition qu'elle soit listée en
+`--cors`.
 
 Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
 est embarqué dans le binaire, de deux façons choisies au build :

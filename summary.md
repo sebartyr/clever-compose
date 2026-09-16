@@ -393,6 +393,38 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   et `l`) ; étapes 2-3 à faire dans un navigateur connecté. Choix de
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
+  Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Scalabilité depuis l'interface, API seule (16/09/2026)** : demandes
+  « configurer la scalabilité, avec édition du compose et possibilité de le
+  dl pour remplacer l'existant ou mettre à jour les assets ; si les
+  ressources existent déjà on ne les recrée pas mais on applique les
+  changements ; les .env doivent être supportés », puis « l'API sans l'UI
+  pour déployer l'UI à part, en indiquant l'URL de l'API », « une var
+  d'env côté front, sinon fallback vers default ». Fait : formulaire dans
+  le détail d'une application (flavors du catalogue via `/api/flavors`,
+  instances), `PUT /api/local/{id}/scaling` qui écrit `x-clever` dans le
+  compose par une édition textuelle (`compose/edit.rs` : le reste du
+  fichier, commentaires compris, n'est pas réécrit ; `flavor` quand
+  min = max, sinon `min_flavor`/`max_flavor` ; refus du bloc en `{…}`,
+  du service absent) ; « Télécharger » le fichier affiché ; « Mettre à
+  jour les assets » (`POST …/assets/sync`, SSE) quand `CC_ASSETS_BUCKET`
+  est posé. Le `up` retrouvait déjà les applications par nom et tags et
+  appliquait `update_scaling` si différent ; les addons ne sont jamais
+  recréés (changement de plan journalisé, manuel). Le `.env` était déjà
+  interpolé (`compose/project.rs`) ; il est maintenant listé juste après
+  le compose dans l'éditeur, et poussé avec les assets comme tout fichier
+  texte. `clever-compose api [--cors ORIGINE...] [--public-url]` : mêmes
+  routes sans l'interface (404 explicite hors `/api`), CORS écrit à la
+  main dans un middleware axum (pré-requête `OPTIONS`, en-têtes seulement
+  pour une origine listée, `Vary: Origin`) ; la danse OAuth prend
+  `?return=` (chemin local, ou une origine `--cors`/la base publique,
+  sinon refus) pour revenir sur l'interface déployée ailleurs.
+  `--public-url` sur `ui` et `api` pour le callback derrière un proxy.
+  Front : `VITE_API_URL` lue au build (`web/src/api.js`, `API_BASE`
+  préfixe toutes les requêtes, SSE et lien OAuth compris) ; absente, même
+  origine, c'est-à-dire le serveur qui a servi la page. Vérifié en local :
+  pré-requête CORS, refus d'une origine inconnue, écriture de `x-clever`
+  et relecture par le plan, `.env` interpolé.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.

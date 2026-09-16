@@ -81,3 +81,5 @@ body { margin: 0; }
 .row-end { display: flex; justify-content: flex-end; gap: .5em; }
 .switch { display: inline-flex; gap: .4em; align-items: center; }
 cc-dialog cc-input-text { display: block; margin-bottom: .6em; }
+.detail .scaling { display: grid; grid-template-columns: 1fr 1fr; gap: .5em .8em; margin: .3em 0 .8em; }
+.detail .scaling cc-button { grid-column: 1 / -1; justify-self: start; }

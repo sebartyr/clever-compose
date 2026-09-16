@@ -289,8 +289,16 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
   seed --service SVC --dump FICHIER [--local]
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
-  orgs | ui [--listen ADRESSE:PORT] [--no-open]
+  orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL]
+  api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL]
 ```
+`api` sert l'API sans l'interface (front Vite bâti à part avec
+`VITE_API_URL`, sinon même origine) ; CORS limité aux origines `--cors`,
+qui sont aussi les seuls retours admis après la danse OAuth (`?return=`).
+Scalabilité éditée depuis l'interface : `PUT /api/local/{id}/scaling`
+écrit `x-clever` dans le compose par `compose::edit::set_xclever` (édition
+textuelle, formatage conservé) ; `POST …/assets/sync` pousse les assets
+sans `up`.
 `clap` (aide par commande, `--org` ou `CC_ORG`). `plan` affiche un résumé
 lisible (ressources, coût) puis les diagnostics ; `--json` pour le plan
 brut. Sortie rendue par `ui.rs` (couleurs, progression, bilan ✔/✘).

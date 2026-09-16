@@ -29,7 +29,7 @@ const SessionPanel = defineComponent({
     };
     // La danse OAuth se fait par redirection : le serveur obtient le request
     // token, Clever Cloud demande l'autorisation, le callback ouvre la session.
-    const login = () => { location.href = '/api/session/oauth/start'; };
+    const login = () => { location.href = api.oauthStart(); };
     return { busy, error, chooseOrg, login, val };
   },
   template: `
@@ -120,12 +120,29 @@ const LogPanel = defineComponent({
 
 const Detail = defineComponent({
   name: 'NodeDetail',
-  props: { node: Object, platform: Boolean },
-  emits: ['close', 'logs'],
-  setup(props) {
+  props: { node: Object, platform: Boolean, flavors: Object },
+  emits: ['close', 'logs', 'scaling'],
+  setup(props, { emit }) {
     const env = computed(() => (props.node?.data?.env || []).map((e) => ({ key: e.key, value: e.value.map((s) => s.literal !== undefined ? s.literal : `\${${s.ref.var || s.ref.member || s.ref.name}}`).join('') })));
     const json = computed(() => JSON.stringify(props.node?.data || {}, null, 2));
-    return { env, json };
+    // Formulaire de scalabilité, rempli depuis le plan à chaque sélection ;
+    // « Appliquer » l'écrit dans x-clever du compose.
+    const scaling = reactive({ min_flavor: '', max_flavor: '', min_instances: 1, max_instances: 1, saving: false });
+    watch(() => props.node, (n) => {
+      const s = n?.data?.scaling;
+      if (!s) return;
+      scaling.min_flavor = s.min_flavor; scaling.max_flavor = s.max_flavor; scaling.min_instances = s.min_instances; scaling.max_instances = s.max_instances;
+    }, { immediate: true });
+    const flavorOptions = computed(() => (props.flavors?.flavors || []).map((f) => ({ value: f.name, label: `${f.name} — ${f.cpus} vCPU, ${Math.round(f.memory_bytes / 1048576)} Mio` })));
+    const scalingDirty = computed(() => {
+      const s = props.node?.data?.scaling;
+      return !!s && (s.min_flavor !== scaling.min_flavor || s.max_flavor !== scaling.max_flavor || s.min_instances !== Number(scaling.min_instances) || s.max_instances !== Number(scaling.max_instances));
+    });
+    const applyScaling = async () => {
+      scaling.saving = true;
+      try { await emit('scaling', { service: props.node.data.service, min_flavor: scaling.min_flavor, max_flavor: scaling.max_flavor, min_instances: Number(scaling.min_instances), max_instances: Number(scaling.max_instances) }); } finally { scaling.saving = false; }
+    };
+    return { env, json, scaling, flavorOptions, scalingDirty, applyScaling };
   },
   template: `
     <aside class="detail" v-if="node">
@@ -162,6 +179,14 @@ const Detail = defineComponent({
           <dt>Port</dt><dd>{{ node.data.shim.port.mode }}{{ node.data.shim.port.target_port ? ' → ' + node.data.shim.port.target_port : '' }}</dd>
           <dt v-if="node.data.depends_on.length">Dépend de</dt><dd v-if="node.data.depends_on.length">{{ node.data.depends_on.join(', ') }}</dd>
         </dl>
+        <h4>Scalabilité</h4>
+        <div class="scaling" v-if="node.data.scaling">
+          <cc-select label="Flavor minimale" :options="flavorOptions" :value="scaling.min_flavor" @cc-select="e => scaling.min_flavor = e.detail" title="Taille d'instance au repos (x-clever.min_flavor, ou flavor si égale à la maximale)"></cc-select>
+          <cc-select label="Flavor maximale" :options="flavorOptions" :value="scaling.max_flavor" @cc-select="e => scaling.max_flavor = e.detail" title="Taille d'instance sous charge (x-clever.max_flavor)"></cc-select>
+          <cc-input-text label="Instances minimales" type="number" :value="String(scaling.min_instances)" @cc-input="e => scaling.min_instances = e.detail" title="x-clever.min_instances"></cc-input-text>
+          <cc-input-text label="Instances maximales" type="number" :value="String(scaling.max_instances)" @cc-input="e => scaling.max_instances = e.detail" :title="'x-clever.max_instances (au plus ' + (flavors?.max_instances || '?') + ')'"></cc-input-text>
+          <cc-button :primary="true" :disabled="!scalingDirty" :waiting="scaling.saving" title="Écrit ces valeurs dans x-clever du compose et recalcule le plan ; un up appliquera le changement aux applications existantes sans les recréer" @cc-click="applyScaling">Appliquer au compose</cc-button>
+        </div>
         <h4 v-if="env.length">Environnement</h4>
         <div v-if="env.length" class="env"><div v-for="e in env" :key="e.key" class="var"><code class="k">{{ e.key }}</code><code class="v">{{ e.value }}</code></div></div>
       </template>
@@ -201,6 +226,7 @@ export const App = defineComponent({
     const assets = ref(null);
     const assetFile = ref('');
     const exportFile = ref('');
+    const flavors = ref(null);
     const selected = ref(null);
     const busy = ref(false);
     const status = ref('');
@@ -231,7 +257,23 @@ export const App = defineComponent({
 
     const notify = (e) => { error.value = e?.message || String(e); setTimeout(() => { if (error.value === (e?.message || String(e))) error.value = ''; }, 8000); };
 
-    const loadInfo = async () => { try { info.value = await api.info(); } catch { /* serveur absent */ } };
+    const loadInfo = async () => { try { info.value = await api.info(); flavors.value = await api.flavors(); } catch { /* serveur absent */ } };
+    // Scalabilité posée dans le compose (x-clever), puis fichiers et plan relus.
+    const setScaling = async (body) => {
+      try {
+        await api.setScaling(current.value.id, body);
+        if (file.path && !file.dirty) await openFile(file.path);
+        await loadPlan();
+      } catch (e) { notify(e); }
+    };
+    // Le fichier affiché, tel qu'enregistré, téléchargé par le navigateur :
+    // pour remplacer le compose d'origine par la version modifiée ici.
+    const downloadFile = () => {
+      const blob = new Blob([file.content], { type: 'text/yaml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = file.path.split('/').pop(); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
     const refreshSession = async () => {
       session.value = await api.session();
       // Organisation retenue (localStorage) si la session n'en a pas.
@@ -353,6 +395,7 @@ export const App = defineComponent({
       const services = service ? [service] : logQuery.services.split(',').map((s) => s.trim()).filter(Boolean);
       run('logs ' + current.value.name + (services.length ? ' ' + services.join(' ') : ''), (onLog) => api.logs(current.value.name, { services, since: logQuery.since, follow: logQuery.follow }, onLog), true);
     };
+    const doAssetsSync = () => run('assets ' + current.value.name, (onLog) => api.syncAssets(current.value.id, onLog));
     const doExport = async () => {
       busy.value = true;
       try {
@@ -388,7 +431,7 @@ export const App = defineComponent({
       if (t && current.value && ['diagram', 'compose', 'diagnostics'].includes(t)) tab.value = t;
     });
 
-    return { assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -456,12 +499,17 @@ export const App = defineComponent({
               <p v-if="current.type === 'platform' && assets" class="dim">Assets conservés dans Cellar (bucket {{ assets.bucket }}, {{ assets.manifest.files.length }} fichiers, {{ assets.manifest.uploaded_at }}) : onglet « Fichiers (Cellar) », ou « Ouvrir en local ».</p>
               <p v-else-if="current.type === 'platform'" class="dim">Pas d'assets dans Cellar pour ce projet : relancez <code>up</code> avec <code>--assets</code> ou <code>x-clever.assets: true</code> pour que le compose et le plan soient lisibles ici.</p>
             </div>
-            <detail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" @close="selected = null" @logs="doLogs"></detail>
+            <detail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" :flavors="flavors" @close="selected = null" @logs="doLogs" @scaling="setScaling"></detail>
           </div>
           <div class="content compose" v-show="tab === 'compose'">
             <aside class="files"><a v-for="f in files" :key="f" href="#" :class="{ active: f === file.path }" @click.prevent="openFile(f)">{{ f }}</a></aside>
             <div class="editor">
-              <header><code>{{ file.path }}</code><span class="grow"></span><cc-button :primary="true" :disabled="!file.dirty" title="Écrit le fichier dans le projet et recalcule le plan" @cc-click="saveFile">Enregistrer et replanifier</cc-button></header>
+              <header>
+                <code>{{ file.path }}</code><span class="grow"></span>
+                <cc-button :outlined="true" :disabled="!file.path" title="Télécharge ce fichier tel qu'affiché, pour remplacer celui de votre dépôt" @cc-click="downloadFile">Télécharger</cc-button>
+                <cc-button v-if="info.assets_bucket" :outlined="true" :disabled="opRunning" title="Pousse les fichiers du projet (compose, .env, build…) dans le bucket Cellar, sans déployer" @cc-click="doAssetsSync">Mettre à jour les assets</cc-button>
+                <cc-button :primary="true" :disabled="!file.dirty" title="Écrit le fichier dans le projet et recalcule le plan" @cc-click="saveFile">Enregistrer et replanifier</cc-button>
+              </header>
               <textarea spellcheck="false" :value="file.content" @input="e => { file.content = e.target.value; file.dirty = true; }"></textarea>
             </div>
           </div>

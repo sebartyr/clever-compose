@@ -26,6 +26,34 @@ use crate::exec::reconcile::Log;
 
 type Shared = Arc<State>;
 
+/// CORS pour une interface servie sur une autre origine (`--cors`) : la
+/// pré-requête `OPTIONS` reçoit les en-têtes sans passer par les routes, les
+/// réponses des origines listées les reçoivent aussi. Rien n'est ajouté
+/// pour une origine inconnue (le navigateur refuse alors la réponse) ni en
+/// même origine (aucun en-tête `Origin` à comparer, ou identique).
+pub async fn cors(AxState(s): AxState<Shared>, req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    use axum::http::{header, HeaderValue, Method};
+    let origin = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()).map(|o| o.trim_end_matches('/').to_string());
+    let allowed = origin.as_deref().filter(|o| s.origins.iter().any(|a| a == o)).map(|o| o.to_string());
+    if req.method() == Method::OPTIONS {
+        let mut r = StatusCode::NO_CONTENT.into_response();
+        if let Some(o) = &allowed {
+            let h = r.headers_mut();
+            h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_str(o).unwrap());
+            h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
+            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type"));
+            h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
+        }
+        return r;
+    }
+    let mut r = next.run(req).await;
+    if let Some(o) = &allowed {
+        r.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_str(o).unwrap());
+        r.headers_mut().insert(header::VARY, HeaderValue::from_static("Origin"));
+    }
+    r
+}
+
 pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
@@ -51,6 +79,9 @@ pub fn router(state: Shared) -> Router {
         .route("/api/local/{id}/seed", post(local_seed))
         .route("/api/local/{id}/seed/upload", post(local_seed_upload))
         .route("/api/local/{id}/export", post(local_export))
+        .route("/api/local/{id}/scaling", axum::routing::put(local_scaling))
+        .route("/api/local/{id}/assets/sync", post(local_assets_sync))
+        .route("/api/flavors", get(flavors))
         .layer(axum::extract::DefaultBodyLimit::max(256 * 1024 * 1024))
         .with_state(state)
 }
@@ -134,10 +165,24 @@ fn parse_form(text: &str) -> std::collections::HashMap<String, String> {
     text.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.replace('+', " "))).collect()
 }
 
+#[derive(Deserialize)]
+struct OauthStart {
+    /// Où renvoyer l'utilisateur à la fin : l'interface (même origine, ou
+    /// une origine `--cors`).
+    #[serde(rename = "return")]
+    return_to: Option<String>,
+}
+
 /// Étape 1 de la danse : request token, puis redirection vers la page
 /// d'autorisation de Clever Cloud.
-async fn oauth_start(AxState(s): AxState<Shared>) -> Result<Response, ApiError> {
+async fn oauth_start(AxState(s): AxState<Shared>, Query(q): Query<OauthStart>) -> Result<Response, ApiError> {
     let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré (CLEVER_CONSUMER_KEY / CLEVER_CONSUMER_SECRET)"))?;
+    let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+        None => "/".to_string(),
+        Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
+        Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
+        Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
+    };
     let mut params = oauth_params(&consumer, "");
     params.push(("oauth_callback".into(), format!("{}/api/session/oauth/callback", s.public_base)));
     let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
@@ -150,7 +195,7 @@ async fn oauth_start(AxState(s): AxState<Shared>) -> Result<Response, ApiError> 
     }
     let form = parse_form(&text);
     let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("request_token : réponse inattendue : {text}"))) };
-    s.pending.lock().unwrap().insert(token.clone(), secret.clone());
+    s.pending.lock().unwrap().insert(token.clone(), (secret.clone(), return_to));
     Ok(axum::response::Redirect::temporary(&format!("{}/v2/oauth/authorize?oauth_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(token))).into_response())
 }
 
@@ -163,7 +208,7 @@ struct OauthCallback {
 /// Étape 3 : access token, session ouverte, retour à l'interface.
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
     let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré"))?;
-    let request_secret = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
+    let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
     let mut params = oauth_params(&consumer, &request_secret);
     params.push(("oauth_token".into(), q.oauth_token.clone()));
     params.push(("oauth_verifier".into(), q.oauth_verifier.clone()));
@@ -181,7 +226,7 @@ async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallba
     let api = crate::exec::platform::Api::new(String::new(), creds);
     api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("jeton obtenu mais refusé par l'API : {e}")))?;
     *s.session.write().unwrap() = Some(super::Session { api, org: String::new() });
-    Ok(axum::response::Redirect::temporary("/").into_response())
+    Ok(axum::response::Redirect::temporary(&return_to).into_response())
 }
 
 async fn orgs(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiError> {
@@ -389,7 +434,8 @@ fn text_files(dir: &Path) -> Vec<String> {
     }
     let mut out = Vec::new();
     walk(dir, dir, 0, &mut out);
-    out.sort_by_key(|f| (!f.to_ascii_lowercase().contains("compose"), f.clone()));
+    // Compose d'abord, puis les `.env` (interpolation et `env_file`), puis le reste.
+    out.sort_by_key(|f| (!f.to_ascii_lowercase().contains("compose"), !f.starts_with(".env"), f.clone()));
     out
 }
 
@@ -542,6 +588,69 @@ async fn local_seed_upload(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<Str
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| internal(e.to_string()))?;
     std::fs::write(&path, &bytes).map_err(|e| internal(format!("{rel} : {e}")))?;
     Ok(Json(json!({ "path": rel, "size": bytes.len() })))
+}
+
+/// Flavors Docker de la plateforme (catalogue embarqué).
+async fn flavors() -> Json<J> {
+    let d = crate::plan::flavors::docker();
+    Json(json!({ "default": d.default_flavor, "max_instances": d.max_instances, "flavors": d.flavors.iter().map(|f| json!({ "name": f.name, "cpus": f.cpus, "memory_bytes": f.memory_bytes })).collect::<Vec<_>>() }))
+}
+
+#[derive(Deserialize)]
+struct ScalingBody {
+    service: String,
+    min_flavor: Option<String>,
+    max_flavor: Option<String>,
+    min_instances: Option<u32>,
+    max_instances: Option<u32>,
+}
+
+/// Le fichier compose principal du projet (celui que la découverte prend).
+fn main_compose(dir: &Path) -> Option<PathBuf> {
+    ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].iter().map(|f| dir.join(f)).find(|p| p.is_file())
+}
+
+/// Pose la scalabilité d'un service dans `x-clever` du compose, sans
+/// toucher au reste du fichier ; la CLI et `up` la reprennent ensuite.
+async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, Json(b): Json<ScalingBody>) -> Result<Json<J>, ApiError> {
+    let dir = project_dir(&s, &id)?;
+    let path = main_compose(&dir).ok_or_else(|| bad("aucun fichier compose dans le projet"))?;
+    let text = std::fs::read_to_string(&path).map_err(|e| internal(e.to_string()))?;
+    let d = crate::plan::flavors::docker();
+    for f in [&b.min_flavor, &b.max_flavor].into_iter().flatten() {
+        if !d.flavors.iter().any(|x| &x.name == f) {
+            return Err(bad(format!("flavor `{f}` inconnue")));
+        }
+    }
+    if let (Some(lo), Some(hi)) = (b.min_instances, b.max_instances) {
+        if lo > hi {
+            return Err(bad("min_instances dépasse max_instances"));
+        }
+    }
+    use crate::compose::edit::Entry;
+    let same_flavor = b.min_flavor.is_some() && b.min_flavor == b.max_flavor;
+    let entries = vec![
+        // `flavor` = raccourci quand min = max ; sinon les deux bornes.
+        Entry { key: "flavor", value: if same_flavor { b.min_flavor.clone() } else { None } },
+        Entry { key: "min_flavor", value: if same_flavor { None } else { b.min_flavor.clone() } },
+        Entry { key: "max_flavor", value: if same_flavor { None } else { b.max_flavor.clone() } },
+        Entry { key: "min_instances", value: b.min_instances.map(|v| v.to_string()) },
+        Entry { key: "max_instances", value: b.max_instances.map(|v| v.to_string()) },
+    ];
+    let out = crate::compose::edit::set_xclever(&text, &b.service, &entries).map_err(bad)?;
+    std::fs::write(&path, &out).map_err(|e| internal(e.to_string()))?;
+    Ok(Json(json!({ "ok": true, "path": path.strip_prefix(&dir).unwrap_or(&path).to_string_lossy() })))
+}
+
+/// Pousse les assets du projet dans le bucket configuré, sans `up`.
+async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let dir = project_dir(&s, &id)?;
+    Ok(stream_task(s, move |_state, mut log| async move {
+        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, false)).await.map_err(|e| e.to_string())??;
+        let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
+        crate::exec::assets::sync(&plan, &project_dir, &opts, &mut log).await
+    }))
 }
 
 #[derive(Deserialize, Default)]

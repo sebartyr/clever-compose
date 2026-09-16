@@ -7,6 +7,7 @@
 
 pub mod consistency;
 pub mod dotenv;
+pub mod edit;
 pub mod envfile;
 pub mod interpolate;
 pub mod loader;
