@@ -208,7 +208,13 @@ export const App = defineComponent({
     const error = ref('');
     const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false });
     const opts = reactive({ yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, branches: false });
-    const seed = reactive({ service: '', dump: '', local: false });
+    const seed = reactive({ service: '', dump: '', local: false, uploading: false });
+    const uploadDump = async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      seed.uploading = true;
+      try { const r = await api.uploadDump(current.value.id, f); seed.dump = r.path; files.value = (await api.files(current.value.id)).files; } catch (err) { notify(err); } finally { seed.uploading = false; e.target.value = ''; }
+    };
     const logQuery = reactive({ services: '', since: '1h', follow: true });
     const dialog = reactive({ down: false, seed: false, addDir: false, path: '' });
 
@@ -333,7 +339,7 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -429,8 +435,11 @@ export const App = defineComponent({
       </cc-dialog>
       <cc-dialog heading="Charger un dump (seed)" :open="dialog.seed" @cc-close="dialog.seed = false" closedBy="any">
         <cc-select label="Service (addon)" :options="(plan?.resources || []).filter(r => r.resource === 'addon').map(r => ({ label: r.service + ' (' + r.provider + ')', value: r.service }))" :value="seed.service" placeholder="Choisir" @cc-select="e => seed.service = val(e)"></cc-select>
-        <cc-select label="Dump (fichier du projet)" :options="files.map(f => ({ label: f, value: f }))" :value="seed.dump" placeholder="Choisir" @cc-select="e => seed.dump = val(e)"></cc-select>
-        <label class="switch"><input type="checkbox" v-model="seed.local"> depuis ce poste (--local)</label>
+        <p class="hint">Formats : .sql/.sql.gz/.sh (PostgreSQL, MySQL), .js/.archive (MongoDB, DocumentDB), .redis/.resp (Redis), .ndjson (Elasticsearch). Chargé une fois par contenu (témoin <code>cc_compose_init</code>).</p>
+        <label class="upload" :title="'Un fichier de votre poste, copié dans le projet (.clever-compose/seed/)'"><input type="file" @change="uploadDump"><span>{{ seed.uploading ? 'Envoi…' : 'Envoyer un fichier de dump' }}</span></label>
+        <cc-select label="ou un fichier déjà dans le projet" :options="files.map(f => ({ label: f, value: f }))" :value="seed.dump" placeholder="Choisir" @cc-select="e => seed.dump = val(e)"></cc-select>
+        <p v-if="seed.dump"><strong>Dump :</strong> <code>{{ seed.dump }}</code></p>
+        <label class="switch" title="Sinon, une Clever Task exécute le chargement sur la plateforme"><input type="checkbox" v-model="seed.local"> exécuter depuis ce poste (Docker s'il répond, sinon le client psql/mysql/mongosh/redis-cli/curl installé)</label>
         <div class="row-end"><cc-button :outlined="true" @cc-click="dialog.seed = false">Annuler</cc-button><cc-button :primary="true" :disabled="!seed.service || !seed.dump" @cc-click="doSeed">Seed</cc-button></div>
       </cc-dialog>
       <cc-dialog heading="Ouvrir un répertoire du poste" :open="dialog.addDir" @cc-close="dialog.addDir = false" closedBy="any">

@@ -45,6 +45,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/local/{id}/plan", get(local_plan))
         .route("/api/local/{id}/up", post(local_up))
         .route("/api/local/{id}/seed", post(local_seed))
+        .route("/api/local/{id}/seed/upload", post(local_seed_upload))
         .route("/api/local/{id}/export", post(local_export))
         .layer(axum::extract::DefaultBodyLimit::max(256 * 1024 * 1024))
         .with_state(state)
@@ -417,6 +418,22 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, J
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes };
         crate::exec::reconcile::up(&plan, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
+}
+
+/// Reçoit un dump quelconque et le range dans le projet
+/// (`.clever-compose/seed/<nom>`), puisque `seed` attend un fichier du
+/// projet ; renvoie son chemin relatif.
+async fn local_seed_upload(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, mut multipart: Multipart) -> Result<Json<J>, ApiError> {
+    let dir = project_dir(&s, &id)?;
+    let Some(field) = multipart.next_field().await.map_err(|e| bad(e.to_string()))? else { return Err(bad("aucun fichier reçu")) };
+    let name = field.file_name().map(str::to_string).unwrap_or_else(|| "dump".into());
+    let name = Path::new(&name).file_name().and_then(|n| n.to_str()).unwrap_or("dump").to_string();
+    let bytes = field.bytes().await.map_err(|e| bad(e.to_string()))?;
+    let rel = format!(".clever-compose/seed/{name}");
+    let path = dir.join(&rel);
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| internal(e.to_string()))?;
+    std::fs::write(&path, &bytes).map_err(|e| internal(format!("{rel} : {e}")))?;
+    Ok(Json(json!({ "path": rel, "size": bytes.len() })))
 }
 
 #[derive(Deserialize, Default)]

@@ -31,6 +31,15 @@ export const api = {
   plan: (id, allowEphemeral) => json('GET', `/api/local/${encodeURIComponent(id)}/plan?allow_ephemeral=${allowEphemeral ? 'true' : 'false'}`),
   exportProject: (id, body) => json('POST', `/api/local/${encodeURIComponent(id)}/export`, body),
 
+  async uploadDump(id, file) {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const res = await fetch(`/api/local/${encodeURIComponent(id)}/seed/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  },
+
   async upload(file) {
     const form = new FormData();
     form.append('file', file, file.name);
