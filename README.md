@@ -93,8 +93,8 @@ est embarqué dans le binaire, de deux façons choisies au build :
 - par défaut, les sources ESM sont servies telles quelles et la page charge
   Vue, Lit et les composants depuis esm.sh / jsDelivr à l'usage (réseau
   nécessaire, pas de Node au build) ;
-- `cargo build --features ui-bundled` embarque `crates/cc-compose/web/dist`,
-  produit par `cd crates/cc-compose/web && npm install && npm run build`
+- `cargo build --features ui-bundled` embarque `web/dist`,
+  produit par `cd web && npm install && npm run build`
   (Vite) : tout est dans le binaire, utilisable hors ligne.
 
 ## Extension `x-clever`

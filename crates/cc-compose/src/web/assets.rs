@@ -1,6 +1,7 @@
 //! Fichiers de l'interface embarqués dans le binaire. Deux modes, choisis au
-//! build : `ui-bundled` embarque `web/dist` (sortie de Vite, dépendances
-//! incluses) ; sinon les sources ESM de `web/` sont servies telles quelles
+//! build : `ui-bundled` embarque `web/dist` (à la racine du dépôt, sortie de
+//! Vite, dépendances incluses) ; sinon les sources ESM de `web/` sont servies
+//! telles quelles
 //! et la page charge Vue et @clevercloud/components depuis esm.sh.
 
 use axum::body::Body;
@@ -9,12 +10,12 @@ use axum::response::{IntoResponse, Response};
 
 #[cfg(feature = "ui-bundled")]
 #[derive(rust_embed::Embed)]
-#[folder = "web/dist/"]
+#[folder = "../../web/dist/"]
 struct Assets;
 
 #[cfg(not(feature = "ui-bundled"))]
 #[derive(rust_embed::Embed)]
-#[folder = "web/"]
+#[folder = "../../web/"]
 #[include = "index.cdn.html"]
 #[include = "src/*"]
 #[include = "src/**/*"]

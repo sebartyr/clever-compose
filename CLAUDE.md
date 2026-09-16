@@ -94,7 +94,7 @@ mêmes commits déployés (vérifié en réel).
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
   locaux et archives ; front Vue 3 + `@clevercloud/components` dans
-  `crates/cc-compose/web/`, sans SFC pour tourner sans build ; embarqué
+  `web/`, sans SFC pour tourner sans build ; embarqué
   soit en sources ESM + import map CDN, soit en `dist/` Vite avec la
   feature `ui-bundled`).
 

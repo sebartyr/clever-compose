@@ -1,6 +1,6 @@
 /target
 .terraform/
 .terraform.lock.hcl
-crates/cc-compose/web/node_modules/
-crates/cc-compose/web/dist/
-crates/cc-compose/web/theme.css
+web/node_modules/
+web/dist/
+web/theme.css
