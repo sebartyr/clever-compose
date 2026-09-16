@@ -203,6 +203,7 @@ export const App = defineComponent({
     const exportFile = ref('');
     const selected = ref(null);
     const busy = ref(false);
+    const status = ref('');
     const error = ref('');
     const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false, tail: false });
     // Une opération (up, down…) bloque les autres ; un suivi de logs, non.
@@ -426,7 +427,7 @@ export const App = defineComponent({
             <span class="grow"></span>
             <template v-if="current.type === 'local'">
               <cc-toggle legend="Options" :hideText="false" :inline="true" title="--yes : confirme la création des addons (facturés). --dry-run : décrit sans rien modifier. --allow-ephemeral : volumes nommés acceptés comme stockage éphémère. --no-wait : n'attend pas les déploiements. --assets : fichiers et plan conservés dans le bucket Cellar configuré (CC_ASSETS_BUCKET)." :choices="[{label:'--yes', value:'yes'},{label:'--dry-run', value:'dry_run'},{label:'--allow-ephemeral', value:'allow_ephemeral'},{label:'--no-wait', value:'no_wait'},{label:'--assets', value:'assets'}]" :multipleValues="['yes','dry_run','allow_ephemeral','no_wait','assets'].filter(k => opts[k])" @cc-multi-select="e => { const v = val(e) || []; for (const k of ['yes','dry_run','allow_ephemeral','no_wait','assets']) opts[k] = v.includes(k); }"></cc-toggle>
-              <cc-button :outlined="true" :waiting="busy" :disabled="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
+              <cc-button :outlined="true" :waiting="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
               <cc-button :primary="true" :disabled="errors > 0 || opRunning" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
               <cc-button :outlined="true" :disabled="!plan || opRunning" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
               <cc-button :outlined="true" :disabled="errors > 0" title="Terraform (JSON et HCL) et script clever-tools" @cc-click="doExport">Export</cc-button>
