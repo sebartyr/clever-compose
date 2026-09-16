@@ -14,7 +14,7 @@ fn usage() -> ExitCode {
     eprintln!("        clever-compose up --org ORG [--dry-run] [--no-wait] [--yes] [options de plan]");
     eprintln!("        clever-compose seed --service SVC --file DUMP.sql [--local] [mêmes options que up]");
     eprintln!("          --local charge le dump depuis ce poste (Docker ou client local) au lieu d'une tâche");
-    eprintln!("        clever-compose down --org ORG [-p PROJET] [--dry-run] [--yes]          (sans plan ; --yes supprime aussi les addons)");
+    eprintln!("        clever-compose down --org ORG [-p PROJET | --all] [--dry-run] [--yes]  (sans plan ; --yes supprime aussi les addons ; --all : tous les projets de l'organisation)");
     eprintln!("        clever-compose ps   --org ORG [-p PROJET]                               (état des apps, addons, réseaux)");
     eprintln!("        clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]");
     eprintln!("          identifiants : CC_API_TOKEN, ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0)");
@@ -87,8 +87,9 @@ fn images(args: &[String]) -> ExitCode {
     };
     let mut diags = diagnostic::Diagnostics::default();
     let fixture = cc_compose::plan::cli::images_fixture(&opts, &registry, &mut diags);
+    let mut ui = cc_compose::ui::Ui::stderr();
     for line in diags.render_all() {
-        eprintln!("{line}");
+        ui.diagnostic(&line);
     }
     match fixture {
         Some(f) if !diags.has_errors() => {
@@ -156,14 +157,20 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
     let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
     let plan = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
+    let ui = std::sync::Arc::new(std::sync::Mutex::new(cc_compose::ui::Ui::stderr()));
     for line in diags.render_all() {
-        eprintln!("{line}");
+        ui.lock().unwrap().diagnostic(&line);
     }
     let Some(plan) = plan else {
+        ui.lock().unwrap().done(false, "plan impossible : corrigez les erreurs ci-dessus");
         return ExitCode::from(1);
     };
     if diags.has_errors() {
+        ui.lock().unwrap().done(false, "plan refusé : corrigez les erreurs ci-dessus");
         return ExitCode::from(1);
+    }
+    if !diags.is_empty() {
+        ui.lock().unwrap().blank();
     }
     let plan = match &seed {
         None => plan,
@@ -177,12 +184,17 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     };
     let api = cc_compose::exec::platform::Api::new(org, creds);
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
+    let ui2 = ui.clone();
+    let mut log: cc_compose::exec::reconcile::Log = Box::new(move |line: &str| ui2.lock().unwrap().log(line));
     let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons }, &mut log));
+    drop(log);
     match result {
-        Ok(_) => ExitCode::SUCCESS,
+        Ok(_) => {
+            ui.lock().unwrap().done(true, if dry_run { "rien n'a été modifié (--dry-run)" } else { "projet à jour" });
+            ExitCode::SUCCESS
+        }
         Err(e) => {
-            eprintln!("erreur : {e}");
+            ui.lock().unwrap().done(false, &e);
             ExitCode::from(1)
         }
     }
@@ -253,15 +265,22 @@ fn run_stateless(f: impl std::future::Future<Output = Result<(), String>>) -> Ex
     match rt.block_on(f) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("erreur : {e}");
+            cc_compose::ui::Ui::stderr().done(false, &e);
             ExitCode::from(1)
         }
     }
 }
 
+/// Journal d'actions rendu par l'interface terminal.
+fn ui_log() -> cc_compose::exec::reconcile::Log {
+    let ui = std::sync::Mutex::new(cc_compose::ui::Ui::stderr());
+    Box::new(move |line: &str| ui.lock().unwrap().log(line))
+}
+
 fn down(args: &[String]) -> ExitCode {
     let mut dry_run = false;
     let mut confirm_addons = false;
+    let mut all = false;
     let st = match stateless("down", args, &mut |a, _, _| match a {
         "--dry-run" => {
             dry_run = true;
@@ -271,14 +290,35 @@ fn down(args: &[String]) -> ExitCode {
             confirm_addons = true;
             true
         }
+        "--all" => {
+            all = true;
+            true
+        }
         _ => false,
     }) {
         Ok(s) => s,
         Err(code) => return code,
     };
     let _ = &st.rest;
-    let mut log: cc_compose::exec::reconcile::Log = Box::new(|line: &str| eprintln!("{line}"));
-    run_stateless(cc_compose::exec::reconcile::down(&st.project, &st.api, dry_run, confirm_addons, &mut log))
+    let mut log = ui_log();
+    if !all {
+        return run_stateless(cc_compose::exec::reconcile::down(&st.project, &st.api, dry_run, confirm_addons, &mut log));
+    }
+    // `--all` : tous les projets que clever-compose a créés dans
+    // l'organisation, retrouvés par leur tag ; les addons seulement avec --yes.
+    run_stateless(async {
+        let projects = cc_compose::exec::inspect::projects(&st.api).await?;
+        if projects.is_empty() {
+            log("aucun projet clever-compose dans cette organisation");
+            return Ok(());
+        }
+        log(&format!("projets : {}", projects.join(", ")));
+        for p in &projects {
+            log(&format!("== {p}"));
+            cc_compose::exec::reconcile::down(p, &st.api, dry_run, confirm_addons, &mut log).await?;
+        }
+        Ok(())
+    })
 }
 
 enum Inspect {
@@ -370,8 +410,9 @@ fn export(args: &[String]) -> ExitCode {
     if let Some(Err(d)) = &result {
         diags.push(d.clone());
     }
+    let mut ui = cc_compose::ui::Ui::stderr();
     for line in diags.render_all() {
-        eprintln!("{line}");
+        ui.diagnostic(&line);
     }
     if plan.is_none() || diags.has_errors() {
         return ExitCode::from(1);
@@ -490,8 +531,9 @@ fn config(args: &[String], plan: bool) -> ExitCode {
         };
         let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
         let result = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
+        let mut ui = cc_compose::ui::Ui::stderr();
         for line in diags.render_all() {
-            eprintln!("{line}");
+            ui.diagnostic(&line);
         }
         let Some(result) = result else {
             return ExitCode::from(1);
@@ -500,8 +542,9 @@ fn config(args: &[String], plan: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let project = compose::project::load(&opts, &mut diags);
+    let mut ui = cc_compose::ui::Ui::stderr();
     for line in diags.render_all() {
-        eprintln!("{line}");
+        ui.diagnostic(&line);
     }
     let Some(project) = project else {
         return ExitCode::from(1);

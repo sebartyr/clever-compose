@@ -68,6 +68,29 @@ pub async fn discover<P: Platform>(project: &str, platform: &P) -> Result<Invent
     Ok(inv)
 }
 
+/// Tous les projets clever-compose de l'organisation : les valeurs du tag
+/// `compose-project=` sur les applications et les network groups.
+pub async fn projects<P: Platform>(platform: &P) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for x in platform.list_apps().await? {
+        for t in platform.get_tags(&x.id).await? {
+            if let Some(p) = t.strip_prefix("compose-project=") {
+                out.push(p.to_string());
+            }
+        }
+    }
+    for x in platform.list_ngs().await? {
+        for t in &x.tags {
+            if let Some(p) = t.strip_prefix("compose-project=") {
+                out.push(p.to_string());
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
 /// `clever-compose ps` : une ligne par ressource, à la manière de
 /// `docker compose ps` (service, type, identifiant, état, accès).
 pub async fn ps<P: Platform>(project: &str, platform: &P, log: &mut Log) -> Result<(), String> {

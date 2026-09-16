@@ -6,3 +6,4 @@ pub mod diagnostic;
 pub mod emit;
 pub mod exec;
 pub mod plan;
+pub mod ui;

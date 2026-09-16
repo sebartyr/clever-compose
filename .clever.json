@@ -1,0 +1,12 @@
+{
+  "apps": [
+    {
+      "app_id": "app_59b80a85-81eb-41c1-91a1-7ff2c545ce15",
+      "org_id": "orga_cd3ca43d-4948-4829-bd7d-0c83cf133bd7",
+      "deploy_url": "https://push-n3-par-clevercloud-customers.services.clever-cloud.com/app_59b80a85-81eb-41c1-91a1-7ff2c545ce15.git",
+      "git_ssh_url": "git+ssh://git@push-n3-par-clevercloud-customers.services.clever-cloud.com/app_59b80a85-81eb-41c1-91a1-7ff2c545ce15.git",
+      "name": "ccp3-hello",
+      "alias": "ccp3-hello"
+    }
+  ]
+}

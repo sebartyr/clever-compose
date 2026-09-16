@@ -293,6 +293,25 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (`ccng4`, détruit) : `mongodb 4.0.3`, `documentdb 7.0.0`, ES `8.19.9`
   atteints par les URL réécrites (`m:27017` → `…:8080`, `d:27017` →
   `…:4040` + TLS, `http://es:9200` → `http://…:8080`).
+- **Retours du premier essai du propriétaire sur son propre compose
+  (16/09/2026)** : (1) espace personnel `user_…` : `PUT /v2/self/applications/{id}/tags`
+  répond 405 — sur Axo les tags se posent un par un
+  (`PUT`/`DELETE …/tags/{tag}`), le `PUT` de la liste n'existait que sur
+  l'ancienne route des organisations ; `set_tags` fait maintenant la
+  différence tag par tag (vérifié sur `user_…`). (2) Affichage : module `ui`
+  — couleurs sur un terminal (`NO_COLOR` respecté), diagnostics mis en forme
+  (position, sévérité, code, chemin), ligne vide entre diagnostics et
+  actions, verbe coloré selon son sens, indicateur de progression en place
+  pendant les attentes (déploiement, peer d'addon, endpoint DocumentDB ;
+  une seule ligne hors terminal), bilan final ✔/✘.
+- **Homonymes (16/09/2026)** : le nom n'est pas unique sur la plateforme.
+  `up` choisit désormais parmi les homonymes celle qui porte le tag
+  `compose-project` (un homonyme sans tag est signalé et laissé), refuse
+  s'il y en a plusieurs avec le tag (ids listés), même règle pour les
+  network groups (label + tag) et les addons (nom + fournisseur). Vérifié en
+  réel avec un homonyme étranger puis un doublon tagué.
+- `down --all` : supprime tout ce que clever-compose a créé dans
+  l'organisation (projets retrouvés par le tag), addons avec `--yes`.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.

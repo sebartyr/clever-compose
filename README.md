@@ -27,7 +27,7 @@ export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--project-directory DIR] [-f FILE]... [-p NAME] [--profile P]
 clever-compose up     [mêmes options] [--dry-run] [--no-wait] [--yes] [--allow-ephemeral]
-clever-compose down   [-p PROJET] [--dry-run] [--yes]   (sans plan : par nom de projet et tags)
+clever-compose down   [-p PROJET | --all] [--dry-run] [--yes]   (sans plan : par nom de projet et tags ; --all : tout ce que clever-compose a créé dans l'organisation)
 clever-compose ps     [-p PROJET]                        (apps, tâches, addons, réseaux)
 clever-compose logs   [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
 clever-compose seed   --service db --file dump.sql [--local] [mêmes options que up]

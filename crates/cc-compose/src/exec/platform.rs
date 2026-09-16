@@ -270,6 +270,11 @@ pub trait Platform: Send + Sync {
     fn git_credentials(&self) -> (String, String);
 }
 
+/// Segment d'URL (`=` et `/` d'un tag `compose-project=x`).
+fn urlencode(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
 /// Identifiants de l'outil, indépendants de la CLI clever : `CC_API_TOKEN`
 /// (bearer, api-bridge) ou `CLEVER_TOKEN` + `CLEVER_SECRET` (OAuth 1.0).
 pub fn credentials_from_env() -> PResult<Credentials> {
@@ -426,7 +431,16 @@ impl Platform for Api {
     }
 
     async fn set_tags(&self, app: &str, tags: &[String]) -> PResult<()> {
-        self.send(reqwest::Method::PUT, &format!("{}/tags", self.app_path(app)), Some(&json!(tags))).await?;
+        // Un tag à la fois (`PUT`/`DELETE …/tags/{tag}`, Axo) : le `PUT` de
+        // la liste n'existe que sur l'ancienne route des organisations, pas
+        // sur `/v2/self` (405 constaté le 16/09/2026).
+        let current = self.get_tags(app).await?;
+        for t in tags.iter().filter(|t| !current.contains(t)) {
+            self.send(reqwest::Method::PUT, &format!("{}/tags/{}", self.app_path(app), urlencode(t)), None).await?;
+        }
+        for t in current.iter().filter(|t| !tags.contains(t)) {
+            self.send(reqwest::Method::DELETE, &format!("{}/tags/{}", self.app_path(app), urlencode(t)), None).await?;
+        }
         Ok(())
     }
 

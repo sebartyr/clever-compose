@@ -40,7 +40,14 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     if !addons.is_empty() {
         let existing = platform.list_addons().await?;
         for a in &addons {
-            match existing.iter().find(|x| x.name == a.name) {
+            // Le nom n'est pas unique sur la plateforme et les addons n'ont
+            // pas de tags : un homonyme du bon fournisseur est le nôtre ;
+            // plusieurs, personne ne tranche à la place de l'utilisateur.
+            let same: Vec<&super::platform::AddonInfo> = existing.iter().filter(|x| x.name == a.name && x.provider == a.provider).collect();
+            if same.len() > 1 {
+                return Err(format!("{} addons `{}` ({}) portent ce nom : {} ; supprimez les doublons avant de continuer", same.len(), a.name, a.provider, same.iter().map(|x| x.id.as_str()).collect::<Vec<_>>().join(", ")));
+            }
+            match same.first().copied().or_else(|| existing.iter().find(|x| x.name == a.name)) {
                 Some(x) => {
                     if x.provider != a.provider {
                         return Err(format!("l'addon `{}` ({}) existe avec le fournisseur {}, le plan demande {}", a.name, x.id, x.provider, a.provider));
@@ -63,16 +70,17 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                     // L'endpoint DocumentDB apparaît quelques secondes après la
                     // création : lier avant, c'est déployer sans son URI.
                     if a.options.get("documentdb").is_some_and(|v| v == "true") {
-                        let deadline = std::time::Instant::now() + Duration::from_secs(180);
+                        let started = std::time::Instant::now();
                         loop {
                             if platform.addon_env(&created.id).await?.iter().any(|e| e.name == "DOCUMENTDB_ADDON_URI") {
                                 log(&format!("addon {} : endpoint DocumentDB prêt", a.name));
                                 break;
                             }
-                            if std::time::Instant::now() > deadline {
+                            if started.elapsed() > Duration::from_secs(180) {
                                 return Err(format!("addon {} : l'endpoint DocumentDB (DOCUMENTDB_ADDON_URI) n'est pas apparu en 3 minutes", a.name));
                             }
-                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            log(&format!("{}addon {} : attente de l'endpoint DocumentDB ({}s)", crate::ui::PROGRESS, a.name, started.elapsed().as_secs()));
+                            tokio::time::sleep(Duration::from_secs(3)).await;
                         }
                     }
                     state.addon_ids.insert(a.service.clone(), created.id);
@@ -86,7 +94,13 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     let existing_ngs = platform.list_ngs().await?;
     for r in &plan.resources {
         let Resource::NetworkGroup(ng) = r else { continue };
-        match existing_ngs.iter().find(|x| x.label == ng.name) {
+        // Par label et tag `compose-project` ; un homonyme sans le tag est à
+        // quelqu'un d'autre, plusieurs avec le tag sont un doublon à trancher.
+        let tagged: Vec<&super::platform::NgInfo> = existing_ngs.iter().filter(|x| x.label == ng.name && x.tags.iter().any(|t| t == &project_tag)).collect();
+        if tagged.len() > 1 {
+            return Err(format!("{} network groups `{}` portent le tag `{project_tag}` : {} ; supprimez les doublons avant de continuer", tagged.len(), ng.name, tagged.iter().map(|x| x.id.as_str()).collect::<Vec<_>>().join(", ")));
+        }
+        match tagged.first().copied() {
             Some(x) => {
                 log(&format!("network group {} : existe ({})", ng.name, x.id));
                 state.ng_ids.insert(ng.network.clone(), x.id.clone());
@@ -107,13 +121,28 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     let all_apps: Vec<&App> = plan.resources.iter().filter_map(|r| if let Resource::App(a) = r { Some(a) } else { None }).collect();
     let apps: Vec<&App> = all_apps.iter().copied().filter(|a| a.run == RunWhere::Platform).collect();
     for app in &apps {
-        let found = existing_apps.iter().find(|x| x.name == app.name);
-        match found {
-            Some(x) => {
-                let tags = platform.get_tags(&x.id).await?;
-                if !tags.iter().any(|t| t == &project_tag) {
-                    return Err(format!("l'application `{}` ({}) existe mais ne porte pas le tag `{project_tag}` : elle n'a pas été créée par clever-compose, refus de la modifier", app.name, x.id));
-                }
+        // Le nom n'est pas unique sur la plateforme : parmi les homonymes,
+        // seule celle qui porte le tag `compose-project` est la nôtre ; sans
+        // aucune, on crée (un homonyme étranger est signalé, pas touché) ;
+        // plusieurs, personne ne tranche à la place de l'utilisateur.
+        let mut tagged: Vec<(&super::platform::AppInfo, Vec<String>)> = Vec::new();
+        let mut foreign: Vec<&str> = Vec::new();
+        for x in existing_apps.iter().filter(|x| x.name == app.name) {
+            let tags = platform.get_tags(&x.id).await?;
+            if tags.iter().any(|t| t == &project_tag) {
+                tagged.push((x, tags));
+            } else {
+                foreign.push(&x.id);
+            }
+        }
+        if tagged.len() > 1 {
+            return Err(format!("{} applications `{}` portent le tag `{project_tag}` : {} ; supprimez les doublons avant de continuer", tagged.len(), app.name, tagged.iter().map(|(x, _)| x.id.as_str()).collect::<Vec<_>>().join(", ")));
+        }
+        if !foreign.is_empty() {
+            log(&format!("application {} : {} homonyme(s) sans le tag `{project_tag}` ({}), laissé(s) tels quels", app.name, foreign.len(), foreign.join(", ")));
+        }
+        match tagged.pop() {
+            Some((x, tags)) => {
                 log(&format!("application {} : existe ({})", app.name, x.id));
                 let i = &x.instance;
                 if i.min_flavor.name != app.scaling.min_flavor || i.max_flavor.name != app.scaling.max_flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances {
@@ -175,17 +204,15 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         // (peer) ; un dédié tout juste créé peut mettre plusieurs minutes.
         // Les consommateurs sont déployés après.
         if kind == "addon" && !opts.dry_run {
-            let deadline = std::time::Instant::now() + Duration::from_secs(900);
+            let started = std::time::Instant::now();
             let mut waited = false;
             while !platform.ng_members_with_peer(ng_id).await?.iter().any(|m| m == member_id) {
-                if std::time::Instant::now() > deadline {
+                if started.elapsed() > Duration::from_secs(900) {
                     return Err(format!("membre {service}@{net} : l'addon n'a pas rejoint le groupe (aucun peer) en 15 minutes"));
                 }
-                if !waited {
-                    log(&format!("membre {service}@{net} : attente de l'instance de l'addon dans le groupe"));
-                    waited = true;
-                }
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                log(&format!("{}membre {service}@{net} : attente de l'instance de l'addon dans le groupe ({}s)", crate::ui::PROGRESS, started.elapsed().as_secs()));
+                waited = true;
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
             if waited {
                 log(&format!("membre {service}@{net} : instance présente"));
@@ -446,14 +473,14 @@ pub fn resolve(t: &Template, plan: &Plan, app: &App, state: &State, project_dir:
 }
 
 async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, log: &mut Log) -> Result<(), String> {
-    log(&format!("application {name} : attente du déploiement"));
     let started = std::time::Instant::now();
     let mut last_seen: Option<u64> = None;
     loop {
         if started.elapsed() > Duration::from_secs(30 * 60) {
             return Err(format!("application {name} : déploiement trop long (30 min)"));
         }
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        log(&format!("{}application {name} : attente du déploiement ({}s)", crate::ui::PROGRESS, started.elapsed().as_secs()));
+        tokio::time::sleep(Duration::from_secs(2)).await;
         let Some(d) = platform.last_deployment(app_id).await? else { continue };
         if last_seen != Some(d.id) {
             last_seen = Some(d.id);
