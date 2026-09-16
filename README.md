@@ -30,7 +30,7 @@ clever-compose up     [mêmes options] [--dry-run] [--no-wait] [--yes] [--allow-
 clever-compose down   [-p PROJET] [--dry-run] [--yes]   (sans plan : par nom de projet et tags)
 clever-compose ps     [-p PROJET]                        (apps, tâches, addons, réseaux)
 clever-compose logs   [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
-clever-compose seed   --service db --file dump.sql [mêmes options que up]
+clever-compose seed   --service db --file dump.sql [--local] [mêmes options que up]
 clever-compose export [terraform|script|all] -o DIR [--branches] [mêmes options que plan]
 clever-compose config [mêmes options] --format json   # l'équivalent de `docker compose config`
 clever-compose images --project-directory DIR         # fixture d'images pour les tests hors ligne
@@ -47,9 +47,24 @@ clever-compose images --project-directory DIR         # fixture d'images pour le
 - `--allow-ephemeral` accepte les volumes des services non substituables
   comme stockage éphémère ; `x-clever.ephemeral: true` garde une base en
   conteneur au lieu d'un addon.
+- `seed` charge un dump local dans un addon (`.sql`/`.sql.gz`/`.sh` pour
+  PostgreSQL et MySQL, `.js`/`.archive`/`.sh` pour MongoDB et DocumentDB,
+  `.redis`/`.resp` pour Redis, `.ndjson` pour Elasticsearch), une fois par
+  contenu (témoin `cc_compose_init`) ; par une Clever Task, ou depuis le
+  poste avec `--local` (Docker s'il répond, sinon le client installé).
+- `down`, `ps` et `logs` ne relisent pas le compose : le nom du projet et
+  les tags posés par `up` suffisent. `logs` lit les applications et les
+  addons, `--since 1h` ou un horodatage RFC 3339, `-f` pour suivre.
 - `export terraform --branches` écrit les branches `clever-compose/<service>`
-  dans le dépôt git du projet, que `deployment.repository` référence ; il
-  reste à les pousser (`git push origin 'refs/heads/clever-compose/*'`).
+  dans le dépôt git du projet, que `deployment.repository` référence : une
+  URL distante à pousser (`git push origin 'refs/heads/clever-compose/*'`),
+  ou `file:///chemin/du/dépôt` (le provider l'ouvre sur place). Ce que le
+  provider ne sait pas exprimer sort en avertissement : Clever Task
+  (`terraform-task`), options d'addon comme DocumentDB (ressource omise,
+  id réel attendu dans la variable `addon_<service>_real_id`), UDP.
+- Image sur un registre privé : `docker login <hôte>` sur le poste suffit,
+  `up` pose `CC_DOCKER_LOGIN_*` depuis la configuration Docker et l'export
+  Terraform attend `registry_<hôte>_user`/`_password` en variables.
 
 ## Extension `x-clever`
 
@@ -73,15 +88,15 @@ segmentation qu'en local), `single` (un seul groupe pour le projet) ou
 
 | Compose | Clever Cloud |
 |---|---|
-| `image:` | dépôt synthétique `FROM image` + shim |
+| `image:` | dépôt synthétique `FROM image` + shim ; registre privé via les identifiants du poste |
 | `build:` | contexte poussé, Dockerfile prolongé (`Dockerfile.cc`) |
-| `ports:` | port HTTP relayé sur 8080 ; autres ports en redirections TCP/UDP (4040) |
+| `ports:` | premier port HTTP relayé sur 8080 ; un port TCP en redirection (4040, port externe attribué) ; UDP : pas disponible sur la plateforme pour le moment |
 | `environment`, `env_file`, `secrets` | variables ; noms de services réécrits en FQDN de membre ; secrets matérialisés par le shim |
 | `depends_on` | ordre de déploiement ; `service_completed_successfully` → Clever Task |
 | `healthcheck` HTTP | `CC_HEALTH_CHECK_PATH` (2xx exigé) |
 | `deploy.replicas`, `resources.limits.{memory,cpus}` | instances fixes (avertissement : pas d'autoscaling sans `x-clever`), plus petite flavor couvrant mémoire et vCPU |
 | réseaux | network groups selon `x-clever.network_groups`, table DNS `CC_COMPOSE_DNS_MAP` + stub DNS du shim |
-| postgres, mysql/mariadb, redis/valkey, mongo (DocumentDB : PostgreSQL dédié avec l'option, API MongoDB 7.0 ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3), elasticsearch | addon managé, identifiants expansés au démarrage ; PostgreSQL, MySQL et Redis membres du network group par défaut (plan dédié, joints sur le port 8080) ; scripts d'init rejoués par une tâche (postgres, mysql, mongo), `seed` pour tous |
+| postgres, mysql/mariadb, redis/valkey, mongo (DocumentDB : PostgreSQL dédié avec l'option, API MongoDB 7.0 ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3), elasticsearch | addon managé sur un plan dédié, **membre du network group par défaut** : joint sur `<id>.m.<ng>.cc-ng.cloud`, port 8080 (4040 pour DocumentDB, Elasticsearch en HTTP clair), identifiants de la liaison expansés au démarrage par le shim ; `x-clever.private: false` pour l'hôte public (et le plan partagé `dev`) ; scripts d'init rejoués par une tâche (PostgreSQL, MySQL, MongoDB, DocumentDB), `seed` pour tous |
 | `privileged`, `cap_add`, `devices`, `network_mode`, `sysctls`, volumes nommés… | refus avec diagnostic |
 
 ## Tests
