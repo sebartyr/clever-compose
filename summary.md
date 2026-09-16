@@ -227,6 +227,12 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
   `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
   candidates donnent `addon-version-ambiguous`.
+- **Règle (propriétaire, 16/09/2026) : la compatibilité Terraform suit le
+  provider.** L'export s'aligne sur le provider publié (schéma embarqué,
+  version dans `data/PROVENANCE.md`) ; à chaque version, régénérer le
+  schéma, relire `deployment`/`networkgroups`/`dependencies`, relancer
+  `terraform validate`. Ce que le provider ne sait pas faire reste un
+  avertissement d'export et une PR côté provider, jamais une invention ici.
 - **Revue contre les sources du provider Terraform 2.2.0 (16/09/2026,
   `~/cc-compose/terraform-provider-clevercloud`)**, demandée par le
   propriétaire. Conforme : `networkgroups[].fqdn` validé contre les suffixes
