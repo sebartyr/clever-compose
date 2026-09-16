@@ -10,7 +10,7 @@ use cc_compose_model::plan::*;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "clever-compose", version, about = "Fait tourner un docker compose sur Clever Cloud : chaque service devient une application Docker, chaque réseau un network group, les bases reconnues des addons managés.", long_about = None, disable_help_subcommand = true, after_help = "Identifiants : CC_API_TOKEN (bearer), ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0). Organisation : --org ou CC_ORG.\nExemples :\n  clever-compose plan                 ce qui serait créé, avec les diagnostics\n  clever-compose up --yes             déploie (--yes confirme les addons, facturés)\n  clever-compose logs api --follow    suit les logs d'un service\n  clever-compose down --yes           supprime tout ce que le projet a créé")]
+#[command(name = "clever-compose", version = build_version(), about = "Fait tourner un docker compose sur Clever Cloud : chaque service devient une application Docker, chaque réseau un network group, les bases reconnues des addons managés.", long_about = None, disable_help_subcommand = true, after_help = "Identifiants : CC_API_TOKEN (bearer), ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0). Organisation : --org ou CC_ORG.\nExemples :\n  clever-compose plan                 ce qui serait créé, avec les diagnostics\n  clever-compose up --yes             déploie (--yes confirme les addons, facturés)\n  clever-compose logs api --follow    suit les logs d'un service\n  clever-compose down --yes           supprime tout ce que le projet a créé")]
 struct Cli {
     #[command(flatten)]
     project: ProjectArgs,
@@ -206,6 +206,16 @@ enum ExportWhat {
     All,
     Terraform,
     Script,
+}
+
+/// `0.1.0 (a1b2c3d, 2026-09-16T19:12:00Z)` : version, commit et date du build.
+fn build_version() -> &'static str {
+    static V: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    V.get_or_init(|| {
+        let stamp = env!("CC_BUILD_STAMP");
+        let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
+        format!("{} ({commit}, {})", env!("CARGO_PKG_VERSION"), cc_compose::exec::inspect::rfc3339(secs.parse().unwrap_or(0)))
+    })
 }
 
 fn main() -> ExitCode {

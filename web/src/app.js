@@ -40,9 +40,9 @@ const SessionPanel = defineComponent({
     <div class="session">
       <template v-if="session?.authenticated">
         <cc-select label="Organisation" :hiddenLabel="true" :inline="true" :options="orgs.map(o => ({ label: o.name, value: o.id }))" :value="session.org" placeholder="Choisir une organisation" @cc-select="chooseOrg" :disabled="busy"></cc-select>
-        <cc-button :outlined="true" @cc-click="open = true">Jetons</cc-button>
+        <cc-button :outlined="true" title="Changer les identifiants" @cc-click="open = true">Jetons</cc-button>
       </template>
-      <cc-button v-else :primary="true" @cc-click="open = true">Se connecter</cc-button>
+      <cc-button v-else :primary="true" title="Saisir un jeton d'API ou OAuth 1.0" @cc-click="open = true">Se connecter</cc-button>
       <cc-dialog heading="Identifiants Clever Cloud" :open="open" @cc-close="open = false" closedBy="any">
         <p class="hint">Un jeton d'API (bearer), ou un jeton OAuth 1.0 et son secret (ceux de la CLI clever conviennent). Ils restent en mémoire du serveur local, jamais sur le disque.</p>
         <cc-input-text label="Jeton d'API" :secret="true" :value="form.api_token" @cc-input="e => form.api_token = val(e)"></cc-input-text>
@@ -112,8 +112,8 @@ const LogPanel = defineComponent({
         <strong>{{ title || 'Journal' }}</strong>
         <cc-loader v-if="running" a11y-name="en cours"></cc-loader>
         <span class="grow"></span>
-        <cc-button v-if="running" :outlined="true" :danger="true" @cc-click="$emit('cancel')">Arrêter</cc-button>
-        <cc-button v-else :outlined="true" @cc-click="$emit('clear')">Effacer</cc-button>
+        <cc-button v-if="running" :outlined="true" :danger="true" title="Interrompt l'opération en cours" @cc-click="$emit('cancel')">Arrêter</cc-button>
+        <cc-button v-else :outlined="true" title="Vide le journal" @cc-click="$emit('clear')">Effacer</cc-button>
       </header>
       <pre ref="el"><div v-for="(l, i) in lines" :key="i" v-html="renderLine(l)"></div></pre>
     </section>
@@ -137,7 +137,7 @@ const Detail = defineComponent({
         <cc-badge :weight="'dimmed'" :intent="node.kind === 'addon' ? 'info' : 'neutral'">{{ node.kind }}</cc-badge>
         <strong>{{ node.label }}</strong>
         <span class="grow"></span>
-        <cc-button :outlined="true" :hideText="true" @cc-click="$emit('close')">Fermer</cc-button>
+        <cc-button :outlined="true" :hideText="true" title="Fermer le détail" @cc-click="$emit('close')">Fermer</cc-button>
       </header>
       <p class="sub">{{ node.sub }}</p>
       <template v-if="platform && node.kind !== 'addon'">
@@ -189,6 +189,7 @@ export const App = defineComponent({
   components: { Diagram, SessionPanel, LogPanel, Detail },
   setup() {
     const session = ref({ authenticated: false, org: '' });
+    const info = ref({});
     const orgs = ref([]);
     const locals = ref([]);
     const platformProjects = ref([]);
@@ -213,6 +214,7 @@ export const App = defineComponent({
 
     const notify = (e) => { error.value = e?.message || String(e); setTimeout(() => { if (error.value === (e?.message || String(e))) error.value = ''; }, 8000); };
 
+    const loadInfo = async () => { try { info.value = await api.info(); } catch { /* serveur absent */ } };
     const refreshSession = async () => {
       session.value = await api.session();
       if (session.value.authenticated) {
@@ -323,7 +325,7 @@ export const App = defineComponent({
 
     watch(() => opts.allow_ephemeral, loadPlan);
     onMounted(async () => {
-      await refreshSession(); await refreshLocals();
+      await loadInfo(); await refreshSession(); await refreshLocals();
       // Liens directs : ?project=<nom> (plateforme) ou ?local=<id>.
       const q = new URLSearchParams(location.search);
       if (q.get('project') && session.value.org) await openPlatform(q.get('project'));
@@ -331,12 +333,12 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
       <header class="top">
-        <h1>clever-compose</h1>
+        <h1>clever-compose <small class="dim" :title="'build ' + (info.built || '') + (info.bundled ? ', interface empaquetée' : ', interface via CDN')">{{ info.version }}{{ info.commit ? ' · ' + info.commit : '' }}</small></h1>
         <span class="grow"></span>
         <session-panel :session="session" :orgs="orgs" @changed="refreshSession"></session-panel>
       </header>
@@ -346,12 +348,12 @@ export const App = defineComponent({
           <li v-for="p in locals" :key="p.id" :class="{ active: current?.id === p.id }">
             <a href="#" @click.prevent="openLocal(p)">{{ p.name }}</a>
             <span class="dim" :title="p.dir">{{ p.temporary ? 'archive' : p.dir }}</span>
-            <cc-button :outlined="true" :hideText="true" :danger="true" @cc-click="removeLocal(p)">Retirer</cc-button>
+            <cc-button :outlined="true" :hideText="true" :danger="true" title="Retire le projet de la liste (une archive extraite est supprimée du disque)" @cc-click="removeLocal(p)">Retirer</cc-button>
           </li>
         </ul>
-        <label class="upload"><input type="file" accept=".zip,.tar,.tgz,.tar.gz" @change="upload"><span>Charger une archive (.zip, .tar.gz)</span></label>
-        <cc-button :outlined="true" @cc-click="dialog.addDir = true">Ouvrir un répertoire du poste</cc-button>
-        <h2>Sur la plateforme <cc-button :outlined="true" :hideText="true" @cc-click="refreshPlatform">Rafraîchir</cc-button></h2>
+        <label class="upload" title="Archive .zip, .tar.gz, .tgz ou .tar contenant le projet ; extraite dans un répertoire temporaire"><input type="file" accept=".zip,.tar,.tgz,.tar.gz" @change="upload"><span>Charger une archive (.zip, .tar.gz)</span></label>
+        <cc-button :outlined="true" title="Un répertoire du poste qui contient un compose.yaml" @cc-click="dialog.addDir = true">Ouvrir un répertoire du poste</cc-button>
+        <h2>Sur la plateforme <cc-button :outlined="true" :hideText="true" title="Relit les projets de l'organisation" @cc-click="refreshPlatform">Rafraîchir</cc-button></h2>
         <p v-if="!session.authenticated" class="dim">Connectez-vous pour voir les projets déployés.</p>
         <p v-else-if="!session.org" class="dim">Choisissez une organisation.</p>
         <ul v-else>
@@ -370,15 +372,15 @@ export const App = defineComponent({
             <span class="grow"></span>
             <template v-if="current.type === 'local'">
               <cc-toggle legend="Options" :hideText="false" :inline="true" :choices="[{label:'--yes', value:'yes'},{label:'--dry-run', value:'dry_run'},{label:'--allow-ephemeral', value:'allow_ephemeral'},{label:'--no-wait', value:'no_wait'}]" :multipleValues="['yes','dry_run','allow_ephemeral','no_wait'].filter(k => opts[k])" @cc-multi-select="e => { const v = val(e) || []; for (const k of ['yes','dry_run','allow_ephemeral','no_wait']) opts[k] = v.includes(k); }"></cc-toggle>
-              <cc-button :outlined="true" :waiting="busy" @cc-click="loadPlan">Plan</cc-button>
-              <cc-button :primary="true" :disabled="errors > 0 || logs.running" @cc-click="doUp">Up</cc-button>
-              <cc-button :outlined="true" :disabled="!plan || logs.running" @cc-click="dialog.seed = true">Seed</cc-button>
-              <cc-button :outlined="true" :disabled="errors > 0" @cc-click="doExport">Export</cc-button>
+              <cc-button :outlined="true" :waiting="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
+              <cc-button :primary="true" :disabled="errors > 0 || logs.running" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
+              <cc-button :outlined="true" :disabled="!plan || logs.running" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
+              <cc-button :outlined="true" :disabled="errors > 0" title="Terraform (JSON et HCL) et script clever-tools" @cc-click="doExport">Export</cc-button>
             </template>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doLogs()">Logs</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doStop">Stop</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doStart">Start</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="logs.running" @cc-click="dialog.down = true">Down</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Logs des applications et addons du projet" @cc-click="doLogs()">Logs</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Arrête les applications sans rien supprimer (comme docker compose stop)" @cc-click="doStop">Stop</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Relance les applications arrêtées" @cc-click="doStart">Start</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="logs.running" title="Supprime les applications et network groups ; les addons seulement avec --yes" @cc-click="dialog.down = true">Down</cc-button>
           </section>
           <nav class="tabs">
             <a :class="{ active: tab === 'diagram' }" href="#" @click.prevent="tab = 'diagram'">Diagramme</a>
@@ -386,8 +388,8 @@ export const App = defineComponent({
             <a v-if="current.type === 'local'" :class="{ active: tab === 'diagnostics' }" href="#" @click.prevent="tab = 'diagnostics'">Diagnostics <cc-badge v-if="diagnostics.length" :intent="errors ? 'danger' : 'warning'" weight="dimmed" circle>{{ diagnostics.length }}</cc-badge></a>
             <a v-if="exportResult" :class="{ active: tab === 'export' }" href="#" @click.prevent="tab = 'export'">Export</a>
             <span class="grow"></span>
-            <label v-if="current.type === 'local' && onPlatform" class="switch"><input type="checkbox" v-model="viewPlatform" @change="loadInventory"> état sur la plateforme</label>
-            <cc-button v-if="current.type === 'platform'" :outlined="true" @cc-click="loadInventory">Rafraîchir</cc-button>
+            <label v-if="current.type === 'local' && onPlatform" class="switch" title="Diagramme de ce qui existe sur la plateforme (instances, déploiements) au lieu du plan"><input type="checkbox" v-model="viewPlatform" @change="loadInventory"> état sur la plateforme</label>
+            <cc-button v-if="current.type === 'platform'" :outlined="true" title="Relit l'état des ressources sur la plateforme" @cc-click="loadInventory">Rafraîchir</cc-button>
           </nav>
           <div class="content" v-show="tab === 'diagram'">
             <div class="canvas">
@@ -399,7 +401,7 @@ export const App = defineComponent({
           <div class="content compose" v-show="tab === 'compose'">
             <aside class="files"><a v-for="f in files" :key="f" href="#" :class="{ active: f === file.path }" @click.prevent="openFile(f)">{{ f }}</a></aside>
             <div class="editor">
-              <header><code>{{ file.path }}</code><span class="grow"></span><cc-button :primary="true" :disabled="!file.dirty" @cc-click="saveFile">Enregistrer et replanifier</cc-button></header>
+              <header><code>{{ file.path }}</code><span class="grow"></span><cc-button :primary="true" :disabled="!file.dirty" title="Écrit le fichier dans le projet et recalcule le plan" @cc-click="saveFile">Enregistrer et replanifier</cc-button></header>
               <textarea spellcheck="false" :value="file.content" @input="e => { file.content = e.target.value; file.dirty = true; }"></textarea>
             </div>
           </div>

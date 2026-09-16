@@ -68,7 +68,9 @@ fn internal(msg: impl Into<String>) -> ApiError {
 
 async fn info(AxState(s): AxState<Shared>) -> Json<J> {
     let org = s.session.read().unwrap().as_ref().map(|x| x.org.clone()).unwrap_or_default();
-    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "bundled": cfg!(feature = "ui-bundled") }))
+    let stamp = env!("CC_BUILD_STAMP");
+    let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
+    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled") }))
 }
 
 /// Session courante : identifiants posés ?, organisation choisie.
