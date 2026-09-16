@@ -26,7 +26,7 @@ variable "addon_mongo_real_id" {
 
 resource "clevercloud_networkgroup" "default" {
   name = "documentdb-default"
-  tags = ["compose-project=documentdb", "compose-network=default", "compose-spec=790298eb6b1b53ea0cead4a4ea536960"]
+  tags = ["compose-project=documentdb", "compose-network=default", "compose-spec=c8802af9104689da556fe0634010e647"]
 }
 
 resource "clevercloud_docker" "mongo_init" {

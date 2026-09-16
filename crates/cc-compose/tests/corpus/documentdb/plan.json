@@ -1,6 +1,6 @@
 {
   "project": "documentdb",
-  "spec_hash": "790298eb6b1b53ea0cead4a4ea536960",
+  "spec_hash": "c8802af9104689da556fe0634010e647",
   "resources": [
     {
       "resource": "network_group",
@@ -10,7 +10,7 @@
       "tags": [
         "compose-project=documentdb",
         "compose-network=default",
-        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+        "compose-spec=c8802af9104689da556fe0634010e647"
       ]
     },
     {
@@ -25,7 +25,7 @@
       "tags": [
         "compose-project=documentdb",
         "compose-service=mongo",
-        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+        "compose-spec=c8802af9104689da556fe0634010e647"
       ],
       "private": true,
       "options": {
@@ -103,7 +103,7 @@
       "tags": [
         "compose-project=documentdb",
         "compose-service=mongo-init",
-        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+        "compose-spec=c8802af9104689da556fe0634010e647"
       ]
     },
     {
@@ -249,7 +249,7 @@
       "tags": [
         "compose-project=documentdb",
         "compose-service=api",
-        "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
+        "compose-spec=c8802af9104689da556fe0634010e647"
       ]
     },
     {

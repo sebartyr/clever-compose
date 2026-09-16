@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `documentdb` (spec 790298eb6b1b53ea0cead4a4ea536960).
+# Bootstrap généré par clever-compose pour le projet `documentdb` (spec c8802af9104689da556fe0634010e647).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'documentdb-default' -o "$ORG" --tags 'compose-project=documentdb,compose-network=default,compose-spec=790298eb6b1b53ea0cead4a4ea536960'
+clever ng create 'documentdb-default' -o "$ORG" --tags 'compose-project=documentdb,compose-network=default,compose-spec=c8802af9104689da556fe0634010e647'
 NG_default="$(clever ng get 'documentdb-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
@@ -21,12 +21,12 @@ APP_mongo_init="$(clever create -t docker 'documentdb-mongo-init' -o "$ORG" -r '
 clever scale --app "$APP_mongo_init" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=documentdb
 # tag : compose-service=mongo-init
-# tag : compose-spec=790298eb6b1b53ea0cead4a4ea536960
+# tag : compose-spec=c8802af9104689da556fe0634010e647
 APP_api="$(clever create -t docker 'documentdb-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=documentdb
 # tag : compose-service=api
-# tag : compose-spec=790298eb6b1b53ea0cead4a4ea536960
+# tag : compose-spec=c8802af9104689da556fe0634010e647
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'documentdb-default' -o "$ORG"

@@ -105,6 +105,10 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
                     let prefix_in_literal = literal[url_start..].to_string();
                     let full = format!("{prefix_in_literal}{}", &rest[..url_end]);
                     literal.truncate(url_start);
+                    let scheme = full.split("://").next().unwrap_or("");
+                    if let Some(served) = super::addons::served_scheme(provider, scheme) {
+                        diags.push(Diagnostic::warning("addon-scheme", format!("`{key}` : `{scheme}://` devient `{served}://`, le schéma que l'addon `{service}` sert")).with_path(p));
+                    }
                     if let Some(t) = super::addons::rebuild_url(&full, &service, provider, private_net.as_deref()) {
                         if !literal.is_empty() {
                             segments.push(Segment::Literal(std::mem::take(&mut literal)));

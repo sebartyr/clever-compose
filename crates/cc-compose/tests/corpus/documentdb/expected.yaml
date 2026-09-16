@@ -12,7 +12,7 @@ services:
     environment:
       MONGO_HOST: mongo
       MONGO_PASSWORD: app
-      MONGO_URL: mongodb://app:app@mongo:27017/app?retryWrites=true
+      MONGO_URL: mongodb+srv://app:app@mongo:27017/app?retryWrites=true
     image: busybox:1.36
     networks:
       default: null

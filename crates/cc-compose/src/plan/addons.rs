@@ -240,8 +240,19 @@ pub fn seg(addon: &str, provider: &str, role: Role) -> Option<Segment> {
 /// URL complète reconstruite depuis les attributs de l'addon, au format
 /// attendu par l'application : schéma, chemin et query d'origine conservés
 /// (§6.2, cas 1 et 3).
+/// Schéma que l'addon parle réellement, quand celui de l'URL d'origine ne
+/// peut pas tenir (`rediss://`, `mongodb+srv://`...). `None` = conservé.
+pub fn served_scheme(provider: &str, original: &str) -> Option<&'static str> {
+    match provider {
+        "redis-addon" if original != "redis" => Some("redis"),
+        "mongodb-addon" | DOCUMENTDB if original != "mongodb" => Some("mongodb"),
+        _ => None,
+    }
+}
+
 pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Option<&str>) -> Option<Template> {
     let (scheme, rest) = original.split_once("://")?;
+    let scheme = served_scheme(provider, scheme).unwrap_or(scheme);
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let (_authority, tail) = rest.split_at(authority_end);
     let mut segs: Vec<Segment> = vec![Segment::Literal(format!("{scheme}://"))];
