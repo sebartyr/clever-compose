@@ -104,15 +104,26 @@ const LogPanel = defineComponent({
   emits: ['cancel', 'clear'],
   setup(props) {
     const el = ref(null);
-    watch(() => props.lines.length, () => { requestAnimationFrame(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight; }); });
-    return { el, renderLine };
+    const big = ref(false);
+    // Suivi collant : on ne descend automatiquement que si l'utilisateur
+    // était déjà en bas ; sinon il garde sa position.
+    const atBottom = () => !el.value || el.value.scrollHeight - el.value.scrollTop - el.value.clientHeight < 40;
+    watch(() => props.lines.length, (_n, _o) => {
+      const follow = atBottom();
+      requestAnimationFrame(() => { if (el.value && follow) el.value.scrollTop = el.value.scrollHeight; });
+    }, { flush: 'pre' });
+    const toBottom = () => { if (el.value) el.value.scrollTop = el.value.scrollHeight; };
+    return { el, big, toBottom, renderLine };
   },
   template: `
-    <section class="logs" v-if="lines.length || running">
+    <section :class="['logs', { big }]" v-if="lines.length || running">
       <header>
         <strong>{{ title || 'Journal' }}</strong>
         <cc-loader v-if="running" a11y-name="en cours"></cc-loader>
+        <span class="dim">{{ lines.length }} lignes</span>
         <span class="grow"></span>
+        <cc-button :outlined="true" title="Aller à la fin" @cc-click="toBottom">↓ Fin</cc-button>
+        <cc-button :outlined="true" :title="big ? 'Réduire le journal' : 'Agrandir le journal'" @cc-click="big = !big">{{ big ? 'Réduire' : 'Agrandir' }}</cc-button>
         <cc-button v-if="running" :outlined="true" :danger="true" title="Interrompt l'opération en cours" @cc-click="$emit('cancel')">Arrêter</cc-button>
         <cc-button v-else :outlined="true" title="Vide le journal" @cc-click="$emit('clear')">Effacer</cc-button>
       </header>
