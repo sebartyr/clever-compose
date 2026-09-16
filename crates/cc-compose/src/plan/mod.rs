@@ -308,7 +308,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             version
         };
         // Coût annoncé (§6) : la substitution est facturée.
-        let access = if private { format!(", membre du network group (joint sur le port {ADDON_NG_PORT}, `x-clever.private: false` pour l'hôte public)") } else { ", joint par son hôte public".to_string() };
+        let access = if private { format!(", membre du network group (joint sur le port {}, `x-clever.private: false` pour l'hôte public)", addon_ng_port(rec.provider)) } else { ", joint par son hôte public".to_string() };
         let engine = if documentdb { " avec l'option DocumentDB (API MongoDB 7.0, pilotes 5.0+, TLS imposé ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3)" } else { "" };
         let shown_version = if documentdb { version.clone().unwrap_or_default() } else { version.clone().unwrap_or_else(|| "latest".into()) };
         diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}) devient un addon {} {shown_version}{engine} plan `{}` ({}) : {} €/mois HT{}{access}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", s.image.as_deref().unwrap_or(rec.kind), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
@@ -589,11 +589,12 @@ fn plan_service(
                         // le port par défaut du protocole, pas 8080.
                         let has_port = s.environment.iter().any(|(k2, v2)| k2 != k && v2.as_deref().is_some_and(|v2| correlate(k2, v2, addon_infos).is_some_and(|(a2, r2)| a2 == addon_name && r2 == addons::Role::Port)));
                         if !has_port {
-                            diags.push(Diagnostic::warning("addon-private-port", format!("`{k}` reçoit le FQDN de `{addon_name}` dans le network group, où l'addon écoute sur {ADDON_NG_PORT} et non sur son port par défaut ; aucune variable de port n'est corrélée : donnez le port à l'application (`{k}=…:{ADDON_NG_PORT}` si elle l'accepte, ou une variable de port), ou `x-clever.private: false`")).with_path(&ep));
+                            let port = addon_ng_port(provider);
+                            diags.push(Diagnostic::warning("addon-private-port", format!("`{k}` reçoit le FQDN de `{addon_name}` dans le network group, où l'addon écoute sur {port} et non sur son port par défaut ; aucune variable de port n'est corrélée : donnez le port à l'application (`{k}=…:{port}` si elle l'accepte, ou une variable de port), ou `x-clever.private: false`")).with_path(&ep));
                         }
                         Some(Segment::Ref(Reference::MemberFqdn { member: ResourceId(format!("member/{addon_name}@{net}")) }))
                     }
-                    (addons::Role::Port, Some(_)) => Some(Segment::Literal(ADDON_NG_PORT.to_string())),
+                    (addons::Role::Port, Some(_)) => Some(Segment::Literal(addon_ng_port(provider).to_string())),
                     _ => addons::seg(&addon_name, provider, role),
                 };
                 if let Some(seg) = seg {

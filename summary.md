@@ -274,6 +274,25 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   Vérifié en réel (`ccddb`, détruit) : `db.version()` = 7.0.0, script
   d'init rejoué, documents lus par l'URL réécrite. Non vérifié : accès par
   le network group (port du gateway inconnu, `private` forcé faux).
+- **Issue #1 (16/09/2026) : accès par le groupe vérifié pour MongoDB,
+  Elasticsearch et DocumentDB.** Ports internes lus dans
+  `~/rubydeployer/src/deploytypes/{mongodb,elasticsearch,postgresql}.rb`
+  (indication du propriétaire) puis sondés : MongoDB 8080, Elasticsearch
+  8080 en HTTP clair (TLS côté proxy public seulement), gateway DocumentDB
+  4040 en TLS (`GatewayListenPort`, 8080 étant PostgreSQL). Modèle :
+  `addon_ng_port(engine)` remplace la constante ; ES reconstruit en
+  `http://` dans le groupe ; `NG_VERIFIED` couvre les six moteurs, donc
+  `private` vaut vrai par défaut pour tous. Deux défauts de l'exécuteur
+  corrigés au passage : les consommateurs étaient déployés avant que
+  l'instance d'un addon dédié tout juste créé ait rejoint le groupe (ES met
+  plusieurs minutes) → attente du peer du membre (`ng_members_with_peer`,
+  15 min max) ; un dernier déploiement en `FAIL`/`CANCELLED` n'était pas
+  retenté quand rien n'avait changé → redéploiement. Terraform : un addon
+  créé hors Terraform (options) est désigné par la variable
+  `addon_<svc>_real_id` (FQDN de membre et `dependencies`). Vérifié en réel
+  (`ccng4`, détruit) : `mongodb 4.0.3`, `documentdb 7.0.0`, ES `8.19.9`
+  atteints par les URL réécrites (`m:27017` → `…:8080`, `d:27017` →
+  `…:4040` + TLS, `http://es:9200` → `http://…:8080`).
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.

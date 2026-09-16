@@ -19,6 +19,11 @@ variable "repository" {
   description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
 }
 
+variable "addon_mongo_real_id" {
+  type        = string
+  description = "Id réel de l'addon `mongo` créé hors Terraform (postgresql_xxx, `clever addon list -F json | jq '.[].realId'`) : ses options n'ont pas d'attribut dans le provider"
+}
+
 resource "clevercloud_networkgroup" "default" {
   name = "documentdb-default"
   tags = ["compose-project=documentdb", "compose-network=default", "compose-spec=790298eb6b1b53ea0cead4a4ea536960"]
@@ -38,6 +43,7 @@ resource "clevercloud_docker" "mongo_init" {
     repository = var.repository
     commit     = "refs/heads/clever-compose/mongo-init"
   }
+  dependencies       = [var.addon_mongo_real_id]
 }
 
 resource "clevercloud_docker" "api" {
@@ -48,10 +54,11 @@ resource "clevercloud_docker" "api" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_EXPAND = "MONGO_URL,MONGO_HOST,MONGO_PASSWORD"
-    MONGO_HOST        = "$${DOCUMENTDB_ADDON_HOST}"
-    MONGO_PASSWORD    = "$${POSTGRESQL_ADDON_PASSWORD}"
-    MONGO_URL         = "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@$${DOCUMENTDB_ADDON_HOST}:$${DOCUMENTDB_ADDON_PORT}/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
+    CC_COMPOSE_DNS_MAP = "mongo=${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CC_COMPOSE_EXPAND  = "MONGO_URL,MONGO_PASSWORD"
+    MONGO_HOST         = "${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    MONGO_PASSWORD     = "$${POSTGRESQL_ADDON_PASSWORD}"
+    MONGO_URL          = "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:4040/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
   }
   networkgroups      = [
     {
@@ -64,4 +71,5 @@ resource "clevercloud_docker" "api" {
     commit     = "refs/heads/clever-compose/api"
   }
   depends_on         = [clevercloud_docker.mongo_init]
+  dependencies       = [var.addon_mongo_real_id]
 }

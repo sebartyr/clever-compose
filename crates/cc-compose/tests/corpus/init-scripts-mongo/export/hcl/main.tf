@@ -25,9 +25,15 @@ resource "clevercloud_networkgroup" "default" {
 }
 
 resource "clevercloud_mongodb" "mongo" {
-  name   = "init-scripts-mongo-mongo"
-  plan   = "xs_sml"
-  region = "par"
+  name          = "init-scripts-mongo-mongo"
+  plan          = "xs_sml"
+  region        = "par"
+  networkgroups = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "mongo.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
 }
 
 resource "clevercloud_redis" "cache" {
@@ -67,8 +73,9 @@ resource "clevercloud_docker" "api" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_EXPAND = "MONGO_URL"
-    MONGO_URL         = "mongodb://$${MONGODB_ADDON_USER}:$${MONGODB_ADDON_PASSWORD}@$${MONGODB_ADDON_HOST}:$${MONGODB_ADDON_PORT}/$${MONGODB_ADDON_DB}"
+    CC_COMPOSE_DNS_MAP = "mongo=${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CC_COMPOSE_EXPAND  = "MONGO_URL"
+    MONGO_URL          = "mongodb://$${MONGODB_ADDON_USER}:$${MONGODB_ADDON_PASSWORD}@${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080/$${MONGODB_ADDON_DB}"
   }
   networkgroups      = [
     {

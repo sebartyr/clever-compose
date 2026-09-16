@@ -27,7 +27,7 @@
         "compose-service=search",
         "compose-spec=2e1635890a217ca2cfc876398bf542ca"
       ],
-      "private": false
+      "private": true
     },
     {
       "resource": "app",
@@ -74,6 +74,20 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "search="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/search@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
@@ -85,7 +99,7 @@
           "key": "ES_URL",
           "value": [
             {
-              "literal": "https://"
+              "literal": "http://"
             },
             {
               "ref": {
@@ -109,10 +123,12 @@
             },
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/search",
-                "var": "ES_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/search@default"
               }
+            },
+            {
+              "literal": ":8080"
             }
           ]
         }
@@ -134,6 +150,15 @@
       "group": "ng/default",
       "aliases": [
         "app"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/search@default",
+      "member": "addon/search",
+      "group": "ng/default",
+      "aliases": [
+        "search"
       ]
     }
   ]

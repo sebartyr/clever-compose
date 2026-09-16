@@ -27,7 +27,7 @@
         "compose-service=mongo",
         "compose-spec=384c4a34423c33de5c04e4446cf23a01"
       ],
-      "private": false
+      "private": true
     },
     {
       "resource": "addon",
@@ -159,6 +159,20 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "mongo="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/mongo@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
@@ -194,20 +208,12 @@
             },
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/mongo",
-                "var": "MONGODB_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/mongo@default"
               }
             },
             {
-              "literal": ":"
-            },
-            {
-              "ref": {
-                "ref": "addon_env",
-                "addon": "addon/mongo",
-                "var": "MONGODB_ADDON_PORT"
-              }
+              "literal": ":8080"
             },
             {
               "literal": "/"
@@ -240,6 +246,15 @@
       "group": "ng/default",
       "aliases": [
         "api"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/mongo@default",
+      "member": "addon/mongo",
+      "group": "ng/default",
+      "aliases": [
+        "mongo"
       ]
     },
     {

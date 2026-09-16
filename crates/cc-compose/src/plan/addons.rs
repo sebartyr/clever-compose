@@ -10,7 +10,7 @@
 
 use std::sync::OnceLock;
 
-use cc_compose_model::plan::{Reference, ResourceId, Segment, Template, ADDON_NG_PORT};
+use cc_compose_model::plan::{addon_ng_port, Reference, ResourceId, Segment, Template};
 use serde::Deserialize;
 
 use crate::compose::model::Service;
@@ -256,7 +256,7 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Opt
     let host_port = |segs: &mut Vec<Segment>| match private_net {
         Some(net) => {
             segs.push(Segment::Ref(Reference::MemberFqdn { member: ResourceId(format!("member/{addon}@{net}")) }));
-            segs.push(Segment::Literal(format!(":{}", ADDON_NG_PORT)));
+            segs.push(Segment::Literal(format!(":{}", addon_ng_port(provider))));
         }
         None => {
             push(segs, seg(addon, provider, Role::Host));
@@ -276,9 +276,10 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Opt
             lit(&mut segs, tail);
         }
         "es-addon" => {
-            // L'addon ne sert que HTTPS sur 443 (`ES_ADDON_HOST` est un hôte
-            // nu, constaté le 13/09/2026) : le schéma d'origine ne tient pas.
-            segs[0] = Segment::Literal("https://".into());
+            // Public : HTTPS seul sur 443 (`ES_ADDON_HOST` est un hôte nu,
+            // constaté le 13/09/2026). Dans le groupe : HTTP clair sur 8080
+            // (`deploytypes/elasticsearch.rb`, vérifié le 16/09/2026).
+            segs[0] = Segment::Literal(if private_net.is_some() { "http://".into() } else { "https://".into() });
             push(&mut segs, seg(addon, provider, Role::User));
             lit(&mut segs, ":");
             push(&mut segs, seg(addon, provider, Role::Password));
@@ -317,9 +318,9 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Opt
 /// Plan retenu : `wanted` (slug) s'il existe, sinon le moins cher servi
 /// dans la région.
 /// Fournisseurs dont l'accès par le network group est vérifié (port
-/// [`ADDON_NG_PORT`], identifiants de la liaison) ; les autres restent
-/// publics tant qu'un test ne l'a pas confirmé.
-pub const NG_VERIFIED: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon"];
+/// [`addon_ng_port`], identifiants de la liaison), vérifié le 16/09/2026
+/// pour chacun.
+pub const NG_VERIFIED: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon", "mongodb-addon", "es-addon", DOCUMENTDB];
 
 /// Plan retenu : `wanted` (slug) s'il existe, sinon le moins cher servi
 /// dans la région — dédié si l'addon doit être membre d'un network group

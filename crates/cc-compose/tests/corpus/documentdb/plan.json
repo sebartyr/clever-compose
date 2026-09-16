@@ -27,7 +27,7 @@
         "compose-service=mongo",
         "compose-spec=790298eb6b1b53ea0cead4a4ea536960"
       ],
-      "private": false,
+      "private": true,
       "options": {
         "documentdb": "true"
       }
@@ -146,10 +146,24 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "mongo="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/mongo@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "MONGO_URL,MONGO_HOST,MONGO_PASSWORD"
+              "literal": "MONGO_URL,MONGO_PASSWORD"
             }
           ]
         },
@@ -158,9 +172,8 @@
           "value": [
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/mongo",
-                "var": "DOCUMENTDB_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/mongo@default"
               }
             }
           ]
@@ -205,20 +218,12 @@
             },
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/mongo",
-                "var": "DOCUMENTDB_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/mongo@default"
               }
             },
             {
-              "literal": ":"
-            },
-            {
-              "ref": {
-                "ref": "addon_env",
-                "addon": "addon/mongo",
-                "var": "DOCUMENTDB_ADDON_PORT"
-              }
+              "literal": ":4040"
             },
             {
               "literal": "/"
@@ -254,6 +259,15 @@
       "group": "ng/default",
       "aliases": [
         "api"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/mongo@default",
+      "member": "addon/mongo",
+      "group": "ng/default",
+      "aliases": [
+        "mongo"
       ]
     }
   ]

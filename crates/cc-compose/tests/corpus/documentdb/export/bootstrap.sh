@@ -14,6 +14,7 @@ NG_default="$(clever ng get 'documentdb-default' -o "$ORG" -F json | jq -r .id)"
 # Addons managés (facturés selon le plan)
 clever addon create 'postgresql-addon' 'documentdb-mongo' --plan 'xxs_sml' --region 'par' --addon-version '17' --option 'documentdb=true' -o "$ORG"
 ADDON_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "documentdb-mongo") | .addonId')"
+ADDON_REAL_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "documentdb-mongo") | .realId')"
 
 # Applications, créées sans déploiement
 APP_mongo_init="$(clever create -t docker 'documentdb-mongo-init' -o "$ORG" -r 'par' --task '' -F json | jq -r .id)"
@@ -29,6 +30,7 @@ clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instance
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'documentdb-default' -o "$ORG"
+clever ng link "$ADDON_REAL_mongo" 'documentdb-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
 clever service link-addon "$ADDON_mongo" --app "$APP_mongo_init"
@@ -36,10 +38,11 @@ clever service link-addon "$ADDON_mongo" --app "$APP_api"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_mongo_init" 'CC_COMPOSE_INIT_HASH' '965bdbffd89e76fcb0544c283a25b57e'
-clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'MONGO_URL,MONGO_HOST,MONGO_PASSWORD'
-clever env set --app "$APP_api" 'MONGO_HOST' '${DOCUMENTDB_ADDON_HOST}'
+clever env set --app "$APP_api" 'CC_COMPOSE_DNS_MAP' 'mongo='"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'MONGO_URL,MONGO_PASSWORD'
+clever env set --app "$APP_api" 'MONGO_HOST' "${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'MONGO_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
-clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@''${DOCUMENTDB_ADDON_HOST}'':''${DOCUMENTDB_ADDON_PORT}''/''${POSTGRESQL_ADDON_DB}''?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true'
+clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"':4040''/''${POSTGRESQL_ADDON_DB}''?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
 (

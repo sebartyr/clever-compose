@@ -136,11 +136,17 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                     .iter()
                     .filter_map(|d| d.0.strip_prefix("addon/"))
                     .filter_map(|svc| {
-                        let provider = plan.resources.iter().find_map(|r| match r {
-                            Resource::Addon(a) if a.service == svc && a.options.is_empty() => Some(a.provider.clone()),
+                        let addon = plan.resources.iter().find_map(|r| match r {
+                            Resource::Addon(a) if a.service == svc => Some(a),
                             _ => None,
                         })?;
-                        let resource = addon_resource_type(&provider)?;
+                        // Addon créé hors Terraform (options sans attribut) :
+                        // son id réel vient d'une variable, `dependencies`
+                        // l'accepte comme l'id d'une ressource.
+                        if !addon.options.is_empty() {
+                            return Some(json!(format!("${{var.{}}}", external_addon_var(svc, &mut variables))));
+                        }
+                        let resource = addon_resource_type(&addon.provider)?;
                         Some(json!(format!("${{{resource}.{}.id}}", ident(svc))))
                     })
                     .collect();
@@ -155,7 +161,8 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 // (`documentdb`) : la ressource est omise plutôt qu'émise sans
                 // l'option, ce qui donnerait un addon différent.
                 if !a.options.is_empty() {
-                    diags.push(Diagnostic::warning("terraform-addon-options", format!("addon `{}` : l'option {} n'a pas d'attribut dans le provider 2.2.0 ; ressource omise (à créer hors Terraform, `bootstrap.sh` sait le faire)", a.name, a.options.iter().map(|(k, v)| format!("`{k}={v}`")).collect::<Vec<_>>().join(", "))));
+                    let var = external_addon_var(&a.service, &mut variables);
+                    diags.push(Diagnostic::warning("terraform-addon-options", format!("addon `{}` : l'option {} n'a pas d'attribut dans le provider 2.2.0 ; ressource omise, à créer hors Terraform (`bootstrap.sh` sait le faire) et à désigner par la variable `{var}` (son id réel)", a.name, a.options.iter().map(|(k, v)| format!("`{k}={v}`")).collect::<Vec<_>>().join(", "))));
                     continue;
                 }
                 let Some(resource) = addon_resource_type(&a.provider) else {
@@ -223,13 +230,20 @@ fn template(t: &Template, plan: &Plan, app: &App, opts: &Options<'_>, variables:
                 Some((MemberKind::App, service, net)) => out.push_str(&format!("${{clevercloud_docker.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
                 // `.id` d'une ressource addon est son id réel (`postgresql_xxx`),
                 // celui que le membre porte.
-                Some((MemberKind::Addon, service, net)) => match plan.resources.iter().find_map(|r| match r {
-                    Resource::Addon(a) if a.service == service => addon_resource_type(&a.provider),
-                    _ => None,
-                }) {
-                    Some(resource) => out.push_str(&format!("${{{resource}.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
-                    None => out.push_str(&format!("<{}>", member.0)),
-                },
+                Some((MemberKind::Addon, service, net)) => {
+                    let addon = plan.resources.iter().find_map(|r| match r {
+                        Resource::Addon(a) if a.service == service => Some(a),
+                        _ => None,
+                    });
+                    match addon {
+                        Some(a) if !a.options.is_empty() => out.push_str(&format!("${{var.{}}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", external_addon_var(&service, variables), ident(&net))),
+                        Some(a) => match addon_resource_type(&a.provider) {
+                            Some(resource) => out.push_str(&format!("${{{resource}.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
+                            None => out.push_str(&format!("<{}>", member.0)),
+                        },
+                        None => out.push_str(&format!("<{}>", member.0)),
+                    }
+                }
                 None => out.push_str(&format!("<{}>", member.0)),
             },
             // Expansée par le shim au démarrage : reste littérale.
@@ -276,6 +290,13 @@ fn addon_resource_type(provider: &str) -> Option<&'static str> {
         "config-provider" => "clevercloud_configprovider",
         _ => return None,
     })
+}
+
+/// Variable portant l'id réel d'un addon créé hors Terraform.
+fn external_addon_var(service: &str, variables: &mut Map<String, J>) -> String {
+    let name = format!("addon_{}_real_id", ident(service));
+    variables.entry(name.clone()).or_insert(json!({ "type": "string", "description": format!("Id réel de l'addon `{service}` créé hors Terraform (postgresql_xxx, `clever addon list -F json | jq '.[].realId'`) : ses options n'ont pas d'attribut dans le provider") }));
+    name
 }
 
 pub fn schema() -> J {

@@ -247,6 +247,9 @@ pub trait Platform: Send + Sync {
     /// Ajoute un membre au groupe : `kind` = `application` ou `addon` (id
     /// réel de l'addon).
     fn link_member(&self, ng: &str, member: &str, kind: &str) -> impl Future<Output = PResult<()>> + Send;
+    /// Membres (`parentMember`) qui ont au moins un peer dans le groupe,
+    /// donc une instance joignable.
+    fn ng_members_with_peer(&self, ng: &str) -> impl Future<Output = PResult<Vec<String>>> + Send;
     fn list_tcp_redirs(&self, app: &str) -> impl Future<Output = PResult<Vec<Redir>>> + Send;
     fn add_tcp_redir(&self, app: &str, namespace: &str) -> impl Future<Output = PResult<Redir>> + Send;
     fn list_udp_redirs(&self, app: &str) -> impl Future<Output = PResult<Vec<Redir>>> + Send;
@@ -458,6 +461,11 @@ impl Platform for Api {
         let body = json!({ "id": member, "kind": kind, "label": member });
         self.send(reqwest::Method::POST, &url, Some(&body)).await?;
         Ok(())
+    }
+
+    async fn ng_members_with_peer(&self, ng: &str) -> PResult<Vec<String>> {
+        let peers: Vec<J> = self.client.get(&format!("{}/v4/networkgroups/organisations/{}/networkgroups/{ng}/peers", self.base(), self.owner)).await.map_err(|e| Self::e("peers", e))?;
+        Ok(peers.iter().filter_map(|p| p["parentMember"].as_str().map(str::to_string)).collect())
     }
 
     async fn list_tcp_redirs(&self, app: &str) -> PResult<Vec<Redir>> {

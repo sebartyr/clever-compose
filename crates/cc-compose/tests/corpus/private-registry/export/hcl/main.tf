@@ -37,10 +37,16 @@ resource "clevercloud_networkgroup" "default" {
 }
 
 resource "clevercloud_elasticsearch" "search" {
-  name    = "private-registry-search"
-  plan    = "xs"
-  region  = "par"
-  version = "8"
+  name          = "private-registry-search"
+  plan          = "xs"
+  region        = "par"
+  version       = "8"
+  networkgroups = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "search.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
 }
 
 resource "clevercloud_docker" "app" {
@@ -54,8 +60,9 @@ resource "clevercloud_docker" "app" {
   registry_user      = var.registry_ghcr_io_user
   registry_password  = var.registry_ghcr_io_password
   environment        = {
-    CC_COMPOSE_EXPAND = "ES_URL"
-    ES_URL            = "https://$${ES_ADDON_USER}:$${ES_ADDON_PASSWORD}@$${ES_ADDON_HOST}"
+    CC_COMPOSE_DNS_MAP = "search=${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CC_COMPOSE_EXPAND  = "ES_URL"
+    ES_URL             = "http://$${ES_ADDON_USER}:$${ES_ADDON_PASSWORD}@${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080"
   }
   networkgroups      = [
     {

@@ -14,6 +14,7 @@ NG_default="$(clever ng get 'init-scripts-mongo-default' -o "$ORG" -F json | jq 
 # Addons managés (facturés selon le plan)
 clever addon create 'mongodb-addon' 'init-scripts-mongo-mongo' --plan 'xs_sml' --region 'par' --addon-version '4.0.3' -o "$ORG"
 ADDON_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-mongo") | .addonId')"
+ADDON_REAL_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-mongo") | .realId')"
 clever addon create 'redis-addon' 'init-scripts-mongo-cache' --plan 's_mono' --region 'par' --addon-version '8.10.1' -o "$ORG"
 ADDON_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .addonId')"
 ADDON_REAL_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .realId')"
@@ -32,6 +33,7 @@ clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instance
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'init-scripts-mongo-default' -o "$ORG"
+clever ng link "$ADDON_REAL_mongo" 'init-scripts-mongo-default' -o "$ORG"
 clever ng link "$ADDON_REAL_cache" 'init-scripts-mongo-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
@@ -40,8 +42,9 @@ clever service link-addon "$ADDON_mongo" --app "$APP_api"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_mongo_init" 'CC_COMPOSE_INIT_HASH' '965bdbffd89e76fcb0544c283a25b57e'
+clever env set --app "$APP_api" 'CC_COMPOSE_DNS_MAP' 'mongo='"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'MONGO_URL'
-clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${MONGODB_ADDON_USER}'':''${MONGODB_ADDON_PASSWORD}''@''${MONGODB_ADDON_HOST}'':''${MONGODB_ADDON_PORT}''/''${MONGODB_ADDON_DB}'
+clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${MONGODB_ADDON_USER}'':''${MONGODB_ADDON_PASSWORD}''@'"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"':8080''/''${MONGODB_ADDON_DB}'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
 (

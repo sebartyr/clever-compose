@@ -171,6 +171,26 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
             platform.link_member(ng_id, member_id, kind).await?;
             log(&format!("membre {service}@{net} : lié ({kind})"));
         }
+        // Un addon n'est joignable qu'une fois son instance dans le groupe
+        // (peer) ; un dédié tout juste créé peut mettre plusieurs minutes.
+        // Les consommateurs sont déployés après.
+        if kind == "addon" && !opts.dry_run {
+            let deadline = std::time::Instant::now() + Duration::from_secs(900);
+            let mut waited = false;
+            while !platform.ng_members_with_peer(ng_id).await?.iter().any(|m| m == member_id) {
+                if std::time::Instant::now() > deadline {
+                    return Err(format!("membre {service}@{net} : l'addon n'a pas rejoint le groupe (aucun peer) en 15 minutes"));
+                }
+                if !waited {
+                    log(&format!("membre {service}@{net} : attente de l'instance de l'addon dans le groupe"));
+                    waited = true;
+                }
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+            if waited {
+                log(&format!("membre {service}@{net} : instance présente"));
+            }
+        }
     }
 
     // 3b. Liaisons aux addons (injection des variables d'addon).
@@ -294,12 +314,16 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         };
         let _ = std::fs::remove_dir_all(&work);
         let restart = needs_restart.get(&app.service).copied().unwrap_or(false) || needs_restart_for_link.contains(&app.service);
-        let never_deployed = info.state == "SHOULD_BE_DOWN" && platform.last_deployment(app_id).await?.is_none();
-        if !pushed && (restart || never_deployed) {
+        let last = platform.last_deployment(app_id).await?;
+        let never_deployed = info.state == "SHOULD_BE_DOWN" && last.is_none();
+        // Un dernier déploiement en échec se retente : la cause est souvent
+        // externe (addon pas encore joignable) et rien dans le dépôt n'a changé.
+        let failed = last.as_ref().is_some_and(|d| matches!(d.state.as_str(), "FAIL" | "CANCELLED"));
+        if !pushed && (restart || never_deployed || failed) {
             platform.redeploy(app_id).await?;
-            log(&format!("application {} : redéploiement demandé", app.name));
+            log(&format!("application {} : redéploiement demandé{}", app.name, if failed { " (dernier déploiement en échec)" } else { "" }));
         }
-        if (pushed || restart || never_deployed) && !opts.no_wait {
+        if (pushed || restart || never_deployed || failed) && !opts.no_wait {
             wait_deployment(platform, app_id, &app.name, log).await?;
         }
     }

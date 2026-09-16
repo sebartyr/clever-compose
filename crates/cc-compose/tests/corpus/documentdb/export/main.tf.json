@@ -21,6 +21,10 @@
     "repository": {
       "type": "string",
       "description": "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
+    },
+    "addon_mongo_real_id": {
+      "type": "string",
+      "description": "Id réel de l'addon `mongo` créé hors Terraform (postgresql_xxx, `clever addon list -F json | jq '.[].realId'`) : ses options n'ont pas d'attribut dans le provider"
     }
   },
   "resource": {
@@ -48,7 +52,10 @@
         "deployment": {
           "repository": "${var.repository}",
           "commit": "refs/heads/clever-compose/mongo-init"
-        }
+        },
+        "dependencies": [
+          "${var.addon_mongo_real_id}"
+        ]
       },
       "api": {
         "name": "documentdb-api",
@@ -58,10 +65,11 @@
         "min_instance_count": 1,
         "max_instance_count": 1,
         "environment": {
-          "CC_COMPOSE_EXPAND": "MONGO_URL,MONGO_HOST,MONGO_PASSWORD",
-          "MONGO_HOST": "$${DOCUMENTDB_ADDON_HOST}",
+          "CC_COMPOSE_DNS_MAP": "mongo=${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "CC_COMPOSE_EXPAND": "MONGO_URL,MONGO_PASSWORD",
+          "MONGO_HOST": "${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "MONGO_PASSWORD": "$${POSTGRESQL_ADDON_PASSWORD}",
-          "MONGO_URL": "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@$${DOCUMENTDB_ADDON_HOST}:$${DOCUMENTDB_ADDON_PORT}/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
+          "MONGO_URL": "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:4040/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
         },
         "networkgroups": [
           {
@@ -75,6 +83,9 @@
         },
         "depends_on": [
           "clevercloud_docker.mongo_init"
+        ],
+        "dependencies": [
+          "${var.addon_mongo_real_id}"
         ]
       }
     }

@@ -17,7 +17,7 @@ type Memberships = IndexMap<String, Vec<(String, Vec<String>)>>;
 pub struct AddonRef {
     pub provider: &'static str,
     /// Membre du network group : joint par son FQDN de membre sur
-    /// `ADDON_NG_PORT`, sinon par son hôte public.
+    /// `addon_ng_port`, sinon par son hôte public.
     pub private: bool,
 }
 
@@ -156,20 +156,21 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
                     }
                     continue;
                 }
-                Some(Target::PrivateAddon(service, _, net)) => {
-                    // Membre du groupe : FQDN de membre, port fixe.
+                Some(Target::PrivateAddon(service, provider, net)) => {
+                    // Membre du groupe : FQDN de membre, port du fournisseur.
+                    let port = cc_compose_model::plan::addon_ng_port(provider);
                     referenced.insert(service.clone());
                     segments.push(Segment::Literal(std::mem::take(&mut literal)));
                     segments.push(member_ref(&service, &net));
                     rest = &rest[token_end..];
                     if followed_by_port {
                         let port_end = rest[1..].find(|c: char| !c.is_ascii_digit()).map(|i| i + 1).unwrap_or(rest.len());
-                        segments.push(Segment::Literal(format!(":{}", cc_compose_model::plan::ADDON_NG_PORT)));
+                        segments.push(Segment::Literal(format!(":{port}")));
                         rest = &rest[port_end..];
                     } else {
                         // Hôte seul : l'application supposera le port par défaut
                         // du protocole, pas celui du groupe.
-                        diags.push(Diagnostic::warning("addon-private-port", format!("`{key}` reçoit le FQDN de `{service}` dans le network group, où l'addon écoute sur {} et non sur son port par défaut ; donnez le port à l'application (`{key}={token}:{}` si elle accepte `hôte:port`, ou sa variable de port), ou `x-clever.private: false`", cc_compose_model::plan::ADDON_NG_PORT, cc_compose_model::plan::ADDON_NG_PORT)).with_path(p));
+                        diags.push(Diagnostic::warning("addon-private-port", format!("`{key}` reçoit le FQDN de `{service}` dans le network group, où l'addon écoute sur {port} et non sur son port par défaut ; donnez le port à l'application (`{key}={token}:{port}` si elle accepte `hôte:port`, ou sa variable de port), ou `x-clever.private: false`")).with_path(p));
                     }
                     continue;
                 }

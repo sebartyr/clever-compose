@@ -147,10 +147,15 @@ s'exécute sur la plateforme ou depuis le poste.
   les identifiants.
 - **Addon membre d'un network group** : déclaré avec son **id réel**
   (`postgresql_xxx`, pas `addon_xxx`, sinon pas de peer), kind `addon` ;
-  joignable sur `<realId>.m.<ng>.cc-ng.cloud` **port 8080** avec les
-  identifiants de la liaison (vérifié PostgreSQL, MySQL, Redis dédiés ; pas
-  Mongo ni ES). Un plan partagé n'a pas d'instance donc pas de peer : en
-  privé le plan par défaut est le moins cher dédié. Les redirections UDP ne
+  joignable sur `<realId>.m.<ng>.cc-ng.cloud` avec les identifiants de la
+  liaison, sur le port interne du service (`rubydeployer/src/deploytypes/*.rb`,
+  vérifié le 16/09/2026) : **8080** pour PostgreSQL, MySQL, Redis, MongoDB
+  et Elasticsearch (ES en **HTTP clair** dans le groupe, HTTPS seulement en
+  public), **4040** pour la gateway DocumentDB (TLS ; 8080 est PostgreSQL).
+  Un plan partagé n'a pas d'instance donc pas de peer : en privé le plan
+  par défaut est le moins cher dédié. L'instance d'un addon dédié met des
+  minutes à rejoindre le groupe : `up` attend son peer avant de déployer
+  les consommateurs, et retente un déploiement en échec. Les redirections UDP ne
   sont pas disponibles nativement pour le moment.
 - Les images Redis, Valkey et Elasticsearch n'ont aucun mécanisme
   `/docker-entrypoint-initdb.d` : montage refusé, reprise par `seed`.
@@ -274,8 +279,8 @@ clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
 ## 10. Ouvert, reporté, décidé
 
 - Reporté : DocumentDB dans l'export Terraform (pas d'attribut d'option
-  dans le provider : ressource omise, `terraform-addon-options`) ; accès par
-  le groupe pour Mongo, DocumentDB et ES (à vérifier) ; les autres points
+  dans le provider : ressource omise, id réel en variable
+  `addon_<svc>_real_id`, `terraform-addon-options`) ; les autres points
   « choix vs défaut » proposés et non retenus (service à service par domaine
   public, protocole exigé, addon public ou groupe).
 - SDK Rust : PR #81 (network groups) à rebaser, bug `v2::plan::list` sur

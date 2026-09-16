@@ -294,7 +294,7 @@ pub struct Addon {
     pub tags: Vec<String>,
     /// Membre des network groups de son service (`x-clever.private`, vrai
     /// par défaut) : les consommateurs le joignent par son FQDN de membre sur
-    /// le port [`ADDON_NG_PORT`], avec les mêmes identifiants. Sinon, par son
+    /// le port [`addon_ng_port`], avec les mêmes identifiants. Sinon, par son
     /// hôte public.
     #[serde(default)]
     pub private: bool,
@@ -305,8 +305,12 @@ pub struct Addon {
 }
 
 /// Port sur lequel un addon membre d'un network group sert son protocole
-/// (constaté le 16/09/2026 pour PostgreSQL, MySQL et Redis dédiés).
-pub const ADDON_NG_PORT: u16 = 8080;
+/// (`rubydeployer/src/deploytypes/*.rb`, vérifié le 16/09/2026) : 8080
+/// pour PostgreSQL, MySQL, Redis, MongoDB et Elasticsearch (en HTTP clair),
+/// 4040 pour la gateway DocumentDB (TLS), 8080 étant pris par PostgreSQL.
+pub fn addon_ng_port(engine: &str) -> u16 {
+    if engine == "documentdb" { 4040 } else { 8080 }
+}
 
 /// Un network group par réseau Compose (§7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
