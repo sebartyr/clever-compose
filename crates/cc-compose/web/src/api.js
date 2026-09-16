@@ -93,6 +93,8 @@ export const api = {
 
   up: (id, body, onLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/up`, body, onLog),
   seed: (id, body, onLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/seed`, body, onLog),
+  stop: (project, onLog) => api.stream('POST', `/api/platform/projects/${encodeURIComponent(project)}/stop`, null, onLog),
+  start: (project, onLog) => api.stream('POST', `/api/platform/projects/${encodeURIComponent(project)}/start`, null, onLog),
   down: (project, body, onLog) => api.stream('POST', `/api/platform/projects/${encodeURIComponent(project)}/down`, body, onLog),
   logs: (project, params, onLog) => {
     const q = new URLSearchParams();

@@ -130,6 +130,16 @@ enum Command {
         #[arg(short = 'y', long, help_heading = "Exécution")]
         yes: bool,
     },
+    /// Arrête les applications du projet sans rien supprimer (comme `docker compose stop`)
+    Stop {
+        #[command(flatten)]
+        org: OrgArgs,
+    },
+    /// Relance les applications arrêtées (comme `docker compose start`)
+    Start {
+        #[command(flatten)]
+        org: OrgArgs,
+    },
     /// État des applications, tâches, addons et network groups du projet
     Ps {
         #[command(flatten)]
@@ -208,6 +218,8 @@ fn main() -> ExitCode {
         Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, Some((service, file, local))),
         Command::Down { org, all, dry_run, yes } => cmd_down(opts, &org.org, all, dry_run, yes),
         Command::Ps { org } => cmd_ps(opts, &org.org),
+        Command::Stop { org } => cmd_stop_start(opts, &org.org, false),
+        Command::Start { org } => cmd_stop_start(opts, &org.org, true),
         Command::Logs { org, services, since, limit, follow } => cmd_logs(opts, &org.org, cc_compose::exec::inspect::LogsOptions { services, since, follow, limit }),
         Command::Export { plan, what, output, branches } => cmd_export(opts, &plan, what, &output, branches),
         Command::Images => cmd_images(opts),
@@ -472,6 +484,20 @@ fn cmd_down(opts: compose::project::Options, org: &str, all: bool, dry_run: bool
             cc_compose::exec::reconcile::down(p, &api, dry_run, yes, &mut log).await?;
         }
         cc_compose::ui::Ui::stderr().done(true, if dry_run { "rien n'a été modifié (--dry-run)" } else { "organisation nettoyée" });
+        Ok(())
+    })
+}
+
+fn cmd_stop_start(opts: compose::project::Options, org: &str, start: bool) -> ExitCode {
+    let api = match api(org) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let project = project_name(&opts);
+    let mut log = ui_log(false);
+    run_stateless(async {
+        cc_compose::exec::reconcile::stop_start(&project, &api, start, &mut log).await?;
+        cc_compose::ui::Ui::stderr().done(true, if start { "projet démarré" } else { "projet arrêté (down pour supprimer)" });
         Ok(())
     })
 }

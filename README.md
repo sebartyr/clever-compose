@@ -27,7 +27,9 @@ export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
 clever-compose up     [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
-clever-compose down   [--all] [--dry-run] [--yes]  # par nom de projet et tags, sans relire le compose
+clever-compose stop                               # arrête les applications, ne supprime rien (comme docker compose stop)
+clever-compose start                              # relance ce qui est arrêté ; `up` le fait aussi
+clever-compose down   [--all] [--dry-run] [--yes]  # supprime ; par nom de projet et tags, sans relire le compose
 clever-compose ps
 clever-compose logs   [SERVICE...] [--since 1h] [-n N] [--follow]
 clever-compose seed   --service db --dump dump.sql [--local]

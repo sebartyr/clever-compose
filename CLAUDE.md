@@ -284,7 +284,7 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   plan [--json] | config | images | export [all|terraform|script] -o DIR [--branches]
   up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
   seed --service SVC --dump FICHIER [--local]
-  down [--all] [--dry-run] [--yes] | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
+  down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
   orgs | ui [--listen ADRESSE:PORT] [--no-open]
 ```
 `clap` (aide par commande, `--org` ou `CC_ORG`). `plan` affiche un résumé

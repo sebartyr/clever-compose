@@ -28,9 +28,17 @@ impl Locals {
     }
 
     pub fn add_dir(&self, dir: PathBuf, temporary: bool) -> Result<String, String> {
+        // `~` et chemins relatifs au lancement, comme dans un shell.
+        let dir = match dir.to_str().and_then(|s| s.strip_prefix("~/")) {
+            Some(rest) => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(rest)).unwrap_or(dir),
+            None => dir,
+        };
         let dir = std::fs::canonicalize(&dir).map_err(|e| format!("{} : {e}", dir.display()))?;
         if !dir.is_dir() {
             return Err(format!("{} n'est pas un répertoire", dir.display()));
+        }
+        if !temporary && !["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].iter().any(|f| dir.join(f).is_file()) {
+            return Err(format!("{} : aucun compose.yaml / docker-compose.yml", dir.display()));
         }
         let mut inner = self.inner.lock().unwrap();
         if let Some(p) = inner.values().find(|p| p.dir == dir) {

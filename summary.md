@@ -346,6 +346,19 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   rendu identique dans les deux modes (Chromium headless), `up` par l'API
   en SSE, inventaire avec instances, upload/extraction/retrait d'archive,
   clippy strict dans les deux modes.
+- **`stop` / `start` (16/09/2026)** : « si je down et que je veux pas
+  supprimer ? et si je veux up un truc éteint ? ». `stop` = `DELETE
+  …/instances` (les applications s'arrêtent, configuration, addons et
+  groupes restent), `start` = redéploiement des applications arrêtées ;
+  `up` relance aussi un service arrêté (état `SHOULD_BE_DOWN` avec un
+  déploiement passé), pas une tâche (elle a fini). CLI, API (`/stop`,
+  `/start` en SSE) et boutons de l'interface. Vérifié en réel.
+- Interface, retours du propriétaire : les boutons des dialogues étaient
+  dans un `slot="footer"` que `cc-dialog` n'a pas (seul un slot par défaut
+  et `heading`) → invisibles ; corrigé, testé avec Puppeteer. Journal :
+  verbes colorés comme dans le terminal et séquences ANSI SGR des logs
+  applicatifs rendues. `~` accepté dans « ouvrir un répertoire », refus
+  clair si le répertoire n'a pas de compose.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.

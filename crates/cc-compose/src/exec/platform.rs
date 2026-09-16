@@ -257,6 +257,8 @@ pub trait Platform: Send + Sync {
     fn list_domains(&self, app: &str) -> impl Future<Output = PResult<Vec<String>>> + Send;
     fn add_domain(&self, app: &str, fqdn: &str) -> impl Future<Output = PResult<()>> + Send;
     fn redeploy(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
+    /// Arrête les instances sans rien supprimer (`DELETE …/instances`).
+    fn stop(&self, app: &str) -> impl Future<Output = PResult<()>> + Send;
     fn last_deployment(&self, app: &str) -> impl Future<Output = PResult<Option<DeploymentState>>> + Send;
     fn instances(&self, app: &str) -> impl Future<Output = PResult<Vec<InstanceState>>> + Send;
     /// Variables qu'un addon injecte dans les applications liées.
@@ -553,6 +555,11 @@ impl Platform for Api {
 
     async fn redeploy(&self, app: &str) -> PResult<()> {
         self.send(reqwest::Method::POST, &format!("{}/instances", self.app_path(app)), None).await?;
+        Ok(())
+    }
+
+    async fn stop(&self, app: &str) -> PResult<()> {
+        self.send(reqwest::Method::DELETE, &format!("{}/instances", self.app_path(app)), None).await?;
         Ok(())
     }
 

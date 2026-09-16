@@ -35,6 +35,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/platform/projects/{project}/inventory", get(inventory))
         .route("/api/platform/projects/{project}/logs", get(logs))
         .route("/api/platform/projects/{project}/down", post(down))
+        .route("/api/platform/projects/{project}/stop", post(stop))
+        .route("/api/platform/projects/{project}/start", post(start))
         .route("/api/local", get(local_list).post(local_add_dir))
         .route("/api/local/upload", post(local_upload))
         .route("/api/local/{id}", axum::routing::delete(local_remove))
@@ -177,6 +179,14 @@ struct DownBody {
 async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let b = body.map(|Json(b)| b).unwrap_or_default();
     stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state).map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
+}
+
+async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state).map_err(|e| e.1)?, false, &mut log).await })
+}
+
+async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state).map_err(|e| e.1)?, true, &mut log).await })
 }
 
 /// Lance `f` dans une tâche et diffuse son journal en SSE.

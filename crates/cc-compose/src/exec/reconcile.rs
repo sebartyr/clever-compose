@@ -346,11 +346,14 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         // Un dernier déploiement en échec se retente : la cause est souvent
         // externe (addon pas encore joignable) et rien dans le dépôt n'a changé.
         let failed = last.as_ref().is_some_and(|d| matches!(d.state.as_str(), "FAIL" | "CANCELLED"));
-        if !pushed && (restart || never_deployed || failed) {
+        // Un service arrêté (`stop`) repart : `up` veut le compose en marche.
+        // Une tâche, elle, a fini : elle ne se relance que si quelque chose change.
+        let stopped = app.kind != AppKind::Task && info.state == "SHOULD_BE_DOWN" && last.is_some() && !failed;
+        if !pushed && (restart || never_deployed || failed || stopped) {
             platform.redeploy(app_id).await?;
-            log(&format!("application {} : redéploiement demandé{}", app.name, if failed { " (dernier déploiement en échec)" } else { "" }));
+            log(&format!("application {} : redéploiement demandé{}", app.name, if failed { " (dernier déploiement en échec)" } else if stopped { " (arrêtée)" } else { "" }));
         }
-        if (pushed || restart || never_deployed || failed) && !opts.no_wait {
+        if (pushed || restart || never_deployed || failed || stopped) && !opts.no_wait {
             wait_deployment(platform, app_id, &app.name, log).await?;
         }
     }
@@ -498,6 +501,49 @@ async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, lo
 
 /// `down` : supprime ce que le plan décrit et que la plateforme porte avec
 /// le tag du projet ; les addons (données) seulement avec `confirm`.
+/// `stop` : arrête les instances des applications du projet, sans rien
+/// supprimer (addons, network groups, applications et leur configuration
+/// restent) ; `start` : relance ce qui est arrêté. Les tâches ne sont pas
+/// concernées.
+pub async fn stop_start<P: Platform>(project: &str, platform: &P, start: bool, log: &mut Log) -> Result<(), String> {
+    let inv = super::inspect::discover(project, platform).await?;
+    let mut touched = 0;
+    for a in &inv.apps {
+        if !a.tagged || a.info.instance.lifetime == "TASK" {
+            continue;
+        }
+        let (name, id) = (&a.info.name, &a.info.id);
+        if start {
+            if a.info.state == "SHOULD_BE_UP" {
+                log(&format!("application {name} : déjà en marche"));
+                continue;
+            }
+            platform.redeploy(id).await?;
+            log(&format!("application {name} : démarrage demandé"));
+            touched += 1;
+        } else {
+            if a.info.state == "SHOULD_BE_DOWN" {
+                log(&format!("application {name} : déjà arrêtée"));
+                continue;
+            }
+            platform.stop(id).await?;
+            log(&format!("application {name} : arrêtée (configuration et addons conservés)"));
+            touched += 1;
+        }
+    }
+    if start && touched > 0 {
+        for a in &inv.apps {
+            if a.tagged && a.info.instance.lifetime != "TASK" && a.info.state != "SHOULD_BE_UP" {
+                wait_deployment(platform, &a.info.id, &a.info.name, log).await?;
+            }
+        }
+    }
+    if inv.apps.iter().all(|a| !a.tagged) {
+        log(&format!("aucune application taguée `compose-project={project}`"));
+    }
+    Ok(())
+}
+
 /// Supprime tout ce que `up` a créé pour `project`, sans recalculer de plan :
 /// l'état est celui de l'API (CLAUDE.md §7, « pas de fichier d'état local »),
 /// découvert comme pour `ps`. Les addons ne partent qu'avec `confirm`.

@@ -50,7 +50,7 @@ const SessionPanel = defineComponent({
         <cc-input-text label="Jeton OAuth 1.0" :secret="true" :value="form.token" @cc-input="e => form.token = val(e)"></cc-input-text>
         <cc-input-text label="Secret OAuth 1.0" :secret="true" :value="form.secret" @cc-input="e => form.secret = val(e)"></cc-input-text>
         <cc-notice v-if="error" intent="danger" :message="error"></cc-notice>
-        <div slot="footer" class="row-end">
+        <div class="row-end">
           <cc-button :outlined="true" @cc-click="open = false">Annuler</cc-button>
           <cc-button :primary="true" :waiting="busy" @cc-click="submit">Vérifier et utiliser</cc-button>
         </div>
@@ -61,6 +61,42 @@ const SessionPanel = defineComponent({
 
 // ------------------------------------------------------------ journal
 
+// Rendu d'une ligne : séquences ANSI SGR des logs applicatifs converties en
+// couleurs, et verbe de nos propres lignes coloré comme dans le terminal.
+const ANSI = { 30: '#555', 31: '#ff8a80', 32: '#8bd48b', 33: '#ffd54f', 34: '#82b1ff', 35: '#ea80fc', 36: '#80deea', 37: '#ddd', 90: '#999', 91: '#ff8a80', 92: '#8bd48b', 93: '#ffd54f', 94: '#82b1ff', 95: '#ea80fc', 96: '#80deea', 97: '#fff' };
+const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+function renderLine(line) {
+  if (line.includes('\u001b[')) {
+    let html = '';
+    let style = '';
+    const parts = line.split(/\u001b\[([0-9;]*)m/);
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) { if (parts[i]) html += style ? `<span style="${style}">${esc(parts[i])}</span>` : esc(parts[i]); continue; }
+      const codes = parts[i].split(';').map(Number);
+      for (const c of codes) {
+        if (c === 0) style = '';
+        else if (c === 1) style += 'font-weight:bold;';
+        else if (ANSI[c]) style += `color:${ANSI[c]};`;
+      }
+    }
+    return html;
+  }
+  const m = line.match(/^([^|]+\| )?(.*)$/);
+  const prefix = m[1] || '';
+  const rest = m[2];
+  const has = (w) => w.some((x) => rest.includes(x));
+  let color = '';
+  if (rest.startsWith('erreur') || rest.includes('erreur [') || has(['échec', 'FAIL'])) color = ANSI[31];
+  else if (rest.includes('avertissement [')) color = ANSI[33];
+  else if (has(['supprimé', 'à supprimer'])) color = ANSI[31];
+  else if (has(['existe', 'déjà', 'inchangé', 'sauté', 'conservé', 'ignoré'])) color = ANSI[90];
+  else if (has(['attente', 'redéploiement', 'à créer', 'exécution locale', 'homonyme'])) color = ANSI[33];
+  else if (has(['créé', 'déployée', 'lié', 'poussé', 'mis à jour', 'ajouté', 'terminé', 'présente', 'prêt', 'démarr', 'arrêtée (']) || rest.startsWith('✔')) color = ANSI[32];
+  const sep = rest.indexOf(' : ');
+  if (!prefix && sep > 0 && color) return `<b>${esc(rest.slice(0, sep))}</b> : <span style="color:${color}">${esc(rest.slice(sep + 3))}</span>`;
+  return (prefix ? `<span style="color:${ANSI[36]}">${esc(prefix)}</span>` : '') + (color ? `<span style="color:${color}">${esc(rest)}</span>` : esc(rest));
+}
+
 const LogPanel = defineComponent({
   name: 'LogPanel',
   props: { lines: Array, running: Boolean, title: String },
@@ -68,8 +104,7 @@ const LogPanel = defineComponent({
   setup(props) {
     const el = ref(null);
     watch(() => props.lines.length, () => { requestAnimationFrame(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight; }); });
-    const cls = (l) => l.startsWith('erreur') || l.includes('erreur [') ? 'err' : (l.includes('avertissement [') ? 'warn' : (l.startsWith('  ') ? 'dim' : ''));
-    return { el, cls };
+    return { el, renderLine };
   },
   template: `
     <section class="logs" v-if="lines.length || running">
@@ -80,7 +115,7 @@ const LogPanel = defineComponent({
         <cc-button v-if="running" :outlined="true" :danger="true" @cc-click="$emit('cancel')">Arrêter</cc-button>
         <cc-button v-else :outlined="true" @cc-click="$emit('clear')">Effacer</cc-button>
       </header>
-      <pre ref="el"><div v-for="(l, i) in lines" :key="i" :class="cls(l)">{{ l }}</div></pre>
+      <pre ref="el"><div v-for="(l, i) in lines" :key="i" v-html="renderLine(l)"></div></pre>
     </section>
   `,
 });
@@ -259,6 +294,8 @@ export const App = defineComponent({
       });
     };
     const doUp = () => run('up ' + current.value.name, (onLog) => api.up(current.value.id, { yes: opts.yes, dry_run: opts.dry_run, allow_ephemeral: opts.allow_ephemeral, no_wait: opts.no_wait }, onLog));
+    const doStop = () => run('stop ' + current.value.name, (onLog) => api.stop(current.value.name, onLog));
+    const doStart = () => run('start ' + current.value.name, (onLog) => api.start(current.value.name, onLog));
     const doDown = () => { dialog.down = false; run('down ' + current.value.name, (onLog) => api.down(current.value.name, { yes: opts.yes, dry_run: opts.dry_run }, onLog)); };
     const doSeed = () => { dialog.seed = false; run('seed ' + seed.service, (onLog) => api.seed(current.value.id, { service: seed.service, dump: seed.dump, local: seed.local, yes: opts.yes, no_wait: opts.no_wait }, onLog)); };
     const doLogs = (service) => {
@@ -294,7 +331,7 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doSeed, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -339,6 +376,8 @@ export const App = defineComponent({
               <cc-button :outlined="true" :disabled="errors > 0" @cc-click="doExport">Export</cc-button>
             </template>
             <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doLogs()">Logs</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doStop">Stop</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" @cc-click="doStart">Start</cc-button>
             <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="logs.running" @cc-click="dialog.down = true">Down</cc-button>
           </section>
           <nav class="tabs">
@@ -384,17 +423,17 @@ export const App = defineComponent({
         <p>Supprime les applications et network groups du projet <strong>{{ current?.name }}</strong>. Les addons ne sont supprimés qu'avec <code>--yes</code> (données perdues).</p>
         <label class="switch"><input type="checkbox" v-model="opts.yes"> --yes (addons compris)</label>
         <label class="switch"><input type="checkbox" v-model="opts.dry_run"> --dry-run</label>
-        <div slot="footer" class="row-end"><cc-button :outlined="true" @cc-click="dialog.down = false">Annuler</cc-button><cc-button :danger="true" @cc-click="doDown">Down</cc-button></div>
+        <div class="row-end"><cc-button :outlined="true" @cc-click="dialog.down = false">Annuler</cc-button><cc-button :danger="true" @cc-click="doDown">Down</cc-button></div>
       </cc-dialog>
       <cc-dialog heading="Charger un dump (seed)" :open="dialog.seed" @cc-close="dialog.seed = false" closedBy="any">
         <cc-select label="Service (addon)" :options="(plan?.resources || []).filter(r => r.resource === 'addon').map(r => ({ label: r.service + ' (' + r.provider + ')', value: r.service }))" :value="seed.service" placeholder="Choisir" @cc-select="e => seed.service = val(e)"></cc-select>
         <cc-select label="Dump (fichier du projet)" :options="files.map(f => ({ label: f, value: f }))" :value="seed.dump" placeholder="Choisir" @cc-select="e => seed.dump = val(e)"></cc-select>
         <label class="switch"><input type="checkbox" v-model="seed.local"> depuis ce poste (--local)</label>
-        <div slot="footer" class="row-end"><cc-button :outlined="true" @cc-click="dialog.seed = false">Annuler</cc-button><cc-button :primary="true" :disabled="!seed.service || !seed.dump" @cc-click="doSeed">Seed</cc-button></div>
+        <div class="row-end"><cc-button :outlined="true" @cc-click="dialog.seed = false">Annuler</cc-button><cc-button :primary="true" :disabled="!seed.service || !seed.dump" @cc-click="doSeed">Seed</cc-button></div>
       </cc-dialog>
       <cc-dialog heading="Ouvrir un répertoire du poste" :open="dialog.addDir" @cc-close="dialog.addDir = false" closedBy="any">
         <cc-input-text label="Chemin absolu" :value="dialog.path" @cc-input="e => dialog.path = val(e)" placeholder="/home/moi/mon-projet"></cc-input-text>
-        <div slot="footer" class="row-end"><cc-button :outlined="true" @cc-click="dialog.addDir = false">Annuler</cc-button><cc-button :primary="true" :disabled="!dialog.path" @cc-click="addDir">Ouvrir</cc-button></div>
+        <div class="row-end"><cc-button :outlined="true" @cc-click="dialog.addDir = false">Annuler</cc-button><cc-button :primary="true" :disabled="!dialog.path" @cc-click="addDir">Ouvrir</cc-button></div>
       </cc-dialog>
     </div>
   `,
