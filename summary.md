@@ -227,6 +227,47 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
   `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
   candidates donnent `addon-version-ambiguous`.
+- **Revue contre les sources du provider Terraform 2.2.0 (16/09/2026,
+  `~/cc-compose/terraform-provider-clevercloud`)**, demandée par le
+  propriétaire. Conforme : `networkgroups[].fqdn` validé contre les suffixes
+  DNS de la plateforme (`pkg/resources/ng.go`, nouveau en 2.2.0) — notre
+  alias `<service>.m.<ng>.cc-ng.cloud` passe ; `deployment.commit` en
+  `refs/heads/…` gardé tel quel (`resolveTargetCommit`) ; `dependencies`
+  attend les ids réels d'addons (`postgresql_xxx`), ce que `.id` renvoie ;
+  `container_port` = `CC_DOCKER_EXPOSED_HTTP_PORT`, jamais émis. Vérifié en
+  réel (`cctfaddon`, détruit) : `terraform apply` avec addon PostgreSQL +
+  `dependencies` + `repository = file://<dépôt local>` (le provider ouvre un
+  dépôt local sans clone : plus besoin d'héberger les branches pour
+  tester) ; le commit déployé est celui de l'exécuteur (f69cc6c57cd6).
+  Corrigé chez nous : schéma embarqué passé en 2.2.0 avec
+  `clevercloud_elasticsearch` (les addons ES sortent en Terraform), pin
+  `~> 2.2` ; registre privé enfin câblé (`registry_url/user/password` en
+  variables sensibles côté Terraform, `CC_DOCKER_LOGIN_*` posés par
+  l'exécuteur depuis la configuration Docker du poste ; « privé » = le poste
+  a des identifiants pour l'hôte, fixé par `plan-options.json` dans les
+  goldens) ; `x-clever.private: true` était parsé et documenté mais jamais
+  appliqué → refus explicite `addon-private-unsupported` en attendant (le
+  provider 2.2.0 sait le faire, `networkgroups` sur les ressources addon ;
+  reste à décider comment l'application joint l'addon par le groupe) ; les
+  applications créées par Terraform n'ont pas de tags (pas d'attribut
+  `tags` sur `clevercloud_docker`) : `ps`/`logs` les montrent quand même
+  par leur nom, `down` les laisse à `terraform destroy`. Toujours absent du
+  provider : le lifetime Task (`instanceLifetime`), les redirections UDP,
+  les tags d'application — trois PR candidates.
+- **Rabattement silencieux trouvé au passage (16/09/2026)** : un plan
+  partagé (`dev`) sert la version de son cluster quelle que soit la version
+  demandée (`postgres:16` sur `dev` en `par` → 15 servi, par l'exécuteur
+  comme par Terraform). Le catalogue porte désormais `shared_versions` par
+  zone (clusters de `/v4/addon-providers/{id}` : PostgreSQL 15 en par/mtl,
+  MySQL 8.0 en par, 8.4 en mtl) ; le plan refuse (`addon-version-shared`)
+  avec les deux sorties : `x-clever.version: <servie>` ou un plan dédié
+  (slug et prix indiqués). Les cas synthétiques du corpus déclarent la
+  version servie ; Mastodon, Plausible et Sentry (14/16 demandés) sortent
+  maintenant en refus, ce qui est la vérité.
+- Le test `terraform validate` isole la configuration CLI du poste
+  (`~/.terraformrc` avec `dev_overrides`, build local dans
+  `~/.terraform.d/plugins` qui exclut le registre) : `provider_installation
+  { direct {} }` via `TF_CLI_CONFIG_FILE`.
 - **Scalabilité (13/09/2026, demande du propriétaire)** : le plan porte
   désormais `min_flavor`/`max_flavor` (évolution de `Scaling`, l'exécuteur
   envoie `minFlavor`/`maxFlavor`, Terraform `smallest_flavor`/

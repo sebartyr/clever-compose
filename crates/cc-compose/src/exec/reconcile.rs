@@ -180,6 +180,19 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         if let Source::Context { .. } = app.source {
             wanted.push(PEnv { name: "CC_DOCKERFILE".into(), value: sources::CONTEXT_DOCKERFILE.into() });
         }
+        // Registre privé : identifiants lus dans la configuration Docker du
+        // poste (jamais dans le plan), posés en `CC_DOCKER_LOGIN_*`.
+        if let Source::Synthetic { image, private_registry: true, .. } = &app.source {
+            let host = crate::plan::registry::registry_host(image);
+            match crate::plan::registry::credentials_for(&crate::plan::registry::docker_auths(), &host) {
+                Some((user, password)) => {
+                    wanted.push(PEnv { name: "CC_DOCKER_LOGIN_SERVER".into(), value: host });
+                    wanted.push(PEnv { name: "CC_DOCKER_LOGIN_USERNAME".into(), value: user });
+                    wanted.push(PEnv { name: "CC_DOCKER_LOGIN_PASSWORD".into(), value: password });
+                }
+                None => log(&format!("application {} : registre privé {host} sans identifiants dans la configuration Docker du poste ; `docker login {host}` d'abord, sinon le build échouera", app.name)),
+            }
+        }
         wanted.sort_by(|a, b| a.name.cmp(&b.name));
         let mut current = platform.get_env(app_id).await?;
         current.sort_by(|a, b| a.name.cmp(&b.name));
@@ -413,6 +426,10 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
     let inv = super::inspect::discover(project, platform).await?;
     for a in &inv.apps {
         let (name, id) = (&a.info.name, &a.info.id);
+        if !a.tagged {
+            log(&format!("application {name} ({id}) : sans tag clever-compose, conservée (créée par Terraform ? `terraform destroy`)"));
+            continue;
+        }
         if dry_run {
             log(&format!("application {name} ({id}) : à supprimer"));
         } else {
@@ -439,7 +456,7 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
             log(&format!("network group {} ({}) : supprimé", x.label, x.id));
         }
     }
-    if inv.apps.is_empty() {
+    if !inv.apps.iter().any(|a| a.tagged) {
         log(&format!("aucune application taguée `compose-project={project}` : rien à faire ?"));
     }
     Ok(())

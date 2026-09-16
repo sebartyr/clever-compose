@@ -1,6 +1,6 @@
 terraform {
   required_providers {
-    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.1" }
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.2" }
   }
 }
 
@@ -16,7 +16,7 @@ variable "organisation" {
 
 variable "repository" {
   type        = string
-  description = "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)"
+  description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
 }
 
 resource "clevercloud_networkgroup" "default" {

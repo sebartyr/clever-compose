@@ -1,3 +1,3 @@
 compose.yaml:140:15: avertissement [network-internal-ignored] networks.internal_network.internal: `internal` est ignoré : un network group n'est joignable que de ses membres, et l'accès public passe par les domaines
-compose.yaml:7:12: avertissement [addon-substitution] services.db.image: `db` (postgres:14) devient un addon PostgreSQL plan `dev` (DEV) : 0 €/mois HT, 5 connexions max. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance
+compose.yaml:7:12: erreur [addon-version-shared] services.db.image: `db` : le plan `dev` est partagé et sert PostgreSQL 15 dans `par`, pas 14 ; `x-clever.version: 15` pour l'accepter, ou un plan dédié pour 14 (`x-clever.plan: xxs_sml`, 5.25 €/mois HT)
 compose.yaml:20:12: erreur [addon-version-unavailable] services.redis.image: `redis` : version 7 indisponible pour Redis (versions : 8.10.1) ; `x-clever.version` pour en choisir une

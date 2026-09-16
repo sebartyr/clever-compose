@@ -11,6 +11,7 @@ services:
     image: postgres:16
     x-clever:
       init: local
+      version: "15"
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app

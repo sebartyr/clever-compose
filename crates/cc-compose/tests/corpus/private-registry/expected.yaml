@@ -1,0 +1,26 @@
+name: private-registry
+services:
+  app:
+    depends_on:
+      search:
+        condition: service_started
+        required: true
+    environment:
+      ES_URL: http://search:9200
+    image: ghcr.io/acme/app:1.2
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "8080"
+        protocol: tcp
+  search:
+    environment:
+      discovery.type: single-node
+    image: elasticsearch:8.17.0
+    networks:
+      default: null
+networks:
+  default:
+    name: private-registry_default

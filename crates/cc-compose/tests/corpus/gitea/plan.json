@@ -21,7 +21,7 @@
       "provider": "postgresql-addon",
       "plan": "dev",
       "region": "par",
-      "version": "17",
+      "version": "15",
       "tags": [
         "compose-project=gitea",
         "compose-service=db",

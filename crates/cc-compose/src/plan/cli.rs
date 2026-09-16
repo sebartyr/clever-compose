@@ -14,6 +14,28 @@ use crate::diagnostic::{Diagnostic, Diagnostics};
 pub struct PlanOptions {
     pub project: Options,
     pub allow_ephemeral: bool,
+    /// Hôtes de registre avec identifiants sur le poste ; `None` = lus dans
+    /// la configuration Docker (`private_registries_from_docker`).
+    pub private_registries: Option<Vec<String>>,
+}
+
+/// Les hôtes des `auths` de la configuration Docker du poste, normalisés
+/// (Docker Hub → `docker.io`).
+pub fn private_registries_from_docker() -> Vec<String> {
+    let auths = super::registry::docker_auths();
+    let mut out: Vec<String> = auths
+        .keys()
+        .map(|k| {
+            let k = k.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/');
+            match k {
+                "index.docker.io/v1" | "index.docker.io" | "registry-1.docker.io" => "docker.io".to_string(),
+                other => other.to_string(),
+            }
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 pub fn run(opts: &PlanOptions, images: &dyn ImageResolver, diags: &mut Diagnostics) -> Option<Plan> {
@@ -30,7 +52,8 @@ pub fn run(opts: &PlanOptions, images: &dyn ImageResolver, diags: &mut Diagnosti
         }
     };
     let project_dir = std::fs::canonicalize(&opts.project.project_dir).unwrap_or_else(|_| opts.project.project_dir.clone());
-    let ctx = Context { images, project_dir: &project_dir, spec_json: &spec, allow_ephemeral: opts.allow_ephemeral };
+    let private_registries = opts.private_registries.clone().unwrap_or_else(private_registries_from_docker);
+    let ctx = Context { images, project_dir: &project_dir, spec_json: &spec, allow_ephemeral: opts.allow_ephemeral, private_registries: &private_registries };
     let before = diags.items.len();
     let result = plan(&typed, &ctx, diags);
     // Les diagnostics du plan reçoivent la position du nœud désigné par leur

@@ -1,0 +1,71 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.2" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
+}
+
+variable "registry_ghcr_io_user" {
+  type        = string
+  sensitive   = true
+  description = "Utilisateur du registre ghcr.io"
+}
+
+variable "registry_ghcr_io_password" {
+  type        = string
+  sensitive   = true
+  description = "Mot de passe du registre ghcr.io"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "private-registry-default"
+  tags = ["compose-project=private-registry", "compose-network=default", "compose-spec=2e1635890a217ca2cfc876398bf542ca"]
+}
+
+resource "clevercloud_elasticsearch" "search" {
+  name    = "private-registry-search"
+  plan    = "xs"
+  region  = "par"
+  version = "8"
+}
+
+resource "clevercloud_docker" "app" {
+  name               = "private-registry-app"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  registry_url       = "ghcr.io"
+  registry_user      = var.registry_ghcr_io_user
+  registry_password  = var.registry_ghcr_io_password
+  environment        = {
+    CC_COMPOSE_EXPAND = "ES_URL"
+    ES_URL            = "https://$${ES_ADDON_USER}:$${ES_ADDON_PASSWORD}@$${ES_ADDON_HOST}"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "app.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/app"
+  }
+  dependencies       = [clevercloud_elasticsearch.search.id]
+}

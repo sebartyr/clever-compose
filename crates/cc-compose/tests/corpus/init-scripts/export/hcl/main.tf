@@ -1,6 +1,6 @@
 terraform {
   required_providers {
-    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.1" }
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.2" }
   }
 }
 
@@ -16,19 +16,19 @@ variable "organisation" {
 
 variable "repository" {
   type        = string
-  description = "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)"
+  description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
 }
 
 resource "clevercloud_networkgroup" "default" {
   name = "init-scripts-default"
-  tags = ["compose-project=init-scripts", "compose-network=default", "compose-spec=03540be59232bd165adc912500eccfb6"]
+  tags = ["compose-project=init-scripts", "compose-network=default", "compose-spec=9fbb301c3c1c91de1fe99c5ae8acc5b9"]
 }
 
 resource "clevercloud_postgresql" "db" {
   name    = "init-scripts-db"
   plan    = "dev"
   region  = "par"
-  version = "16"
+  version = "15"
 }
 
 resource "clevercloud_docker" "db_init" {

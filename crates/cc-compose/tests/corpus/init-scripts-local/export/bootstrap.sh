@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap généré par clever-compose pour le projet `init-scripts-local` (spec 48b936df37f9aaeea0835a9517208ffa).
+# Bootstrap généré par clever-compose pour le projet `init-scripts-local` (spec 44c4d252a8e51abc7433e559c5289d27).
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
@@ -8,11 +8,11 @@ cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
 clever features enable ng >/dev/null 2>&1 || true
-clever ng create 'init-scripts-local-default' -o "$ORG" --tags 'compose-project=init-scripts-local,compose-network=default,compose-spec=48b936df37f9aaeea0835a9517208ffa'
+clever ng create 'init-scripts-local-default' -o "$ORG" --tags 'compose-project=init-scripts-local,compose-network=default,compose-spec=44c4d252a8e51abc7433e559c5289d27'
 NG_default="$(clever ng get 'init-scripts-local-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'init-scripts-local-db' --plan 'dev' --region 'par' --version '16' -o "$ORG"
+clever addon create 'postgresql-addon' 'init-scripts-local-db' --plan 'dev' --region 'par' --version '15' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-local-db") | .addonId')"
 
 # Applications, créées sans déploiement
@@ -20,12 +20,12 @@ APP_db_init="$(clever create -t docker 'init-scripts-local-db-init' -o "$ORG" -r
 clever scale --app "$APP_db_init" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts-local
 # tag : compose-service=db-init
-# tag : compose-spec=48b936df37f9aaeea0835a9517208ffa
+# tag : compose-spec=44c4d252a8e51abc7433e559c5289d27
 APP_api="$(clever create -t docker 'init-scripts-local-api' -o "$ORG" -r 'par' -F json | jq -r .id)"
 clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instances 1 --max-instances 1
 # tag : compose-project=init-scripts-local
 # tag : compose-service=api
-# tag : compose-spec=48b936df37f9aaeea0835a9517208ffa
+# tag : compose-spec=44c4d252a8e51abc7433e559c5289d27
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'init-scripts-local-default' -o "$ORG"

@@ -1,0 +1,11 @@
+services:
+  app:
+    image: ghcr.io/acme/app:1.2
+    ports: ["8080:3000"]
+    environment:
+      ES_URL: http://search:9200
+    depends_on: [search]
+  search:
+    image: elasticsearch:8.17.0
+    environment:
+      discovery.type: single-node

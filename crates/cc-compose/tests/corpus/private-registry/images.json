@@ -1,0 +1,4 @@
+{
+  "ghcr.io/acme/app:1.2": { "entrypoint": [], "cmd": ["node", "server.js"], "user": "node", "workdir": "/app", "exposed_ports": [3000] },
+  "elasticsearch:8.17.0": { "entrypoint": ["/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"], "cmd": ["eswrapper"], "user": null, "workdir": "/usr/share/elasticsearch", "exposed_ports": [9200, 9300] }
+}

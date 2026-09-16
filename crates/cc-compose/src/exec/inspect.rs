@@ -18,6 +18,11 @@ pub struct ProjectApp {
     pub service: String,
     pub info: AppInfo,
     pub tags: Vec<String>,
+    /// Portée par le tag `compose-project=` (créée par `up`). Sinon, elle a
+    /// le nom attendu mais vient d'ailleurs (export Terraform appliqué : le
+    /// provider n'a pas d'attribut `tags` sur les applications) : `ps` et
+    /// `logs` la montrent, `down` la laisse à son propriétaire.
+    pub tagged: bool,
 }
 
 /// Un addon du projet, le service étant le nom sans le préfixe du projet.
@@ -44,11 +49,9 @@ pub async fn discover<P: Platform>(project: &str, platform: &P) -> Result<Invent
             continue;
         }
         let tags = platform.get_tags(&x.id).await?;
-        if !tags.iter().any(|t| t == &project_tag) {
-            continue;
-        }
+        let tagged = tags.iter().any(|t| t == &project_tag);
         let service = tags.iter().find_map(|t| t.strip_prefix("compose-service=")).map(str::to_string).unwrap_or_else(|| x.name[prefix.len()..].to_string());
-        inv.apps.push(ProjectApp { service, info: x, tags });
+        inv.apps.push(ProjectApp { service, info: x, tags, tagged });
     }
     for x in platform.list_addons().await? {
         if x.name.starts_with(&prefix) && ADDON_PROVIDERS.contains(&x.provider.as_str()) {
@@ -95,6 +98,7 @@ pub async fn ps<P: Platform>(project: &str, platform: &P, log: &mut Log) -> Resu
         };
         // L'accès public : le premier domaine (les tâches n'en ont pas d'utile).
         let access = if kind == "tâche" { String::new() } else { platform.list_domains(&a.info.id).await?.into_iter().next().map(|d| format!("https://{d}")).unwrap_or_default() };
+        let state = if a.tagged { state } else { format!("{state} (sans tag clever-compose : Terraform ?)") };
         rows.push([a.service.clone(), kind.into(), a.info.id.clone(), state, access]);
     }
     for a in &inv.addons {

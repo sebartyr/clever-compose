@@ -51,5 +51,7 @@ services:
       - net.ipv4.ip_forward=1
   db:
     image: postgres:16
+    x-clever:
+      version: "15"
 volumes:
   cache: {}

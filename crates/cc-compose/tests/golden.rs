@@ -3,7 +3,9 @@
 //! `plan.diagnostics.txt`, figés dans le dépôt. Régénération :
 //! `CC_REGEN_GOLDEN=1 cargo test`.
 //!
-//! `plan-options.json` (optionnel) : `{"allow_ephemeral": true}`.
+//! `plan-options.json` (optionnel) : `{"allow_ephemeral": true,
+//! "private_registries": ["ghcr.io"]}` (les registres « avec identifiants »
+//! sont fixés ici pour que le golden ne dépende pas du poste).
 
 use std::path::{Path, PathBuf};
 
@@ -20,6 +22,8 @@ fn corpus_dir() -> PathBuf {
 struct PlanTestOptions {
     #[serde(default)]
     allow_ephemeral: bool,
+    #[serde(default)]
+    private_registries: Vec<String>,
 }
 
 #[test]
@@ -35,6 +39,7 @@ fn corpus_plans_match_golden_files() {
         let opts = PlanOptions {
             project: Options { project_dir: dir.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() },
             allow_ephemeral: topts.allow_ephemeral,
+            private_registries: Some(topts.private_registries.clone()),
         };
         let mut diags = Diagnostics::default();
         let plan = run(&opts, &fixture, &mut diags);

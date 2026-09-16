@@ -1,0 +1,139 @@
+{
+  "project": "private-registry",
+  "spec_hash": "2e1635890a217ca2cfc876398bf542ca",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "private-registry-default",
+      "tags": [
+        "compose-project=private-registry",
+        "compose-network=default",
+        "compose-spec=2e1635890a217ca2cfc876398bf542ca"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/search",
+      "service": "search",
+      "name": "private-registry-search",
+      "provider": "es-addon",
+      "plan": "xs",
+      "region": "par",
+      "version": "8",
+      "tags": [
+        "compose-project=private-registry",
+        "compose-service=search",
+        "compose-spec=2e1635890a217ca2cfc876398bf542ca"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/app",
+      "service": "app",
+      "name": "private-registry-app",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "ghcr.io/acme/app:1.2",
+        "private_registry": true,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [],
+        "cmd": [
+          "node",
+          "server.js"
+        ],
+        "user": "node",
+        "workdir": "/app",
+        "exposed_ports": [
+          3000
+        ]
+      },
+      "shim": {
+        "argv": [
+          "node",
+          "server.js"
+        ],
+        "workdir": "/app",
+        "user": "node",
+        "port": {
+          "mode": "forward",
+          "target_port": 3000
+        }
+      },
+      "env": [
+        {
+          "key": "CC_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "ES_URL"
+            }
+          ]
+        },
+        {
+          "key": "ES_URL",
+          "value": [
+            {
+              "literal": "https://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/search",
+                "var": "ES_ADDON_USER"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/search",
+                "var": "ES_ADDON_PASSWORD"
+              }
+            },
+            {
+              "literal": "@"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/search",
+                "var": "ES_ADDON_HOST"
+              }
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/search"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=private-registry",
+        "compose-service=app",
+        "compose-spec=2e1635890a217ca2cfc876398bf542ca"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/app@default",
+      "member": "app/app",
+      "group": "ng/default",
+      "aliases": [
+        "app"
+      ]
+    }
+  ]
+}

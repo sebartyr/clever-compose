@@ -38,6 +38,9 @@ pub struct Context<'a> {
     pub spec_json: &'a serde_json::Value,
     /// Accepte les volumes nommés comme stockage éphémère.
     pub allow_ephemeral: bool,
+    /// Hôtes de registre pour lesquels le poste a des identifiants
+    /// (`docker login`) : une image qui en vient est traitée comme privée.
+    pub private_registries: &'a [String],
 }
 
 impl Context<'_> {
@@ -120,6 +123,10 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         let Some(rec) = s.image.as_deref().and_then(addons::recognize) else { continue };
         if x.ephemeral == Some(true) {
             diags.push(Diagnostic::warning("addon-declined", format!("`{name}` ({}) reste un conteneur éphémère (`x-clever.ephemeral: true`) ; un addon `{}` managé est possible", rec.kind, rec.provider)).with_path(&p.child("image")));
+            continue;
+        }
+        if x.private == Some(true) {
+            diags.push(Diagnostic::error("addon-private-unsupported", format!("`{name}` : `x-clever.private: true` (addon rattaché au network group) n'est pas encore pris en charge : l'addon est joint par son hôte public ; retirez la clé")).with_path(&p.child("x-clever").child("private")));
             continue;
         }
         let declared = addons::declared(&rec, s);
@@ -235,6 +242,25 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
                 }
             }
             other => other,
+        };
+        // Un plan partagé (`dev`) sert la version de son cluster, quoi qu'on
+        // demande (constaté le 16/09/2026 : 16 demandé, 15 servi) : jamais en
+        // silence (§6.1).
+        let version = if plan.features.get("Type").map(|t| t == "Shared").unwrap_or(false) {
+            match provider.shared_versions.get(&region) {
+                Some(served) => {
+                    let asked = x.version.clone().or_else(|| rec.version.clone());
+                    if let Some(a) = asked.filter(|a| !served.starts_with(a.as_str())) {
+                        let dedicated = provider.plans.iter().filter(|p| p.features.get("Type").map(|t| t == "Dedicated").unwrap_or(false) && (p.zones.is_empty() || p.zones.iter().any(|z| *z == region))).min_by(|a, b| a.price.partial_cmp(&b.price).unwrap());
+                        diags.push(Diagnostic::error("addon-version-shared", format!("`{name}` : le plan `{}` est partagé et sert {} {served} dans `{region}`, pas {a} ; `x-clever.version: {served}` pour l'accepter, ou un plan dédié pour {a}{}", plan.slug, provider.name, dedicated.map(|p| format!(" (`x-clever.plan: {}`, {} €/mois HT)", p.slug, p.price)).unwrap_or_default())).with_path(&p.child("image")));
+                        continue;
+                    }
+                    Some(served.clone())
+                }
+                None => version,
+            }
+        } else {
+            version
         };
         // Coût annoncé (§6) : la substitution est facturée.
         diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
@@ -410,7 +436,10 @@ fn plan_service(
                     return None;
                 }
             };
-            let private_registry = !images::is_public_registry(image);
+            // Registre privé = le poste a des identifiants pour cet hôte (une
+            // image privée peut vivre sur ghcr.io comme sur un registre interne).
+            let host = registry::registry_host(image);
+            let private_registry = ctx.private_registries.iter().any(|h| *h == host);
             (Source::Synthetic { image: image.clone(), private_registry, files: Vec::new(), generated: Vec::new() }, intr)
         }
         (None, None) => {

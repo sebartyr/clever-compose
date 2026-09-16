@@ -11,9 +11,13 @@ fichier. Régénérer avec la même requête ; ne pas éditer à la main.
 # terraform-provider-schema.json
 
 Sortie de `terraform providers schema -json` (Terraform 1.16.2) pour le
-provider `CleverCloud/clevercloud` **2.1.0**, le 13/09/2026, réduite aux
+provider `CleverCloud/clevercloud` **2.2.0**, le 16/09/2026, réduite aux
 ressources utilisées (`clevercloud_docker`, `clevercloud_networkgroup`, les
-addons `postgresql`, `mysql`, `redis`, `mongodb`, et `configprovider`).
+addons `postgresql`, `mysql`, `redis`, `mongodb`, `elasticsearch`, et
+`configprovider`). Les sources du provider sont en local dans
+`~/cc-compose/terraform-provider-clevercloud` pour lire le comportement
+derrière le schéma (`pkg/resources/application/git.go` pour `deployment`,
+`pkg/resources/ng.go` pour `networkgroups`, `dependencies.go`).
 
 Sert à l'émetteur Terraform pour les noms de ressources et d'attributs
 (CLAUDE.md §10 : jamais de mémoire). Régénérer avec un `main.tf` qui
@@ -23,7 +27,9 @@ déclare le provider, `terraform init`, puis la commande ci-dessus.
 
 Extrait de `GET /v2/products/addonproviders` (plans, prix mensuels en euros
 HT, zones, features dont `Max connection limit` et `Memory`) et de
-`GET /v4/addon-providers/{id}` (versions dédiées et version par défaut), le
+`GET /v4/addon-providers/{id}` (versions dédiées et version par défaut, et
+`shared_versions` : version du cluster partagé par zone, lue dans `clusters`,
+ajoutée le 16/09/2026 après un `dev` demandé en 16 et servi en 15), le
 13/09/2026, pour `postgresql-addon`, `mysql-addon`, `redis-addon`,
 `mongodb-addon`, `es-addon`, `cellar-addon`, `config-provider`.
 

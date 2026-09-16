@@ -1,16 +1,24 @@
 //! Émetteur Terraform : `main.tf.json`, syntaxe JSON native de Terraform,
 //! sans règle d'échappement HCL à gérer, validable par `terraform validate`.
 //! Noms de ressources et d'attributs : `data/terraform-provider-schema.json`
-//! (provider 2.1.0), relus ici et non mémorisés.
+//! (provider 2.2.0), relus ici et non mémorisés.
 //!
-//! Contraintes du provider 2.1.0 (constatées dans le schéma) :
-//! - `networkgroups[].fqdn` est requis et ne peut pas référencer l'id de sa
-//!   propre ressource : on y pose l'alias `<service>.m.<ng>.cc-ng.cloud`,
-//!   accepté par l'API (sans effet DNS aujourd'hui, résolvable si axo#3168
-//!   aboutit) ; les références d'environnement calculent le nom dérivé
-//!   depuis les ids des autres ressources ;
+//! Contraintes du provider 2.2.0 (schéma et sources `pkg/resources`) :
+//! - `networkgroups[].fqdn` est requis, validé contre les suffixes DNS de la
+//!   plateforme (`cc-ng.cloud`) et ne peut pas référencer l'id de sa propre
+//!   ressource : on y pose l'alias `<service>.m.<ng>.cc-ng.cloud`, accepté
+//!   par l'API (sans effet DNS aujourd'hui, résolvable si axo#3168 aboutit) ;
+//!   les références d'environnement calculent le nom dérivé depuis les ids
+//!   des autres ressources ;
+//! - `deployment.commit` accepte `refs/heads/<branche>` (gardé tel quel,
+//!   `resolveTargetCommit`) et `repository` accepte `file://` (dépôt local
+//!   ouvert sur place, sans clone) ;
+//! - `dependencies` accepte les ids réels des addons (`postgresql_xxx`), ce
+//!   que `.id` des ressources addon renvoie ;
 //! - `redirection` est un bloc unique et TCP : un seul port, pas d'UDP ;
-//! - pas d'attribut pour une Clever Task.
+//! - `container_port` / `container_port_tcp` posent
+//!   `CC_DOCKER_EXPOSED_*_PORT` : jamais émis (CLAUDE.md §3) ;
+//! - pas d'attribut pour une Clever Task (`instanceLifetime`).
 
 use std::path::Path as FsPath;
 
@@ -32,7 +40,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
     let schema = schema();
     let mut variables = Map::new();
     variables.insert("organisation".into(), json!({ "type": "string", "description": "Organisation Clever Cloud (orga_xxx ou user_xxx)", "sensitive": true }));
-    let mut repository = json!({ "type": "string", "description": "Dépôt git qui héberge les branches clever-compose/<service> (écrites par `clever-compose export`, à pousser)" });
+    let mut repository = json!({ "type": "string", "description": "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)" });
     if let Some(url) = &opts.repository {
         repository["default"] = json!(url);
     }
@@ -49,7 +57,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
             }
             Resource::App(app) => {
                 if app.kind == AppKind::Task {
-                    diags.push(Diagnostic::warning("terraform-task", format!("`{}` est une tâche : le provider 2.1.0 n'a pas d'attribut pour une Clever Task, la ressource est émise comme une application ordinaire", app.service)));
+                    diags.push(Diagnostic::warning("terraform-task", format!("`{}` est une tâche : le provider 2.2.0 n'a pas d'attribut pour une Clever Task, la ressource est émise comme une application ordinaire", app.service)));
                 }
                 check_attrs(&schema, "clevercloud_docker", &["name", "region", "smallest_flavor", "biggest_flavor", "min_instance_count", "max_instance_count", "environment", "networkgroups", "redirection", "vhosts", "dockerfile"], diags);
                 let mut res = Map::new();
@@ -61,6 +69,18 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 res.insert("max_instance_count".into(), json!(app.scaling.max_instances));
                 if let Source::Context { .. } = &app.source {
                     res.insert("dockerfile".into(), json!(crate::plan::sources::CONTEXT_DOCKERFILE));
+                }
+                // Registre privé : identifiants en variables sensibles, jamais
+                // en littéral (le provider les pose en `CC_DOCKER_LOGIN_*`).
+                if let Source::Synthetic { image, private_registry: true, .. } = &app.source {
+                    check_attrs(&schema, "clevercloud_docker", &["registry_url", "registry_user", "registry_password"], diags);
+                    let host = crate::plan::registry::registry_host(image);
+                    let v = ident(&host);
+                    variables.entry(format!("registry_{v}_user")).or_insert(json!({ "type": "string", "sensitive": true, "description": format!("Utilisateur du registre {host}") }));
+                    variables.entry(format!("registry_{v}_password")).or_insert(json!({ "type": "string", "sensitive": true, "description": format!("Mot de passe du registre {host}") }));
+                    res.insert("registry_url".into(), json!(host));
+                    res.insert("registry_user".into(), json!(format!("${{var.registry_{v}_user}}")));
+                    res.insert("registry_password".into(), json!(format!("${{var.registry_{v}_password}}")));
                 }
                 let mut env = Map::new();
                 for e in &app.env {
@@ -95,7 +115,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                     res.insert("redirection".into(), json!({ "namespace": first.namespace }));
                 }
                 for u in redirs.iter().filter(|x| x.protocol == Protocol::Udp) {
-                    diags.push(Diagnostic::warning("terraform-udp", format!("`{}` : la redirection UDP du port {} n'est pas exprimable avec le provider 2.1.0 (bloc `redirection` TCP seulement) ; à créer à la main", app.service, u.target_port)));
+                    diags.push(Diagnostic::warning("terraform-udp", format!("`{}` : la redirection UDP du port {} n'est pas exprimable avec le provider 2.2.0 (bloc `redirection` TCP seulement) ; à créer à la main", app.service, u.target_port)));
                 }
                 let vhosts: Vec<J> = plan.resources.iter().filter_map(|r| match r {
                     Resource::Domain(d) if d.app == app.id => Some(json!({ "fqdn": d.fqdn })),
@@ -132,7 +152,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
             }
             Resource::Addon(a) => {
                 let Some(resource) = addon_resource_type(&a.provider) else {
-                    diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : pas de ressource Terraform pour `{}` dans le provider 2.1.0", a.name, a.provider)));
+                    diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : pas de ressource Terraform pour `{}` dans le provider 2.2.0", a.name, a.provider)));
                     continue;
                 };
                 let has_version = schema["provider_schemas"]["registry.terraform.io/clevercloud/clevercloud"]["resource_schemas"][resource]["block"]["attributes"].get("version").is_some();
@@ -158,7 +178,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
         resources.insert("clevercloud_docker".into(), J::Object(dockers));
     }
     json!({
-        "terraform": { "required_providers": { "clevercloud": { "source": "CleverCloud/clevercloud", "version": "~> 2.1" } } },
+        "terraform": { "required_providers": { "clevercloud": { "source": "CleverCloud/clevercloud", "version": "~> 2.2" } } },
         "provider": { "clevercloud": { "organisation": "${var.organisation}" } },
         "variable": variables,
         "resource": resources,
@@ -216,6 +236,7 @@ fn addon_resource_type(provider: &str) -> Option<&'static str> {
         "mysql-addon" => "clevercloud_mysql",
         "redis-addon" => "clevercloud_redis",
         "mongodb-addon" => "clevercloud_mongodb",
+        "es-addon" => "clevercloud_elasticsearch",
         "config-provider" => "clevercloud_configprovider",
         _ => return None,
     })

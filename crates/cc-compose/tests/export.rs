@@ -21,6 +21,8 @@ fn corpus_dir() -> PathBuf {
 struct PlanTestOptions {
     #[serde(default)]
     allow_ephemeral: bool,
+    #[serde(default)]
+    private_registries: Vec<String>,
 }
 
 fn cases() -> Vec<PathBuf> {
@@ -39,6 +41,7 @@ fn corpus_exports_match_golden_files() {
         let opts = PlanOptions {
             project: Options { project_dir: dir.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() },
             allow_ephemeral: topts.allow_ephemeral,
+            private_registries: Some(topts.private_registries.clone()),
         };
         let mut diags = Diagnostics::default();
         let Some(plan) = run(&opts, &fixture, &mut diags) else { continue };
@@ -92,6 +95,16 @@ fn corpus_terraform_validates() {
     };
     let cache = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/terraform-plugins")).unwrap();
     std::fs::create_dir_all(&cache).unwrap();
+    // Le test vise le provider publié, pas un `dev_overrides` du poste
+    // (`~/.terraformrc`) ni un build local dans `~/.terraform.d/plugins`
+    // (miroir implicite, qui exclut le registre pour ce provider) :
+    // configuration CLI réduite à l'installation directe.
+    let rc = cache.join("direct.tfrc");
+    std::fs::write(&rc, "provider_installation {\n  direct {}\n}\n").unwrap();
+    let tf_env = |c: &mut Command| {
+        c.env("TF_PLUGIN_CACHE_DIR", &cache).env("TF_CLI_CONFIG_FILE", &rc);
+    };
+    std::fs::create_dir_all(&cache).unwrap();
     let mut failures = Vec::new();
     for dir in cases() {
         let src = dir.join("export/main.tf.json");
@@ -102,13 +115,19 @@ fn corpus_terraform_validates() {
         // `.terraform*` est ignoré par git. Le JSON est validé, puis le HCL
         // rendu depuis la même structure (`hcl/main.tf`, `file()` relatif).
         let work = dir.join("export");
-        let init = Command::new(&tf).args(["init", "-input=false", "-backend=false", "-no-color"]).current_dir(&work).env("TF_PLUGIN_CACHE_DIR", &cache).output().unwrap();
+        let mut cmd = Command::new(&tf);
+        cmd.args(["init", "-input=false", "-backend=false", "-no-color"]).current_dir(&work);
+        tf_env(&mut cmd);
+        let init = cmd.output().unwrap();
         if !init.status.success() {
             eprintln!("terraform init en échec pour {} :\n{}", dir.display(), String::from_utf8_lossy(&init.stderr));
             failures.push(dir.display().to_string());
             continue;
         }
-        let out = Command::new(&tf).args(["validate", "-no-color"]).current_dir(&work).output().unwrap();
+        let mut cmd = Command::new(&tf);
+        cmd.args(["validate", "-no-color"]).current_dir(&work);
+        tf_env(&mut cmd);
+        let out = cmd.output().unwrap();
         if !out.status.success() {
             eprintln!("terraform validate en échec pour {} :\n{}{}", dir.display(), String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
             failures.push(dir.display().to_string());
@@ -116,8 +135,14 @@ fn corpus_terraform_validates() {
         // Le HCL rendu, validé à son tour.
         let hcl = work.join("hcl");
         if hcl.join("main.tf").is_file() {
-            let init = Command::new(&tf).args(["init", "-input=false", "-backend=false", "-no-color"]).current_dir(&hcl).env("TF_PLUGIN_CACHE_DIR", &cache).output().unwrap();
-            let out = Command::new(&tf).args(["validate", "-no-color"]).current_dir(&hcl).output().unwrap();
+            let mut cmd = Command::new(&tf);
+            cmd.args(["init", "-input=false", "-backend=false", "-no-color"]).current_dir(&hcl);
+            tf_env(&mut cmd);
+            let init = cmd.output().unwrap();
+            let mut cmd = Command::new(&tf);
+            cmd.args(["validate", "-no-color"]).current_dir(&hcl);
+            tf_env(&mut cmd);
+            let out = cmd.output().unwrap();
             if !init.status.success() || !out.status.success() {
                 eprintln!("terraform validate (HCL) en échec pour {} :\n{}{}", dir.display(), String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
                 failures.push(format!("{} (hcl)", dir.display()));

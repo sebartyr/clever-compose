@@ -50,16 +50,10 @@ impl Registry {
     }
 
     fn auth_for(&self, registry: &str) -> RegistryAuth {
-        let keys: Vec<&str> = match registry {
-            "docker.io" | "index.docker.io" | "registry-1.docker.io" => vec!["https://index.docker.io/v1/", "index.docker.io", "docker.io", "registry-1.docker.io"],
-            r => vec![r],
-        };
-        for k in keys {
-            if let Some((u, p)) = self.auths.get(k) {
-                return RegistryAuth::Basic(u.clone(), p.clone());
-            }
+        match credentials_for(&self.auths, registry) {
+            Some((u, p)) => RegistryAuth::Basic(u, p),
+            None => RegistryAuth::Anonymous,
         }
-        RegistryAuth::Anonymous
     }
 
     fn cache_path(&self, image: &str) -> Option<PathBuf> {
@@ -117,9 +111,26 @@ impl ImageResolver for Registry {
     }
 }
 
+/// Identifiants d'un registre dans les `auths` de Docker (Docker Hub sous
+/// ses différents noms).
+pub fn credentials_for(auths: &HashMap<String, (String, String)>, registry: &str) -> Option<(String, String)> {
+    let keys: Vec<&str> = match registry {
+        "docker.io" | "index.docker.io" | "registry-1.docker.io" => vec!["https://index.docker.io/v1/", "index.docker.io", "docker.io", "registry-1.docker.io"],
+        r => vec![r],
+    };
+    keys.iter().find_map(|k| auths.get(*k).cloned())
+}
+
+/// Hôte du registre d'une référence d'image (`ghcr.io/o/i:t` → `ghcr.io`).
+pub fn registry_host(image: &str) -> String {
+    let first = image.split('/').next().unwrap_or("");
+    let has_host = image.contains('/') && (first.contains('.') || first.contains(':') || first == "localhost");
+    if has_host { first.to_string() } else { "docker.io".into() }
+}
+
 /// `auths` de `~/.docker/config.json` (ou `$DOCKER_CONFIG/config.json`) :
 /// `auth` en base64 `user:password`, ou `username`/`password` en clair.
-fn docker_auths() -> HashMap<String, (String, String)> {
+pub fn docker_auths() -> HashMap<String, (String, String)> {
     use base64::Engine;
     let mut out = HashMap::new();
     let path = std::env::var_os("DOCKER_CONFIG")

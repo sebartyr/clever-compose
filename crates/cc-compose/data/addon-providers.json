@@ -1,2872 +1,2880 @@
 {
- "source": "GET /v2/products/addonproviders + GET /v4/addon-providers/{id}",
- "date": "2026-09-13",
- "providers": {
-  "config-provider": {
-   "name": "Configuration provider",
-   "plans": [
-    {
-     "id": "plan_5d8e9596-dd73-4b73-84d9-e165372c5324",
-     "slug": "std",
-     "name": "Standard",
-     "price": 0.0,
-     "zones": [
-      "parhds",
-      "par"
-     ],
-     "features": {}
+  "source": "GET /v2/products/addonproviders + GET /v4/addon-providers/{id}",
+  "date": "2026-09-13 ; shared_versions (clusters de /v4/addon-providers/{id}) ajoutées le 16/09/2026",
+  "providers": {
+    "config-provider": {
+      "name": "Configuration provider",
+      "plans": [
+        {
+          "id": "plan_5d8e9596-dd73-4b73-84d9-e165372c5324",
+          "slug": "std",
+          "name": "Standard",
+          "price": 0.0,
+          "zones": [
+            "parhds",
+            "par"
+          ],
+          "features": {}
+        }
+      ]
+    },
+    "redis-addon": {
+      "name": "Redis",
+      "plans": [
+        {
+          "id": "plan_c62dd71e-15c3-483e-879d-75e4c836e21e",
+          "slug": "s_mono",
+          "name": "S",
+          "price": 5.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "1 vCPU",
+            "Connection limit": "100",
+            "Size": "128MB",
+            "Databases": "1",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_221bbf5a-30d0-49a9-b539-ce09b8a734a9",
+          "slug": "m_mono",
+          "name": "M",
+          "price": 12.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Connection limit": "250",
+            "Type": "Dedicated",
+            "CPU": "1 vCPU",
+            "Size": "256MB",
+            "Databases": "5",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_56579711-5b5c-451c-b274-2662eb528fc1",
+          "slug": "l_mono",
+          "name": "L",
+          "price": 19.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "1 vCPU",
+            "Connection limit": "500",
+            "Size": "512MB",
+            "Databases": "10",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_17f3735a-e1e4-4296-9e4c-e41cf74121c5",
+          "slug": "xl_mono",
+          "name": "XL",
+          "price": 24.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "Connection limit": "500",
+            "CPU": "1 vCPU",
+            "Size": "1GB",
+            "Databases": "10",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_3bb59326-15d2-404b-be6e-97069710e8dd",
+          "slug": "xxl_mono",
+          "name": "2XL",
+          "price": 57.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "2 vCPUs",
+            "Connection limit": "750",
+            "Size": "2.5GB",
+            "Databases": "10",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_3901ff93-bb24-411d-9a5c-be3c625e3dd9",
+          "slug": "xxxl_mono",
+          "name": "3XL",
+          "price": 108.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "4 vCPUs",
+            "Connection limit": "1000",
+            "Databases": "20",
+            "Size": "5GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_b43a32be-ada0-49c1-ab3e-db04f9dcfef2",
+          "slug": "xxxxl_mono",
+          "name": "4XL",
+          "price": 212.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "6 vCPUs",
+            "Connection limit": "1500",
+            "Size": "10GB",
+            "Databases": "20",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_c08f98c1-a8ae-41f6-a55e-32e1db601f63",
+          "slug": "5xl_mono",
+          "name": "5XL",
+          "price": 315.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "CPU": "8 vCPUs",
+            "Connection limit": "2250",
+            "Databases": "30",
+            "Type": "Dedicated",
+            "Size": "15GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_73062568-ce5a-4263-bd38-11abedb9d14a",
+          "slug": "6xl_mono",
+          "name": "6XL",
+          "price": 420.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "12 vCPUs",
+            "Connection limit": "3000",
+            "Databases": "40",
+            "Size": "20GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_3646ebc0-a77f-42a7-a0ca-443326584df8",
+          "slug": "7xl_mono",
+          "name": "7XL",
+          "price": 630.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "CPU": "16 vCPUs",
+            "Connection limit": "4500",
+            "Databases": "50",
+            "Size": "30GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        }
+      ],
+      "versions": [
+        "8.10.1"
+      ],
+      "default_version": "8.10.1"
+    },
+    "mongodb-addon": {
+      "name": "MongoDB",
+      "plans": [
+        {
+          "id": "plan_b53983a2-63d3-472d-8c98-f1bdea682912",
+          "slug": "xs_sml",
+          "name": "XS Small Space",
+          "price": 17.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Max DB size": "5 GB",
+            "Type": "Dedicated",
+            "Memory": "1 GB",
+            "vCPU": "1",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_14ab2ba4-4b61-4e4f-8971-f26e7daa4963",
+          "slug": "xs_med",
+          "name": "XS Medium Space",
+          "price": 22.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Max DB size": "15 GB",
+            "Memory": "1 GB",
+            "Type": "Dedicated",
+            "vCPU": "1",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_8c379b80-6f2d-4b93-8839-8cb14aee4218",
+          "slug": "xs_big",
+          "name": "XS Big Space",
+          "price": 30.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "1 GB",
+            "Max DB size": "30 GB",
+            "Type": "Dedicated",
+            "vCPU": "1",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_5ad112b9-15ca-4c1d-800d-f1cb2989ee83",
+          "slug": "s_sml",
+          "name": "S Small Space",
+          "price": 41.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "2 GB",
+            "Max DB size": "15 GB",
+            "vCPU": "2",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_01fd9ba8-2e8f-4a0a-bbf7-aecb4d982780",
+          "slug": "s_med",
+          "name": "S Medium Space",
+          "price": 49.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Max DB size": "30 GB",
+            "vCPU": "2",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_b60a7496-f44d-4f95-b942-c2445958d58a",
+          "slug": "s_big",
+          "name": "S Big Space",
+          "price": 59.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Max DB size": "50 GB",
+            "Memory": "2 GB",
+            "vCPU": "2",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_5172896b-9f29-48f6-8820-3d07a04b80c9",
+          "slug": "s_hug",
+          "name": "S Huge Space",
+          "price": 74.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "2 GB",
+            "vCPU": "2",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3",
+            "Max DB size": "80 GB"
+          }
+        },
+        {
+          "id": "plan_8c14d2c0-05fe-4137-912b-1e99b01b871d",
+          "slug": "m_sml",
+          "name": "M Small Space",
+          "price": 99.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Max DB size": "50 GB",
+            "Memory": "4 GB",
+            "vCPU": "4",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_5f1e6e86-a9d7-4698-b6c1-6ef5935d16b7",
+          "slug": "m_med",
+          "name": "M Medium Space",
+          "price": 114.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "4 GB",
+            "Max DB size": "80 GB",
+            "vCPU": "4",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_e8036bc6-5341-4c6e-b843-f4c60d442198",
+          "slug": "m_big",
+          "name": "M Big Space",
+          "price": 124.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "4 GB",
+            "Max DB size": "100 GB",
+            "vCPU": "4",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_df538656-adf7-4846-8e39-d96d0c362706",
+          "slug": "m_hug",
+          "name": "M Huge Space",
+          "price": 174.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "4 GB",
+            "vCPU": "4",
+            "Max DB size": "200 GB",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Type": "Dedicated",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_513675e4-32c0-4b3a-991c-24fcff62b0cf",
+          "slug": "l_sml",
+          "name": "L Small Space",
+          "price": 202.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "8 GB",
+            "Type": "Dedicated",
+            "Max DB size": "100 GB",
+            "vCPU": "6",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_66f4b19c-621a-4b39-892d-0e6f0bf62fed",
+          "slug": "l_med",
+          "name": "L Medium Space",
+          "price": 252.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "8 GB",
+            "Type": "Dedicated",
+            "Max DB size": "200 GB",
+            "Metrics": "Yes",
+            "vCPU": "6",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_24bbde1f-e8c7-4a45-b8bf-1ab1e320049c",
+          "slug": "l_big",
+          "name": "L Big Space",
+          "price": 302.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Metrics": "Yes",
+            "Max DB size": "300 GB",
+            "Memory": "8 GB",
+            "Type": "Dedicated",
+            "vCPU": "6",
+            "Migration Tool": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_36429877-93c4-4639-83f0-cdc96493caf3",
+          "slug": "xl_sml",
+          "name": "XL Small Space",
+          "price": 470.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "16 GB",
+            "Max DB size": "300 GB",
+            "Type": "Dedicated",
+            "vCPU": "8",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_e4745876-6013-48fc-9cbf-c7a49be84cb4",
+          "slug": "xl_med",
+          "name": "XL Medium Space",
+          "price": 545.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "16 GB",
+            "Max DB size": "450 GB",
+            "Type": "Dedicated",
+            "vCPU": "8",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_ffdd05ce-5f30-4750-94c5-424899d1f89d",
+          "slug": "xl_big",
+          "name": "XL Big Space",
+          "price": 620.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "16 GB",
+            "Max DB size": "600 GB",
+            "Type": "Dedicated",
+            "vCPU": "8",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_98370e12-e54a-4dc1-8ee4-4d4f3007f3eb",
+          "slug": "xxl_sml",
+          "name": "XXL Small Space",
+          "price": 972.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "32 GB",
+            "Type": "Dedicated",
+            "Max DB size": "600 GB",
+            "vCPU": "10",
+            "Migration Tool": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_8da4539d-198b-48da-9d4e-df4e832085fe",
+          "slug": "xxl_med",
+          "name": "XXL Medium Space",
+          "price": 1075.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "32 GB",
+            "Type": "Dedicated",
+            "Max DB size": "750 GB",
+            "vCPU": "10",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        },
+        {
+          "id": "plan_e6030ef6-005a-4f77-939d-f1395b02f5d6",
+          "slug": "xxl_big",
+          "name": "XXL Big Space",
+          "price": 1122.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "wsw",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "32 GB",
+            "Type": "Dedicated",
+            "Max DB size": "900 GB",
+            "vCPU": "10",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Version": "4.0.3"
+          }
+        }
+      ],
+      "versions": [
+        "4.0.3"
+      ],
+      "default_version": "4.0.3"
+    },
+    "postgresql-addon": {
+      "name": "PostgreSQL",
+      "plans": [
+        {
+          "id": "plan_d2ada71a-aa8e-4ead-8cb9-28314664437e",
+          "slug": "dev",
+          "name": "DEV",
+          "price": 0.0,
+          "zones": [
+            "par",
+            "mtl"
+          ],
+          "features": {
+            "Max connection limit": "5",
+            "Memory": "Shared",
+            "vCPUS": "Shared",
+            "Max DB size": "256 MB",
+            "Metrics": "No",
+            "Logs": "No",
+            "Type": "Shared",
+            "Migration Tool": "Yes",
+            "Backups": "No"
+          }
+        },
+        {
+          "id": "plan_c32d00fb-6c06-48a9-a0a3-9d808937ec68",
+          "slug": "xxs_sml",
+          "name": "XXS Small Space",
+          "price": 5.25,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Metrics": "Yes",
+            "Type": "Dedicated",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "1 GB",
+            "Memory": "512 MB",
+            "vCPUS": "1",
+            "Max connection limit": "45"
+          }
+        },
+        {
+          "id": "plan_9ce0a025-f5bd-4ac4-a5be-e2da37c87583",
+          "slug": "xxs_med",
+          "name": "XXS Medium Space",
+          "price": 6.8,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Metrics": "Yes",
+            "Max connection limit": "45",
+            "Type": "Dedicated",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Memory": "512 MB",
+            "Max DB size": "2 GB",
+            "vCPUS": "1"
+          }
+        },
+        {
+          "id": "plan_810751de-ab47-4bd8-918b-b857f9011050",
+          "slug": "xxs_big",
+          "name": "XXS Big Space",
+          "price": 7.7,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "1",
+            "Max connection limit": "45",
+            "Metrics": "Yes",
+            "Type": "Dedicated",
+            "Memory": "512 MB",
+            "Max DB size": "3 GB"
+          }
+        },
+        {
+          "id": "plan_4b988584-adf5-43a5-891b-9ba1d8fe6d5d",
+          "slug": "xs_tny",
+          "name": "XS Tiny Space",
+          "price": 15.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "1 GB",
+            "Max connection limit": "75",
+            "vCPUS": "1",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Metrics": "Yes",
+            "Type": "Dedicated",
+            "Max DB size": "2 GB"
+          }
+        },
+        {
+          "id": "plan_f14478be-b59a-4f64-870c-6887c561492d",
+          "slug": "xs_sml",
+          "name": "XS Small Space",
+          "price": 19.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "Max DB size": "5 GB",
+            "Backups": "Daily - 7 Retained",
+            "vCPUS": "1",
+            "Memory": "1 GB",
+            "Metrics": "Yes",
+            "Max connection limit": "75",
+            "Logs": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_cb267d0a-5a2d-4c5b-9709-ee4d321691e7",
+          "slug": "xs_med",
+          "name": "XS Medium Space",
+          "price": 22.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "1 GB",
+            "Max DB size": "10 GB",
+            "Max connection limit": "75",
+            "vCPUS": "1",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_a9cfb2d3-c959-4ab2-8b6f-fcbd07aa4f51",
+          "slug": "xs_big",
+          "name": "XS Big Space",
+          "price": 25.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "1 GB",
+            "Max DB size": "15 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "1",
+            "Max connection limit": "75"
+          }
+        },
+        {
+          "id": "plan_f1f39547-be55-4be0-96d0-5140da25c138",
+          "slug": "s_sml",
+          "name": "S Small Space",
+          "price": 41.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Backups": "Daily - 7 Retained",
+            "Max DB size": "10 GB",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "2",
+            "Max connection limit": "125"
+          }
+        },
+        {
+          "id": "plan_db834b61-21d3-423f-81ac-e8ec5b94a51c",
+          "slug": "s_med",
+          "name": "S Medium Space",
+          "price": 44.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "15 GB",
+            "Memory": "2 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "2",
+            "Max connection limit": "125"
+          }
+        },
+        {
+          "id": "plan_06303461-b9d1-4418-a352-7be788c17777",
+          "slug": "s_big",
+          "name": "S Big Space",
+          "price": 47.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Max DB size": "20 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "2",
+            "Max connection limit": "125"
+          }
+        },
+        {
+          "id": "plan_926643d1-3180-4e6a-bbc0-da828b884f77",
+          "slug": "s_hug",
+          "name": "S Huge Space",
+          "price": 64.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Max DB size": "50 GB",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Max connection limit": "125",
+            "vCPUS": "2"
+          }
+        },
+        {
+          "id": "plan_13def017-26d9-469d-88b1-6591cbf4422f",
+          "slug": "m_sml",
+          "name": "M Small Space",
+          "price": 88.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "4 GB",
+            "Max DB size": "20 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "4",
+            "Max connection limit": "250"
+          }
+        },
+        {
+          "id": "plan_ef13e023-b519-4130-bfa0-54e2e0893362",
+          "slug": "m_med",
+          "name": "M Medium Space",
+          "price": 98.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "40 GB",
+            "Memory": "4 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "4",
+            "Max connection limit": "250"
+          }
+        },
+        {
+          "id": "plan_55d54396-799b-4e01-92ce-34ad68392e7a",
+          "slug": "m_big",
+          "name": "M Big Space",
+          "price": 118.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "4 GB",
+            "Max DB size": "80 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "4",
+            "Max connection limit": "250"
+          }
+        },
+        {
+          "id": "plan_20cf7db8-2687-495f-978d-785a8ac87814",
+          "slug": "l_sml",
+          "name": "L Small Space",
+          "price": 178.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "40 GB",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "6",
+            "Max connection limit": "500"
+          }
+        },
+        {
+          "id": "plan_bfc12b2d-37af-4d5c-98b5-f5ce8856965c",
+          "slug": "l_med",
+          "name": "L Medium Space",
+          "price": 198.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "80 GB",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "6",
+            "Max connection limit": "500"
+          }
+        },
+        {
+          "id": "plan_166c1a3f-3e7d-427c-9a2d-adeaf6c30c1c",
+          "slug": "l_big",
+          "name": "L Big Space",
+          "price": 218.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "120 GB",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "6",
+            "Max connection limit": "500"
+          }
+        },
+        {
+          "id": "plan_9b4505e7-ac36-4caa-ac7d-9e11b6a26b15",
+          "slug": "xl_sml",
+          "name": "XL Small Space",
+          "price": 360.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "80 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "16 GB",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "8",
+            "Max connection limit": "750"
+          }
+        },
+        {
+          "id": "plan_957a3cbc-022f-430d-aa6e-3156b8da20c6",
+          "slug": "l_gnt",
+          "name": "L Giant Space",
+          "price": 400.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "480 GB",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Max connection limit": "500",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Type": "Dedicated",
+            "vCPUS": "6"
+          }
+        },
+        {
+          "id": "plan_b35727fe-2100-4f7c-82c8-31d9471769ab",
+          "slug": "xl_med",
+          "name": "XL Medium Space",
+          "price": 400.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "160 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "16 GB",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "8",
+            "Max connection limit": "750"
+          }
+        },
+        {
+          "id": "plan_1067ae12-c433-497d-a20f-d16e50b932d9",
+          "slug": "xl_big",
+          "name": "XL Big Space",
+          "price": 480.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "320 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "16 GB",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "8",
+            "Max connection limit": "750"
+          }
+        },
+        {
+          "id": "plan_b972af97-96cb-4a5d-b4ff-7b3efb6ff44b",
+          "slug": "xl_hug",
+          "name": "XL Huge Space",
+          "price": 560.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "480 GB",
+            "Max connection limit": "750",
+            "Memory": "16 GB",
+            "vCPUS": "8",
+            "Type": "Dedicated"
+          }
+        },
+        {
+          "id": "plan_fdbaa2cc-3403-451a-b341-0973e04be1d2",
+          "slug": "xl_gnt",
+          "name": "XL Giant Space",
+          "price": 640.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Type": "Dedicated",
+            "vCPUS": "8",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Max DB size": "640 GB",
+            "Max connection limit": "750",
+            "Memory": "16 GB"
+          }
+        },
+        {
+          "id": "plan_1c8a4179-78ef-4bdd-bfd7-7f389782b8c6",
+          "slug": "xxl_sml",
+          "name": "XXL Small Space",
+          "price": 760.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "160 GB",
+            "Type": "Dedicated",
+            "Memory": "32 GB",
+            "Backups": "Daily - 7 Retained",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "vCPUS": "10",
+            "Max connection limit": "900"
+          }
+        },
+        {
+          "id": "plan_5e33d20a-fe32-4b4f-91f0-b59bf0deae13",
+          "slug": "xxl_med",
+          "name": "XXL Medium Space",
+          "price": 840.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "320 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "32 GB",
+            "vCPUS": "10",
+            "Max connection limit": "900",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_d3131cb3-5d92-4b8c-b3db-30e8be4716af",
+          "slug": "xxl_big",
+          "name": "XXL Big Space",
+          "price": 1000.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "640 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "32 GB",
+            "vCPUS": "10",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max connection limit": "900"
+          }
+        },
+        {
+          "id": "plan_e89e0986-2664-46b1-aaff-305b9c6ec552",
+          "slug": "xxl_hug",
+          "name": "XXL Huge Space",
+          "price": 1160.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max DB size": "960 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Memory": "32 GB",
+            "vCPUS": "10",
+            "Metrics": "Yes",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max connection limit": "900"
+          }
+        },
+        {
+          "id": "plan_5601b1c6-9850-4a02-9288-8894670f0d7d",
+          "slug": "xxxl_sml",
+          "name": "XXXL Small Space",
+          "price": 1730.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "64 GB",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "640 GB",
+            "Max connection limit": "1200",
+            "vCPUS": "12"
+          }
+        },
+        {
+          "id": "plan_9c7779d2-2701-4420-bd8a-3e7b49083847",
+          "slug": "xxxl_med",
+          "name": "XXXL Medium Space",
+          "price": 1890.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "64 GB",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "960 GB",
+            "Max connection limit": "1200",
+            "vCPUS": "12"
+          }
+        },
+        {
+          "id": "plan_52b00af0-b49f-477b-a2bb-05e6bdf057af",
+          "slug": "xxxl_big",
+          "name": "XXXL Big Space",
+          "price": 2010.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Metrics": "Yes",
+            "Memory": "64 GB",
+            "Backups": "Daily - 7 Retained",
+            "Type": "Dedicated",
+            "Logs": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "1200 GB",
+            "Max connection limit": "1200",
+            "vCPUS": "12"
+          }
+        },
+        {
+          "id": "plan_d9d4f69d-0f9a-43a3-bfc4-0c043a6ec906",
+          "slug": "3xl_cpu_tit",
+          "name": "3XL CPU Titan space",
+          "price": 4490.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "vCPUS": "32",
+            "Type": "Dedicated",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes",
+            "Max DB size": "6 TB",
+            "Max connection limit": "1200",
+            "Memory": "64 GB",
+            "Backups": "Daily - 7 Retained"
+          }
+        }
+      ],
+      "versions": [
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18"
+      ],
+      "default_version": "17",
+      "shared_versions": {
+        "par": "15",
+        "mtl": "15"
+      }
+    },
+    "es-addon": {
+      "name": "Elastic Stack",
+      "plans": [
+        {
+          "id": "plan_0e0bc5ea-ba21-41e8-865b-1ed48e0163ca",
+          "slug": "xs",
+          "name": "XS",
+          "price": 19.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "MEMORY": "1 GB",
+            "DISK": "10 GB",
+            "Type": "Dedicated",
+            "CPUs": "1",
+            "NODES": "1",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_7675a239-057e-448e-85fb-77b5aa2ef47e",
+          "slug": "s",
+          "name": "S",
+          "price": 39.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "MEMORY": "2 GB",
+            "DISK": "60 GB",
+            "CPUs": "1",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_bb93c360-d60c-4441-b18b-cb530a6b7b11",
+          "slug": "m",
+          "name": "M",
+          "price": 80.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "DISK": "120 GB",
+            "MEMORY": "4 GB",
+            "CPUs": "2",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_33ad969a-2f37-4d47-8707-93315650fc0f",
+          "slug": "l",
+          "name": "L",
+          "price": 160.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "CPUs": "4",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "MEMORY": "8 GB",
+            "DISK": "240 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_0e494649-d62a-45e7-ba81-61c1a5d8503a",
+          "slug": "xl",
+          "name": "XL",
+          "price": 320.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "DISK": "450 GB",
+            "MEMORY": "16 GB",
+            "CPUs": "6",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_56265b48-d826-4484-9fd8-d3038c973027",
+          "slug": "xxl",
+          "name": "XXL",
+          "price": 640.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "MEMORY": "32 GB",
+            "DISK": "870 GB",
+            "CPUs": "8",
+            "Type": "Dedicated",
+            "NODES": "1",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_a9565b70-7d5b-44b9-892f-de9bc6cade84",
+          "slug": "xxxl",
+          "name": "XXXL",
+          "price": 1280.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "MEMORY": "64 GB",
+            "DISK": "1700 GB",
+            "CPUs": "16",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_31ea6328-7df8-4208-a18d-137d2941f16d",
+          "slug": "4xl",
+          "name": "4XL",
+          "price": 2560.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "DISK": "3500 GB",
+            "MEMORY": "128 GB",
+            "CPUs": "32",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_197dbf8a-c30b-49c9-a2ac-126a0b79efba",
+          "slug": "5xl",
+          "name": "5XL",
+          "price": 5120.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "MEMORY": "256 GB",
+            "DISK": "7000 GB",
+            "CPUs": "64",
+            "NODES": "1",
+            "Type": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        }
+      ],
+      "versions": [
+        "7",
+        "8",
+        "9"
+      ],
+      "default_version": "8"
+    },
+    "cellar-addon": {
+      "name": "Cellar S3 storage",
+      "plans": [
+        {
+          "id": "plan_84c85ee3-5fdb-4aca-a727-298ddc14b766",
+          "slug": "S",
+          "name": "S",
+          "price": 0.0,
+          "zones": [
+            "fr-north-hds",
+            "parhds",
+            "par"
+          ],
+          "features": {
+            "Storage < 25TB": "15.36€/TB/Mo",
+            "Storage < 50TB": "10.24€/TB/Mo",
+            "Outbound traffic < 10TB": "100MB free, 0.09€/GB/Mo",
+            "Storage < 1TB": "100 MB free, 20.48€/TB/Mo",
+            "Outbound traffic < 40TB": "0.07€/GB/Mo"
+          }
+        }
+      ]
+    },
+    "mysql-addon": {
+      "name": "MySQL",
+      "plans": [
+        {
+          "id": "plan_bf78ef5b-aedd-4024-973a-c2ff45541b88",
+          "slug": "dev",
+          "name": "DEV",
+          "price": 0.0,
+          "zones": [
+            "par",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "Shared",
+            "Max db size": "10 MB",
+            "Max connection limit": "5",
+            "vCPUS": "Shared",
+            "Backups": "No",
+            "TYPE": "Shared",
+            "Logs": "No",
+            "Metrics": "No",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_7ab494e2-c319-4330-8170-35d78738c1ee",
+          "slug": "xxs_sml",
+          "name": "XXS Small Space",
+          "price": 5.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 retained",
+            "Logs": "Yes",
+            "TYPE": "Dedicated",
+            "Memory": "512 MB",
+            "Max db size": "512 MB",
+            "Max connection limit": "15",
+            "vCPUS": "1",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_53d3c47d-ce81-466b-8acb-d5efaa68d27b",
+          "slug": "xxs_med",
+          "name": "XXS Medium Space",
+          "price": 5.9,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 retained",
+            "Memory": "512 MB",
+            "TYPE": "Dedicated",
+            "Max db size": "1 GB",
+            "Max connection limit": "15",
+            "vCPUS": "1",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_b7ee59a4-4115-41b8-b735-e44378b95c57",
+          "slug": "xxs_big",
+          "name": "XXS Big Space",
+          "price": 6.8,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 retained",
+            "Memory": "512 MB",
+            "TYPE": "Dedicated",
+            "Max db size": "2 GB",
+            "vCPUS": "1",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "15",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_0ffb4a1e-ac15-47c6-965f-f87ac990d99c",
+          "slug": "xs_tny",
+          "name": "XS Tiny Space",
+          "price": 15.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 retained",
+            "Max connection limit": "75",
+            "TYPE": "Dedicated",
+            "Max db size": "2 GB",
+            "Memory": "1 GB",
+            "vCPUS": "1",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_bde0b41f-77a7-4285-a08c-b8f4d9780fc4",
+          "slug": "xs_sml",
+          "name": "XS Small Space",
+          "price": 23.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Memory": "1 GB",
+            "Max db size": "5 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "75",
+            "vCPUS": "1",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_889ddd44-68e1-4473-b152-a1abcaeec5b0",
+          "slug": "xs_med",
+          "name": "XS Medium Space",
+          "price": 26.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "1 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "10 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "75",
+            "vCPUS": "1",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_01d5d079-e900-49c7-8273-4fb3473eedea",
+          "slug": "xs_big",
+          "name": "XS Big Space",
+          "price": 30.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "1 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "15 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "75",
+            "vCPUS": "1",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_445566dd-b996-456f-96e3-186c29f4bd11",
+          "slug": "s_sml",
+          "name": "S Small Space",
+          "price": 50.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Max db size": "10 GB",
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "125",
+            "vCPUS": "2",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_1940a893-ff6b-4c64-85e7-4955bb3355c0",
+          "slug": "s_med",
+          "name": "S Medium Space",
+          "price": 52.5,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "2 GB",
+            "Backups": "Daily - 7 Retained",
+            "TYPE": "Dedicated",
+            "Max db size": "15 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "vCPUS": "2",
+            "Max connection limit": "125",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_a367b384-2942-4226-884c-5211b79aae81",
+          "slug": "s_big",
+          "name": "S Big Space",
+          "price": 55.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "2 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "20 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "125",
+            "vCPUS": "2",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_97afb4d4-cfeb-4fcb-966f-6072c6c327dc",
+          "slug": "m_sml",
+          "name": "M Small Space",
+          "price": 106.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "4 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "20 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "250",
+            "vCPUS": "4",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_ead3f4d7-a920-4b8c-8706-8fa8280d0bcc",
+          "slug": "m_med",
+          "name": "M Medium Space",
+          "price": 116.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "4 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "40 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "250",
+            "vCPUS": "4",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_d7f7bcff-df64-4326-a8f7-9d112d75bbff",
+          "slug": "m_big",
+          "name": "M Big Space",
+          "price": 136.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Backups": "Daily - 7 Retained",
+            "Memory": "4 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "80 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "250",
+            "vCPUS": "4",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_65af8c37-a9ca-4f37-8490-c727a9d7fe23",
+          "slug": "l_sml",
+          "name": "L Small Space",
+          "price": 220.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "8 GB",
+            "Max db size": "40 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "500",
+            "vCPUS": "6",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_786d19e3-d5ec-43d1-bb99-4bdf51d1708f",
+          "slug": "l_med",
+          "name": "L Medium Space",
+          "price": 240.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Max db size": "80 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "500",
+            "vCPUS": "6",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_cecdd927-0c2b-4df5-80bf-7a3956b7da45",
+          "slug": "l_big",
+          "name": "L Big Space",
+          "price": 260.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Max db size": "120 GB",
+            "Memory": "8 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "500",
+            "vCPUS": "6",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_85292520-3687-488a-aefc-1884349205e4",
+          "slug": "xl_sml",
+          "name": "XL Small Space",
+          "price": 472.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Memory": "16 GB",
+            "Backups": "Daily - 7 Retained",
+            "Max db size": "80 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "750",
+            "vCPUS": "8",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_b6cac148-b1fe-4018-a605-9ecd92b436d1",
+          "slug": "xl_med",
+          "name": "XL Medium Space",
+          "price": 512.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "16 GB",
+            "Max db size": "160 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "750",
+            "vCPUS": "8",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_df6d36d3-07a4-4027-a0bb-333240a6b7c8",
+          "slug": "xl_big",
+          "name": "XL Big Space",
+          "price": 592.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max db size": "320 GB",
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "16 GB",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "750",
+            "vCPUS": "8",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_8c48584e-4d0a-43db-91a1-f2d1a3475fe5",
+          "slug": "xxl_sml",
+          "name": "XXL Small Space",
+          "price": 1008.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Memory": "32 GB",
+            "TYPE": "Dedicated",
+            "Max db size": "160 GB",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "900",
+            "vCPUS": "10",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_f6108804-9258-41f3-9920-0b5e0a41cb60",
+          "slug": "xxl_med",
+          "name": "XXL Medium Space",
+          "price": 1088.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max db size": "320 GB",
+            "Memory": "32 GB",
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "900",
+            "vCPUS": "10",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_c26fc00b-abfb-44ec-951d-73ed65892f3e",
+          "slug": "xxl_big",
+          "name": "XXL Big Space",
+          "price": 1248.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "Max db size": "640 GB",
+            "Memory": "32 GB",
+            "TYPE": "Dedicated",
+            "Backups": "Daily - 7 Retained",
+            "vCPUS": "10",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Max connection limit": "900",
+            "Migration Tool": "Yes"
+          }
+        },
+        {
+          "id": "plan_9f7b1d05-36e7-493d-a32f-af0507477af0",
+          "slug": "xxl_hug",
+          "name": "XXL Huge Space",
+          "price": 1408.0,
+          "zones": [
+            "ldn",
+            "syd",
+            "scw",
+            "sgp",
+            "parhds",
+            "rbxhds",
+            "wsw",
+            "grahds",
+            "par",
+            "rbx",
+            "mtl"
+          ],
+          "features": {
+            "TYPE": "Dedicated",
+            "Max db size": "960 GB",
+            "Backups": "Daily - 7 Retained",
+            "Memory": "32 GB",
+            "Max connection limit": "900",
+            "vCPUS": "10",
+            "Logs": "Yes",
+            "Metrics": "Yes",
+            "Migration Tool": "Yes"
+          }
+        }
+      ],
+      "versions": [
+        "5.7",
+        "8.0",
+        "8.4",
+        "9.7"
+      ],
+      "default_version": "8.4",
+      "shared_versions": {
+        "par": "8.0",
+        "mtl": "8.4"
+      }
     }
-   ]
-  },
-  "redis-addon": {
-   "name": "Redis",
-   "plans": [
-    {
-     "id": "plan_c62dd71e-15c3-483e-879d-75e4c836e21e",
-     "slug": "s_mono",
-     "name": "S",
-     "price": 5.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "1 vCPU",
-      "Connection limit": "100",
-      "Size": "128MB",
-      "Databases": "1",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_221bbf5a-30d0-49a9-b539-ce09b8a734a9",
-     "slug": "m_mono",
-     "name": "M",
-     "price": 12.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Connection limit": "250",
-      "Type": "Dedicated",
-      "CPU": "1 vCPU",
-      "Size": "256MB",
-      "Databases": "5",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_56579711-5b5c-451c-b274-2662eb528fc1",
-     "slug": "l_mono",
-     "name": "L",
-     "price": 19.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "1 vCPU",
-      "Connection limit": "500",
-      "Size": "512MB",
-      "Databases": "10",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_17f3735a-e1e4-4296-9e4c-e41cf74121c5",
-     "slug": "xl_mono",
-     "name": "XL",
-     "price": 24.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "Connection limit": "500",
-      "CPU": "1 vCPU",
-      "Size": "1GB",
-      "Databases": "10",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_3bb59326-15d2-404b-be6e-97069710e8dd",
-     "slug": "xxl_mono",
-     "name": "2XL",
-     "price": 57.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "2 vCPUs",
-      "Connection limit": "750",
-      "Size": "2.5GB",
-      "Databases": "10",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_3901ff93-bb24-411d-9a5c-be3c625e3dd9",
-     "slug": "xxxl_mono",
-     "name": "3XL",
-     "price": 108.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "4 vCPUs",
-      "Connection limit": "1000",
-      "Databases": "20",
-      "Size": "5GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_b43a32be-ada0-49c1-ab3e-db04f9dcfef2",
-     "slug": "xxxxl_mono",
-     "name": "4XL",
-     "price": 212.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "6 vCPUs",
-      "Connection limit": "1500",
-      "Size": "10GB",
-      "Databases": "20",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_c08f98c1-a8ae-41f6-a55e-32e1db601f63",
-     "slug": "5xl_mono",
-     "name": "5XL",
-     "price": 315.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "CPU": "8 vCPUs",
-      "Connection limit": "2250",
-      "Databases": "30",
-      "Type": "Dedicated",
-      "Size": "15GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_73062568-ce5a-4263-bd38-11abedb9d14a",
-     "slug": "6xl_mono",
-     "name": "6XL",
-     "price": 420.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "12 vCPUs",
-      "Connection limit": "3000",
-      "Databases": "40",
-      "Size": "20GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_3646ebc0-a77f-42a7-a0ca-443326584df8",
-     "slug": "7xl_mono",
-     "name": "7XL",
-     "price": 630.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "CPU": "16 vCPUs",
-      "Connection limit": "4500",
-      "Databases": "50",
-      "Size": "30GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    }
-   ],
-   "versions": [
-    "8.10.1"
-   ],
-   "default_version": "8.10.1"
-  },
-  "mongodb-addon": {
-   "name": "MongoDB",
-   "plans": [
-    {
-     "id": "plan_b53983a2-63d3-472d-8c98-f1bdea682912",
-     "slug": "xs_sml",
-     "name": "XS Small Space",
-     "price": 17.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Max DB size": "5 GB",
-      "Type": "Dedicated",
-      "Memory": "1 GB",
-      "vCPU": "1",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_14ab2ba4-4b61-4e4f-8971-f26e7daa4963",
-     "slug": "xs_med",
-     "name": "XS Medium Space",
-     "price": 22.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Max DB size": "15 GB",
-      "Memory": "1 GB",
-      "Type": "Dedicated",
-      "vCPU": "1",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_8c379b80-6f2d-4b93-8839-8cb14aee4218",
-     "slug": "xs_big",
-     "name": "XS Big Space",
-     "price": 30.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "1 GB",
-      "Max DB size": "30 GB",
-      "Type": "Dedicated",
-      "vCPU": "1",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_5ad112b9-15ca-4c1d-800d-f1cb2989ee83",
-     "slug": "s_sml",
-     "name": "S Small Space",
-     "price": 41.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "2 GB",
-      "Max DB size": "15 GB",
-      "vCPU": "2",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_01fd9ba8-2e8f-4a0a-bbf7-aecb4d982780",
-     "slug": "s_med",
-     "name": "S Medium Space",
-     "price": 49.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Max DB size": "30 GB",
-      "vCPU": "2",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_b60a7496-f44d-4f95-b942-c2445958d58a",
-     "slug": "s_big",
-     "name": "S Big Space",
-     "price": 59.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Max DB size": "50 GB",
-      "Memory": "2 GB",
-      "vCPU": "2",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_5172896b-9f29-48f6-8820-3d07a04b80c9",
-     "slug": "s_hug",
-     "name": "S Huge Space",
-     "price": 74.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "2 GB",
-      "vCPU": "2",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3",
-      "Max DB size": "80 GB"
-     }
-    },
-    {
-     "id": "plan_8c14d2c0-05fe-4137-912b-1e99b01b871d",
-     "slug": "m_sml",
-     "name": "M Small Space",
-     "price": 99.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Max DB size": "50 GB",
-      "Memory": "4 GB",
-      "vCPU": "4",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_5f1e6e86-a9d7-4698-b6c1-6ef5935d16b7",
-     "slug": "m_med",
-     "name": "M Medium Space",
-     "price": 114.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "4 GB",
-      "Max DB size": "80 GB",
-      "vCPU": "4",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_e8036bc6-5341-4c6e-b843-f4c60d442198",
-     "slug": "m_big",
-     "name": "M Big Space",
-     "price": 124.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "4 GB",
-      "Max DB size": "100 GB",
-      "vCPU": "4",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_df538656-adf7-4846-8e39-d96d0c362706",
-     "slug": "m_hug",
-     "name": "M Huge Space",
-     "price": 174.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "4 GB",
-      "vCPU": "4",
-      "Max DB size": "200 GB",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Type": "Dedicated",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_513675e4-32c0-4b3a-991c-24fcff62b0cf",
-     "slug": "l_sml",
-     "name": "L Small Space",
-     "price": 202.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "8 GB",
-      "Type": "Dedicated",
-      "Max DB size": "100 GB",
-      "vCPU": "6",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_66f4b19c-621a-4b39-892d-0e6f0bf62fed",
-     "slug": "l_med",
-     "name": "L Medium Space",
-     "price": 252.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "8 GB",
-      "Type": "Dedicated",
-      "Max DB size": "200 GB",
-      "Metrics": "Yes",
-      "vCPU": "6",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_24bbde1f-e8c7-4a45-b8bf-1ab1e320049c",
-     "slug": "l_big",
-     "name": "L Big Space",
-     "price": 302.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Metrics": "Yes",
-      "Max DB size": "300 GB",
-      "Memory": "8 GB",
-      "Type": "Dedicated",
-      "vCPU": "6",
-      "Migration Tool": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_36429877-93c4-4639-83f0-cdc96493caf3",
-     "slug": "xl_sml",
-     "name": "XL Small Space",
-     "price": 470.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "16 GB",
-      "Max DB size": "300 GB",
-      "Type": "Dedicated",
-      "vCPU": "8",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_e4745876-6013-48fc-9cbf-c7a49be84cb4",
-     "slug": "xl_med",
-     "name": "XL Medium Space",
-     "price": 545.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "16 GB",
-      "Max DB size": "450 GB",
-      "Type": "Dedicated",
-      "vCPU": "8",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_ffdd05ce-5f30-4750-94c5-424899d1f89d",
-     "slug": "xl_big",
-     "name": "XL Big Space",
-     "price": 620.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "16 GB",
-      "Max DB size": "600 GB",
-      "Type": "Dedicated",
-      "vCPU": "8",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_98370e12-e54a-4dc1-8ee4-4d4f3007f3eb",
-     "slug": "xxl_sml",
-     "name": "XXL Small Space",
-     "price": 972.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "32 GB",
-      "Type": "Dedicated",
-      "Max DB size": "600 GB",
-      "vCPU": "10",
-      "Migration Tool": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_8da4539d-198b-48da-9d4e-df4e832085fe",
-     "slug": "xxl_med",
-     "name": "XXL Medium Space",
-     "price": 1075.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "32 GB",
-      "Type": "Dedicated",
-      "Max DB size": "750 GB",
-      "vCPU": "10",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    },
-    {
-     "id": "plan_e6030ef6-005a-4f77-939d-f1395b02f5d6",
-     "slug": "xxl_big",
-     "name": "XXL Big Space",
-     "price": 1122.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "wsw",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "32 GB",
-      "Type": "Dedicated",
-      "Max DB size": "900 GB",
-      "vCPU": "10",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Version": "4.0.3"
-     }
-    }
-   ],
-   "versions": [
-    "4.0.3"
-   ],
-   "default_version": "4.0.3"
-  },
-  "postgresql-addon": {
-   "name": "PostgreSQL",
-   "plans": [
-    {
-     "id": "plan_d2ada71a-aa8e-4ead-8cb9-28314664437e",
-     "slug": "dev",
-     "name": "DEV",
-     "price": 0.0,
-     "zones": [
-      "par",
-      "mtl"
-     ],
-     "features": {
-      "Max connection limit": "5",
-      "Memory": "Shared",
-      "vCPUS": "Shared",
-      "Max DB size": "256 MB",
-      "Metrics": "No",
-      "Logs": "No",
-      "Type": "Shared",
-      "Migration Tool": "Yes",
-      "Backups": "No"
-     }
-    },
-    {
-     "id": "plan_c32d00fb-6c06-48a9-a0a3-9d808937ec68",
-     "slug": "xxs_sml",
-     "name": "XXS Small Space",
-     "price": 5.25,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Metrics": "Yes",
-      "Type": "Dedicated",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "1 GB",
-      "Memory": "512 MB",
-      "vCPUS": "1",
-      "Max connection limit": "45"
-     }
-    },
-    {
-     "id": "plan_9ce0a025-f5bd-4ac4-a5be-e2da37c87583",
-     "slug": "xxs_med",
-     "name": "XXS Medium Space",
-     "price": 6.8,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Metrics": "Yes",
-      "Max connection limit": "45",
-      "Type": "Dedicated",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Memory": "512 MB",
-      "Max DB size": "2 GB",
-      "vCPUS": "1"
-     }
-    },
-    {
-     "id": "plan_810751de-ab47-4bd8-918b-b857f9011050",
-     "slug": "xxs_big",
-     "name": "XXS Big Space",
-     "price": 7.7,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "1",
-      "Max connection limit": "45",
-      "Metrics": "Yes",
-      "Type": "Dedicated",
-      "Memory": "512 MB",
-      "Max DB size": "3 GB"
-     }
-    },
-    {
-     "id": "plan_4b988584-adf5-43a5-891b-9ba1d8fe6d5d",
-     "slug": "xs_tny",
-     "name": "XS Tiny Space",
-     "price": 15.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "1 GB",
-      "Max connection limit": "75",
-      "vCPUS": "1",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Metrics": "Yes",
-      "Type": "Dedicated",
-      "Max DB size": "2 GB"
-     }
-    },
-    {
-     "id": "plan_f14478be-b59a-4f64-870c-6887c561492d",
-     "slug": "xs_sml",
-     "name": "XS Small Space",
-     "price": 19.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "Max DB size": "5 GB",
-      "Backups": "Daily - 7 Retained",
-      "vCPUS": "1",
-      "Memory": "1 GB",
-      "Metrics": "Yes",
-      "Max connection limit": "75",
-      "Logs": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_cb267d0a-5a2d-4c5b-9709-ee4d321691e7",
-     "slug": "xs_med",
-     "name": "XS Medium Space",
-     "price": 22.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "1 GB",
-      "Max DB size": "10 GB",
-      "Max connection limit": "75",
-      "vCPUS": "1",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_a9cfb2d3-c959-4ab2-8b6f-fcbd07aa4f51",
-     "slug": "xs_big",
-     "name": "XS Big Space",
-     "price": 25.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "1 GB",
-      "Max DB size": "15 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "1",
-      "Max connection limit": "75"
-     }
-    },
-    {
-     "id": "plan_f1f39547-be55-4be0-96d0-5140da25c138",
-     "slug": "s_sml",
-     "name": "S Small Space",
-     "price": 41.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Backups": "Daily - 7 Retained",
-      "Max DB size": "10 GB",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "2",
-      "Max connection limit": "125"
-     }
-    },
-    {
-     "id": "plan_db834b61-21d3-423f-81ac-e8ec5b94a51c",
-     "slug": "s_med",
-     "name": "S Medium Space",
-     "price": 44.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "15 GB",
-      "Memory": "2 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "2",
-      "Max connection limit": "125"
-     }
-    },
-    {
-     "id": "plan_06303461-b9d1-4418-a352-7be788c17777",
-     "slug": "s_big",
-     "name": "S Big Space",
-     "price": 47.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Max DB size": "20 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "2",
-      "Max connection limit": "125"
-     }
-    },
-    {
-     "id": "plan_926643d1-3180-4e6a-bbc0-da828b884f77",
-     "slug": "s_hug",
-     "name": "S Huge Space",
-     "price": 64.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Max DB size": "50 GB",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Max connection limit": "125",
-      "vCPUS": "2"
-     }
-    },
-    {
-     "id": "plan_13def017-26d9-469d-88b1-6591cbf4422f",
-     "slug": "m_sml",
-     "name": "M Small Space",
-     "price": 88.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "4 GB",
-      "Max DB size": "20 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "4",
-      "Max connection limit": "250"
-     }
-    },
-    {
-     "id": "plan_ef13e023-b519-4130-bfa0-54e2e0893362",
-     "slug": "m_med",
-     "name": "M Medium Space",
-     "price": 98.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "40 GB",
-      "Memory": "4 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "4",
-      "Max connection limit": "250"
-     }
-    },
-    {
-     "id": "plan_55d54396-799b-4e01-92ce-34ad68392e7a",
-     "slug": "m_big",
-     "name": "M Big Space",
-     "price": 118.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "4 GB",
-      "Max DB size": "80 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "4",
-      "Max connection limit": "250"
-     }
-    },
-    {
-     "id": "plan_20cf7db8-2687-495f-978d-785a8ac87814",
-     "slug": "l_sml",
-     "name": "L Small Space",
-     "price": 178.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "40 GB",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "6",
-      "Max connection limit": "500"
-     }
-    },
-    {
-     "id": "plan_bfc12b2d-37af-4d5c-98b5-f5ce8856965c",
-     "slug": "l_med",
-     "name": "L Medium Space",
-     "price": 198.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "80 GB",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "6",
-      "Max connection limit": "500"
-     }
-    },
-    {
-     "id": "plan_166c1a3f-3e7d-427c-9a2d-adeaf6c30c1c",
-     "slug": "l_big",
-     "name": "L Big Space",
-     "price": 218.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "120 GB",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "6",
-      "Max connection limit": "500"
-     }
-    },
-    {
-     "id": "plan_9b4505e7-ac36-4caa-ac7d-9e11b6a26b15",
-     "slug": "xl_sml",
-     "name": "XL Small Space",
-     "price": 360.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "80 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "16 GB",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "8",
-      "Max connection limit": "750"
-     }
-    },
-    {
-     "id": "plan_957a3cbc-022f-430d-aa6e-3156b8da20c6",
-     "slug": "l_gnt",
-     "name": "L Giant Space",
-     "price": 400.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "480 GB",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Max connection limit": "500",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Type": "Dedicated",
-      "vCPUS": "6"
-     }
-    },
-    {
-     "id": "plan_b35727fe-2100-4f7c-82c8-31d9471769ab",
-     "slug": "xl_med",
-     "name": "XL Medium Space",
-     "price": 400.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "160 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "16 GB",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "8",
-      "Max connection limit": "750"
-     }
-    },
-    {
-     "id": "plan_1067ae12-c433-497d-a20f-d16e50b932d9",
-     "slug": "xl_big",
-     "name": "XL Big Space",
-     "price": 480.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "320 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "16 GB",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "8",
-      "Max connection limit": "750"
-     }
-    },
-    {
-     "id": "plan_b972af97-96cb-4a5d-b4ff-7b3efb6ff44b",
-     "slug": "xl_hug",
-     "name": "XL Huge Space",
-     "price": 560.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "480 GB",
-      "Max connection limit": "750",
-      "Memory": "16 GB",
-      "vCPUS": "8",
-      "Type": "Dedicated"
-     }
-    },
-    {
-     "id": "plan_fdbaa2cc-3403-451a-b341-0973e04be1d2",
-     "slug": "xl_gnt",
-     "name": "XL Giant Space",
-     "price": 640.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Type": "Dedicated",
-      "vCPUS": "8",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Max DB size": "640 GB",
-      "Max connection limit": "750",
-      "Memory": "16 GB"
-     }
-    },
-    {
-     "id": "plan_1c8a4179-78ef-4bdd-bfd7-7f389782b8c6",
-     "slug": "xxl_sml",
-     "name": "XXL Small Space",
-     "price": 760.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "160 GB",
-      "Type": "Dedicated",
-      "Memory": "32 GB",
-      "Backups": "Daily - 7 Retained",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "vCPUS": "10",
-      "Max connection limit": "900"
-     }
-    },
-    {
-     "id": "plan_5e33d20a-fe32-4b4f-91f0-b59bf0deae13",
-     "slug": "xxl_med",
-     "name": "XXL Medium Space",
-     "price": 840.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "320 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "32 GB",
-      "vCPUS": "10",
-      "Max connection limit": "900",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_d3131cb3-5d92-4b8c-b3db-30e8be4716af",
-     "slug": "xxl_big",
-     "name": "XXL Big Space",
-     "price": 1000.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "640 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "32 GB",
-      "vCPUS": "10",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max connection limit": "900"
-     }
-    },
-    {
-     "id": "plan_e89e0986-2664-46b1-aaff-305b9c6ec552",
-     "slug": "xxl_hug",
-     "name": "XXL Huge Space",
-     "price": 1160.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max DB size": "960 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Memory": "32 GB",
-      "vCPUS": "10",
-      "Metrics": "Yes",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max connection limit": "900"
-     }
-    },
-    {
-     "id": "plan_5601b1c6-9850-4a02-9288-8894670f0d7d",
-     "slug": "xxxl_sml",
-     "name": "XXXL Small Space",
-     "price": 1730.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "64 GB",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "640 GB",
-      "Max connection limit": "1200",
-      "vCPUS": "12"
-     }
-    },
-    {
-     "id": "plan_9c7779d2-2701-4420-bd8a-3e7b49083847",
-     "slug": "xxxl_med",
-     "name": "XXXL Medium Space",
-     "price": 1890.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "64 GB",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "960 GB",
-      "Max connection limit": "1200",
-      "vCPUS": "12"
-     }
-    },
-    {
-     "id": "plan_52b00af0-b49f-477b-a2bb-05e6bdf057af",
-     "slug": "xxxl_big",
-     "name": "XXXL Big Space",
-     "price": 2010.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Metrics": "Yes",
-      "Memory": "64 GB",
-      "Backups": "Daily - 7 Retained",
-      "Type": "Dedicated",
-      "Logs": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "1200 GB",
-      "Max connection limit": "1200",
-      "vCPUS": "12"
-     }
-    },
-    {
-     "id": "plan_d9d4f69d-0f9a-43a3-bfc4-0c043a6ec906",
-     "slug": "3xl_cpu_tit",
-     "name": "3XL CPU Titan space",
-     "price": 4490.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "vCPUS": "32",
-      "Type": "Dedicated",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes",
-      "Max DB size": "6 TB",
-      "Max connection limit": "1200",
-      "Memory": "64 GB",
-      "Backups": "Daily - 7 Retained"
-     }
-    }
-   ],
-   "versions": [
-    "13",
-    "14",
-    "15",
-    "16",
-    "17",
-    "18"
-   ],
-   "default_version": "17"
-  },
-  "es-addon": {
-   "name": "Elastic Stack",
-   "plans": [
-    {
-     "id": "plan_0e0bc5ea-ba21-41e8-865b-1ed48e0163ca",
-     "slug": "xs",
-     "name": "XS",
-     "price": 19.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "MEMORY": "1 GB",
-      "DISK": "10 GB",
-      "Type": "Dedicated",
-      "CPUs": "1",
-      "NODES": "1",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_7675a239-057e-448e-85fb-77b5aa2ef47e",
-     "slug": "s",
-     "name": "S",
-     "price": 39.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "MEMORY": "2 GB",
-      "DISK": "60 GB",
-      "CPUs": "1",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_bb93c360-d60c-4441-b18b-cb530a6b7b11",
-     "slug": "m",
-     "name": "M",
-     "price": 80.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "DISK": "120 GB",
-      "MEMORY": "4 GB",
-      "CPUs": "2",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_33ad969a-2f37-4d47-8707-93315650fc0f",
-     "slug": "l",
-     "name": "L",
-     "price": 160.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "CPUs": "4",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "MEMORY": "8 GB",
-      "DISK": "240 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_0e494649-d62a-45e7-ba81-61c1a5d8503a",
-     "slug": "xl",
-     "name": "XL",
-     "price": 320.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "DISK": "450 GB",
-      "MEMORY": "16 GB",
-      "CPUs": "6",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_56265b48-d826-4484-9fd8-d3038c973027",
-     "slug": "xxl",
-     "name": "XXL",
-     "price": 640.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "MEMORY": "32 GB",
-      "DISK": "870 GB",
-      "CPUs": "8",
-      "Type": "Dedicated",
-      "NODES": "1",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_a9565b70-7d5b-44b9-892f-de9bc6cade84",
-     "slug": "xxxl",
-     "name": "XXXL",
-     "price": 1280.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "MEMORY": "64 GB",
-      "DISK": "1700 GB",
-      "CPUs": "16",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_31ea6328-7df8-4208-a18d-137d2941f16d",
-     "slug": "4xl",
-     "name": "4XL",
-     "price": 2560.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "DISK": "3500 GB",
-      "MEMORY": "128 GB",
-      "CPUs": "32",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_197dbf8a-c30b-49c9-a2ac-126a0b79efba",
-     "slug": "5xl",
-     "name": "5XL",
-     "price": 5120.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "MEMORY": "256 GB",
-      "DISK": "7000 GB",
-      "CPUs": "64",
-      "NODES": "1",
-      "Type": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    }
-   ],
-   "versions": [
-    "7",
-    "8",
-    "9"
-   ],
-   "default_version": "8"
-  },
-  "cellar-addon": {
-   "name": "Cellar S3 storage",
-   "plans": [
-    {
-     "id": "plan_84c85ee3-5fdb-4aca-a727-298ddc14b766",
-     "slug": "S",
-     "name": "S",
-     "price": 0.0,
-     "zones": [
-      "fr-north-hds",
-      "parhds",
-      "par"
-     ],
-     "features": {
-      "Storage < 25TB": "15.36€/TB/Mo",
-      "Storage < 50TB": "10.24€/TB/Mo",
-      "Outbound traffic < 10TB": "100MB free, 0.09€/GB/Mo",
-      "Storage < 1TB": "100 MB free, 20.48€/TB/Mo",
-      "Outbound traffic < 40TB": "0.07€/GB/Mo"
-     }
-    }
-   ]
-  },
-  "mysql-addon": {
-   "name": "MySQL",
-   "plans": [
-    {
-     "id": "plan_bf78ef5b-aedd-4024-973a-c2ff45541b88",
-     "slug": "dev",
-     "name": "DEV",
-     "price": 0.0,
-     "zones": [
-      "par",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "Shared",
-      "Max db size": "10 MB",
-      "Max connection limit": "5",
-      "vCPUS": "Shared",
-      "Backups": "No",
-      "TYPE": "Shared",
-      "Logs": "No",
-      "Metrics": "No",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_7ab494e2-c319-4330-8170-35d78738c1ee",
-     "slug": "xxs_sml",
-     "name": "XXS Small Space",
-     "price": 5.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 retained",
-      "Logs": "Yes",
-      "TYPE": "Dedicated",
-      "Memory": "512 MB",
-      "Max db size": "512 MB",
-      "Max connection limit": "15",
-      "vCPUS": "1",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_53d3c47d-ce81-466b-8acb-d5efaa68d27b",
-     "slug": "xxs_med",
-     "name": "XXS Medium Space",
-     "price": 5.9,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 retained",
-      "Memory": "512 MB",
-      "TYPE": "Dedicated",
-      "Max db size": "1 GB",
-      "Max connection limit": "15",
-      "vCPUS": "1",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_b7ee59a4-4115-41b8-b735-e44378b95c57",
-     "slug": "xxs_big",
-     "name": "XXS Big Space",
-     "price": 6.8,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 retained",
-      "Memory": "512 MB",
-      "TYPE": "Dedicated",
-      "Max db size": "2 GB",
-      "vCPUS": "1",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "15",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_0ffb4a1e-ac15-47c6-965f-f87ac990d99c",
-     "slug": "xs_tny",
-     "name": "XS Tiny Space",
-     "price": 15.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 retained",
-      "Max connection limit": "75",
-      "TYPE": "Dedicated",
-      "Max db size": "2 GB",
-      "Memory": "1 GB",
-      "vCPUS": "1",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_bde0b41f-77a7-4285-a08c-b8f4d9780fc4",
-     "slug": "xs_sml",
-     "name": "XS Small Space",
-     "price": 23.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Memory": "1 GB",
-      "Max db size": "5 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "75",
-      "vCPUS": "1",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_889ddd44-68e1-4473-b152-a1abcaeec5b0",
-     "slug": "xs_med",
-     "name": "XS Medium Space",
-     "price": 26.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "1 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "10 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "75",
-      "vCPUS": "1",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_01d5d079-e900-49c7-8273-4fb3473eedea",
-     "slug": "xs_big",
-     "name": "XS Big Space",
-     "price": 30.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "1 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "15 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "75",
-      "vCPUS": "1",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_445566dd-b996-456f-96e3-186c29f4bd11",
-     "slug": "s_sml",
-     "name": "S Small Space",
-     "price": 50.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Max db size": "10 GB",
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "125",
-      "vCPUS": "2",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_1940a893-ff6b-4c64-85e7-4955bb3355c0",
-     "slug": "s_med",
-     "name": "S Medium Space",
-     "price": 52.5,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "2 GB",
-      "Backups": "Daily - 7 Retained",
-      "TYPE": "Dedicated",
-      "Max db size": "15 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "vCPUS": "2",
-      "Max connection limit": "125",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_a367b384-2942-4226-884c-5211b79aae81",
-     "slug": "s_big",
-     "name": "S Big Space",
-     "price": 55.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "2 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "20 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "125",
-      "vCPUS": "2",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_97afb4d4-cfeb-4fcb-966f-6072c6c327dc",
-     "slug": "m_sml",
-     "name": "M Small Space",
-     "price": 106.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "4 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "20 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "250",
-      "vCPUS": "4",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_ead3f4d7-a920-4b8c-8706-8fa8280d0bcc",
-     "slug": "m_med",
-     "name": "M Medium Space",
-     "price": 116.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "4 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "40 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "250",
-      "vCPUS": "4",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_d7f7bcff-df64-4326-a8f7-9d112d75bbff",
-     "slug": "m_big",
-     "name": "M Big Space",
-     "price": 136.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Backups": "Daily - 7 Retained",
-      "Memory": "4 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "80 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "250",
-      "vCPUS": "4",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_65af8c37-a9ca-4f37-8490-c727a9d7fe23",
-     "slug": "l_sml",
-     "name": "L Small Space",
-     "price": 220.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "8 GB",
-      "Max db size": "40 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "500",
-      "vCPUS": "6",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_786d19e3-d5ec-43d1-bb99-4bdf51d1708f",
-     "slug": "l_med",
-     "name": "L Medium Space",
-     "price": 240.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Max db size": "80 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "500",
-      "vCPUS": "6",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_cecdd927-0c2b-4df5-80bf-7a3956b7da45",
-     "slug": "l_big",
-     "name": "L Big Space",
-     "price": 260.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Max db size": "120 GB",
-      "Memory": "8 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "500",
-      "vCPUS": "6",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_85292520-3687-488a-aefc-1884349205e4",
-     "slug": "xl_sml",
-     "name": "XL Small Space",
-     "price": 472.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Memory": "16 GB",
-      "Backups": "Daily - 7 Retained",
-      "Max db size": "80 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "750",
-      "vCPUS": "8",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_b6cac148-b1fe-4018-a605-9ecd92b436d1",
-     "slug": "xl_med",
-     "name": "XL Medium Space",
-     "price": 512.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "16 GB",
-      "Max db size": "160 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "750",
-      "vCPUS": "8",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_df6d36d3-07a4-4027-a0bb-333240a6b7c8",
-     "slug": "xl_big",
-     "name": "XL Big Space",
-     "price": 592.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max db size": "320 GB",
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "16 GB",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "750",
-      "vCPUS": "8",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_8c48584e-4d0a-43db-91a1-f2d1a3475fe5",
-     "slug": "xxl_sml",
-     "name": "XXL Small Space",
-     "price": 1008.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Memory": "32 GB",
-      "TYPE": "Dedicated",
-      "Max db size": "160 GB",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "900",
-      "vCPUS": "10",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_f6108804-9258-41f3-9920-0b5e0a41cb60",
-     "slug": "xxl_med",
-     "name": "XXL Medium Space",
-     "price": 1088.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max db size": "320 GB",
-      "Memory": "32 GB",
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "900",
-      "vCPUS": "10",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_c26fc00b-abfb-44ec-951d-73ed65892f3e",
-     "slug": "xxl_big",
-     "name": "XXL Big Space",
-     "price": 1248.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "Max db size": "640 GB",
-      "Memory": "32 GB",
-      "TYPE": "Dedicated",
-      "Backups": "Daily - 7 Retained",
-      "vCPUS": "10",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Max connection limit": "900",
-      "Migration Tool": "Yes"
-     }
-    },
-    {
-     "id": "plan_9f7b1d05-36e7-493d-a32f-af0507477af0",
-     "slug": "xxl_hug",
-     "name": "XXL Huge Space",
-     "price": 1408.0,
-     "zones": [
-      "ldn",
-      "syd",
-      "scw",
-      "sgp",
-      "parhds",
-      "rbxhds",
-      "wsw",
-      "grahds",
-      "par",
-      "rbx",
-      "mtl"
-     ],
-     "features": {
-      "TYPE": "Dedicated",
-      "Max db size": "960 GB",
-      "Backups": "Daily - 7 Retained",
-      "Memory": "32 GB",
-      "Max connection limit": "900",
-      "vCPUS": "10",
-      "Logs": "Yes",
-      "Metrics": "Yes",
-      "Migration Tool": "Yes"
-     }
-    }
-   ],
-   "versions": [
-    "5.7",
-    "8.0",
-    "8.4",
-    "9.7"
-   ],
-   "default_version": "8.4"
   }
- }
 }

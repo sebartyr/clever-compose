@@ -154,7 +154,7 @@ fn up(args: &[String], seed: Option<(String, PathBuf)>) -> ExitCode {
     };
     let mut diags = diagnostic::Diagnostics::default();
     let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
-    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral };
+    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
     let plan = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
     for line in diags.render_all() {
         eprintln!("{line}");
@@ -364,7 +364,7 @@ fn export(args: &[String]) -> ExitCode {
     };
     let mut diags = diagnostic::Diagnostics::default();
     let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
-    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral };
+    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
     let plan = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
     let result = plan.as_ref().map(|p| cc_compose::emit::export::write(p, &project_dir, &out, &what, &mut diags));
     if let Some(Err(d)) = &result {
@@ -488,7 +488,7 @@ fn config(args: &[String], plan: bool) -> ExitCode {
                 }
             },
         };
-        let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral };
+        let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
         let result = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
         for line in diags.render_all() {
             eprintln!("{line}");

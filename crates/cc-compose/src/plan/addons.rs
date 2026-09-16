@@ -28,6 +28,10 @@ pub struct Provider {
     pub versions: Vec<String>,
     #[serde(default)]
     pub default_version: Option<String>,
+    /// Version servie par le cluster partagé de chaque zone (plans
+    /// `Shared`, comme `dev`) : la version demandée n'y a aucun effet.
+    #[serde(default)]
+    pub shared_versions: indexmap::IndexMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

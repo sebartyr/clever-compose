@@ -1,6 +1,6 @@
 {
   "project": "init-scripts-local",
-  "spec_hash": "48b936df37f9aaeea0835a9517208ffa",
+  "spec_hash": "44c4d252a8e51abc7433e559c5289d27",
   "resources": [
     {
       "resource": "network_group",
@@ -10,7 +10,7 @@
       "tags": [
         "compose-project=init-scripts-local",
         "compose-network=default",
-        "compose-spec=48b936df37f9aaeea0835a9517208ffa"
+        "compose-spec=44c4d252a8e51abc7433e559c5289d27"
       ]
     },
     {
@@ -21,11 +21,11 @@
       "provider": "postgresql-addon",
       "plan": "dev",
       "region": "par",
-      "version": "16",
+      "version": "15",
       "tags": [
         "compose-project=init-scripts-local",
         "compose-service=db",
-        "compose-spec=48b936df37f9aaeea0835a9517208ffa"
+        "compose-spec=44c4d252a8e51abc7433e559c5289d27"
       ]
     },
     {
@@ -43,7 +43,7 @@
       },
       "source": {
         "type": "synthetic",
-        "image": "postgres:16",
+        "image": "postgres:15",
         "private_registry": false,
         "files": [
           {
@@ -104,7 +104,7 @@
       "tags": [
         "compose-project=init-scripts-local",
         "compose-service=db-init",
-        "compose-spec=48b936df37f9aaeea0835a9517208ffa"
+        "compose-spec=44c4d252a8e51abc7433e559c5289d27"
       ],
       "run": "local"
     },
@@ -234,7 +234,7 @@
       "tags": [
         "compose-project=init-scripts-local",
         "compose-service=api",
-        "compose-spec=48b936df37f9aaeea0835a9517208ffa"
+        "compose-spec=44c4d252a8e51abc7433e559c5289d27"
       ]
     },
     {

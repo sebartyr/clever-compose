@@ -32,6 +32,8 @@ services:
         source: pgdata
         target: /var/lib/postgresql/data
         volume: {}
+    x-clever:
+      version: "15"
 networks:
   default:
     name: init-scripts_default
