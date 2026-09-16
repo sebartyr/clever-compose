@@ -35,7 +35,9 @@ pub fn accepted_extensions(provider: &str) -> &'static [&'static str] {
 /// Ce que `seed` accepte comme dump, par fournisseur.
 pub fn seed_extensions(provider: &str) -> &'static [&'static str] {
     match provider {
-        "postgresql-addon" | "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
+        // `.dump` : format custom de `pg_dump -Fc`, chargé par `pg_restore`.
+        "postgresql-addon" => &[".sql", ".sql.gz", ".dump", ".sh"],
+        "mysql-addon" => &[".sql", ".sql.gz", ".sh"],
         "mongodb-addon" | "documentdb" => &[".js", ".archive", ".sh"],
         "redis-addon" => &[".redis", ".resp", ".sh"],
         "es-addon" => &[".ndjson", ".sh"],
@@ -144,6 +146,7 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.sql)    echo "cc-compose init : $f"; $PSQL -f "$f" ;;
     *.sql.gz) echo "cc-compose init : $f"; gunzip -c "$f" | $PSQL ;;
+    *.dump)   echo "cc-compose init : $f"; pg_restore --no-owner --no-privileges --no-acl -h "$POSTGRESQL_ADDON_HOST" -p "$POSTGRESQL_ADDON_PORT" -U "$POSTGRESQL_ADDON_USER" -d "$POSTGRESQL_ADDON_DB" "$f" ;;
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done

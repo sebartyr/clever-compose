@@ -55,7 +55,7 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   comme stockage éphémère ; `x-clever.ephemeral: true` garde une base en
   conteneur au lieu d'un addon.
 - `seed` charge un dump local dans un addon (`.sql`/`.sql.gz`/`.sh` pour
-  PostgreSQL et MySQL, `.js`/`.archive`/`.sh` pour MongoDB et DocumentDB,
+  PostgreSQL et MySQL, `.dump` de `pg_dump -Fc` via `pg_restore`, `.js`/`.archive`/`.sh` pour MongoDB et DocumentDB,
   `.redis`/`.resp` pour Redis, `.ndjson` pour Elasticsearch), une fois par
   contenu (témoin `cc_compose_init`) ; par une Clever Task, ou depuis le
   poste avec `--local` (Docker s'il répond, sinon le client installé).

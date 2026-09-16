@@ -435,7 +435,7 @@ export const App = defineComponent({
       </cc-dialog>
       <cc-dialog heading="Charger un dump (seed)" :open="dialog.seed" @cc-close="dialog.seed = false" closedBy="any">
         <cc-select label="Service (addon)" :options="(plan?.resources || []).filter(r => r.resource === 'addon').map(r => ({ label: r.service + ' (' + r.provider + ')', value: r.service }))" :value="seed.service" placeholder="Choisir" @cc-select="e => seed.service = val(e)"></cc-select>
-        <p class="hint">Formats : .sql/.sql.gz/.sh (PostgreSQL, MySQL), .js/.archive (MongoDB, DocumentDB), .redis/.resp (Redis), .ndjson (Elasticsearch). Chargé une fois par contenu (témoin <code>cc_compose_init</code>).</p>
+        <p class="hint">Formats : .sql/.sql.gz (psql) et .dump (pg_dump -Fc, via pg_restore) pour PostgreSQL, .sql/.sql.gz pour MySQL, .sh, .js/.archive (MongoDB, DocumentDB), .redis/.resp (Redis), .ndjson (Elasticsearch). Chargé une fois par contenu (témoin <code>cc_compose_init</code>).</p>
         <label class="upload" :title="'Un fichier de votre poste, copié dans le projet (.clever-compose/seed/)'"><input type="file" @change="uploadDump"><span>{{ seed.uploading ? 'Envoi…' : 'Envoyer un fichier de dump' }}</span></label>
         <cc-select label="ou un fichier déjà dans le projet" :options="files.map(f => ({ label: f, value: f }))" :value="seed.dump" placeholder="Choisir" @cc-select="e => seed.dump = val(e)"></cc-select>
         <p v-if="seed.dump"><strong>Dump :</strong> <code>{{ seed.dump }}</code></p>
