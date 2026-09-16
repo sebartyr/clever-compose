@@ -91,12 +91,16 @@ mêmes commits déployés (vérifié en réel).
   (`build.rs` ; `CC_SHIM_BIN` au build ou `CC_SHIM_PATH` à l'exécution pour
   en charger un autre).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
-  émetteurs (`emit/`), CLI (`main.rs`), interface web (`web/` : serveur
+  émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
-  locaux et archives ; front Vue 3 + `@clevercloud/components` dans
-  `web/`, sans SFC pour tourner sans build ; embarqué
-  soit en sources ESM + import map CDN, soit en `dist/` Vite avec la
-  feature `ui-bundled`).
+  locaux et archives, session par identifiants d'environnement ou danse
+  OAuth 1.0 avec un consumer `CLEVER_CONSUMER_KEY`/`SECRET` — jamais de
+  jetons saisis ; front Vue 3 + `@clevercloud/components` dans `web/` à la
+  racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
+  import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
+  Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
+  (`CC_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe par projet ; l'outil
+  ne crée ni addon ni bucket (décision du 16/09/2026).
 
 Architecture figée à amd64.
 

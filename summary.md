@@ -359,6 +359,40 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   verbes colorés comme dans le terminal et séquences ANSI SGR des logs
   applicatifs rendues. `~` accepté dans « ouvrir un répertoire », refus
   clair si le répertoire n'a pas de compose.
+- **Assets dans Cellar (16/09/2026)** : demande « un bucket Cellar pour
+  stocker les assets uploadés d'un projet, vue plus complète d'un projet
+  déployé », puis consignes « laisse la personne créer l'addon », « un
+  seul bucket », « tu touches pas à ça », « via var d'env à configurer ».
+  `x-clever.assets: true` (niveau projet, `Plan.assets`) ou `up --assets` ;
+  configuration `CC_ASSETS_BUCKET` + `CELLAR_ADDON_HOST`/`KEY_ID`/
+  `KEY_SECRET` (noms injectés par l'addon), un seul bucket, préfixe
+  `<projet>/` ; l'outil ne crée ni addon ni bucket (erreur claire si le
+  bucket n'existe pas). `up` pousse les fichiers texte du projet (≤ 512
+  Kio, hors `.git`/`node_modules`/`target`/`.terraform`/`.clever-compose`)
+  plus tout fichier référencé par le plan (≤ 32 Mio), `plan.json` et
+  `manifest.json` (sha256, tailles, date) ; inchangé = sauté, disparu =
+  retiré ; `down` retire les objets du projet, jamais le bucket. Client
+  S3 : `rusty-s3` (URL présignées, path-style). API `GET …/assets`, `POST
+  …/assets/open` (rapatriement en projet local temporaire) ; interface :
+  onglet « Fichiers (Cellar) », « Ouvrir en local », plan du bucket en
+  diagramme. Vérifié en réel avec la première version (bucket dédié créé
+  par l'outil, retirée) ; la version finale compile et passe les tests, à
+  vérifier par le propriétaire avec son bucket.
+- **Session de l'interface (16/09/2026)** : « on va retirer les jetons à
+  set à la main. Soit c'est présent dans l'env soit le lancement de l'ui
+  échoue sauf si la danse oauth est conf ». `ui` démarre avec les
+  identifiants d'environnement, ou avec un consumer OAuth 1.0
+  (`CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET`, créé par le propriétaire
+  dans la console, base URL = adresse d'écoute) : `GET
+  /api/session/oauth/start` → `POST /v2/oauth/request_token_query`
+  (signature `PLAINTEXT`, admise par la doc de l'API, transport TLS) →
+  redirection `/v2/oauth/authorize` → `/api/session/oauth/callback` →
+  `POST /v2/oauth/access_token_query` → session. Sans l'un ni l'autre,
+  refus au lancement. Vérifié : étape 1 avec le consumer du propriétaire
+  (la clé lue par `/v2/self/consumers`, l'OCR de la capture confondait `I`
+  et `l`) ; étapes 2-3 à faire dans un navigateur connecté. Choix de
+  l'interface (options, logs, seed local, dernier projet, onglet,
+  organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
 - Redirections UDP : pas disponibles nativement pour le moment
   (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
   Terraform). Pas de contribution externe pour le moment.
