@@ -72,6 +72,9 @@ body { margin: 0; }
 .logs pre .warn { color: #ffd54f; }
 .logs pre .dim { color: #999; }
 .grow { flex: 1; }
+.options { display: inline-flex; gap: .8em; align-items: center; border: 1px solid var(--cc-color-border-neutral, #bbb); border-radius: 6px; padding: .3em .6em; font-family: var(--cc-ff-monospace, monospace); font-size: .85em; }
+.status { margin: 0; display: flex; align-items: center; gap: .5em; color: var(--cc-color-text-weak, #666); }
+.status cc-loader { width: 1.2em; height: 1.2em; }
 .dim { color: var(--cc-color-text-weak, #666); }
 .hint { color: var(--cc-color-text-weak, #666); font-size: .9em; }
 .row-end { display: flex; justify-content: flex-end; gap: .5em; }

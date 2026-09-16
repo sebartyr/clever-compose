@@ -18,6 +18,7 @@ const SessionPanel = defineComponent({
     const open = ref(false);
     const form = reactive({ api_token: '', token: '', secret: '' });
     const busy = ref(false);
+    const status = ref('');
     const error = ref('');
     const submit = async () => {
       busy.value = true; error.value = '';
@@ -244,11 +245,14 @@ export const App = defineComponent({
 
     const loadPlan = async () => {
       if (current.value?.type !== 'local') return;
-      busy.value = true;
+      busy.value = true; status.value = 'Calcul du plan (lecture des images sur leurs registres)…';
       try {
         const r = await api.plan(current.value.id, opts.allow_ephemeral);
         plan.value = r.plan; diagnostics.value = r.diagnostics;
-      } catch (e) { notify(e); } finally { busy.value = false; }
+        const errs = r.diagnostics.filter((d) => d.severity === 'error').length;
+        status.value = errs ? `Plan refusé : ${errs} erreur(s), voyez les diagnostics` : `Plan à jour : ${r.plan.resources.length} ressources, ${r.diagnostics.length} avertissement(s)`;
+        setTimeout(() => { if (status.value.startsWith('Plan')) status.value = ''; }, 6000);
+      } catch (e) { status.value = ''; notify(e); } finally { busy.value = false; }
     };
     const loadInventory = async () => {
       if (!current.value || !session.value.org) return;
@@ -339,7 +343,7 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -377,8 +381,13 @@ export const App = defineComponent({
             <h2>{{ current.name }} <cc-badge v-if="current.type === 'local'" weight="dimmed">local</cc-badge><cc-badge v-if="onPlatform" intent="success" weight="dimmed">déployé</cc-badge></h2>
             <span class="grow"></span>
             <template v-if="current.type === 'local'">
-              <cc-toggle legend="Options" :hideText="false" :inline="true" :choices="[{label:'--yes', value:'yes'},{label:'--dry-run', value:'dry_run'},{label:'--allow-ephemeral', value:'allow_ephemeral'},{label:'--no-wait', value:'no_wait'}]" :multipleValues="['yes','dry_run','allow_ephemeral','no_wait'].filter(k => opts[k])" @cc-multi-select="e => { const v = val(e) || []; for (const k of ['yes','dry_run','allow_ephemeral','no_wait']) opts[k] = v.includes(k); }"></cc-toggle>
-              <cc-button :outlined="true" :waiting="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
+              <span class="options">
+                <label class="switch" title="Confirme la création des addons (facturés) ; sans elle, up s'arrête avant de créer un addon"><input type="checkbox" v-model="opts.yes"> --yes</label>
+                <label class="switch" title="Décrit ce qui serait fait sans rien modifier sur la plateforme"><input type="checkbox" v-model="opts.dry_run"> --dry-run</label>
+                <label class="switch" title="Accepte les volumes nommés des services non substituables comme stockage éphémère (données perdues au redéploiement)"><input type="checkbox" v-model="opts.allow_ephemeral"> --allow-ephemeral</label>
+                <label class="switch" title="N'attend pas la fin des déploiements"><input type="checkbox" v-model="opts.no_wait"> --no-wait</label>
+              </span>
+              <cc-button :outlined="true" :waiting="busy" :disabled="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
               <cc-button :primary="true" :disabled="errors > 0 || logs.running" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
               <cc-button :outlined="true" :disabled="!plan || logs.running" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
               <cc-button :outlined="true" :disabled="errors > 0" title="Terraform (JSON et HCL) et script clever-tools" @cc-click="doExport">Export</cc-button>
@@ -388,6 +397,7 @@ export const App = defineComponent({
             <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Relance les applications arrêtées" @cc-click="doStart">Start</cc-button>
             <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="logs.running" title="Supprime les applications et network groups ; les addons seulement avec --yes" @cc-click="dialog.down = true">Down</cc-button>
           </section>
+          <p v-if="status" class="status"><cc-loader v-if="busy" a11y-name="en cours"></cc-loader> {{ status }}</p>
           <nav class="tabs">
             <a :class="{ active: tab === 'diagram' }" href="#" @click.prevent="tab = 'diagram'">Diagramme</a>
             <a v-if="current.type === 'local'" :class="{ active: tab === 'compose' }" href="#" @click.prevent="tab = 'compose'">Compose</a>
