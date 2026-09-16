@@ -31,9 +31,15 @@ resource "clevercloud_mongodb" "mongo" {
 }
 
 resource "clevercloud_redis" "cache" {
-  name   = "init-scripts-mongo-cache"
-  plan   = "s_mono"
-  region = "par"
+  name          = "init-scripts-mongo-cache"
+  plan          = "s_mono"
+  region        = "par"
+  networkgroups = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "cache.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
 }
 
 resource "clevercloud_docker" "mongo_init" {

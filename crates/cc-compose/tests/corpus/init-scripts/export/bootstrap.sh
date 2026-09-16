@@ -12,8 +12,9 @@ clever ng create 'init-scripts-default' -o "$ORG" --tags 'compose-project=init-s
 NG_default="$(clever ng get 'init-scripts-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'init-scripts-db' --plan 'dev' --region 'par' --version '15' -o "$ORG"
+clever addon create 'postgresql-addon' 'init-scripts-db' --plan 'xxs_sml' --region 'par' --version '15' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-db") | .addonId')"
+ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-db") | .realId')"
 
 # Applications, créées sans déploiement
 APP_db_init="$(clever create -t docker 'init-scripts-db-init' -o "$ORG" -r 'par' --task '' -F json | jq -r .id)"
@@ -29,6 +30,7 @@ clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instance
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'init-scripts-default' -o "$ORG"
+clever ng link "$ADDON_REAL_db" 'init-scripts-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
 clever service link-addon "$ADDON_db" --app "$APP_db_init"
@@ -36,8 +38,9 @@ clever service link-addon "$ADDON_db" --app "$APP_api"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_db_init" 'CC_COMPOSE_INIT_HASH' '58d214e86fa675d00c5603cc537d6ae5'
+clever env set --app "$APP_api" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'DATABASE_URL,DB_PASSWORD'
-clever env set --app "$APP_api" 'DATABASE_URL' 'postgres://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@''${POSTGRESQL_ADDON_HOST}'':''${POSTGRESQL_ADDON_PORT}''/''${POSTGRESQL_ADDON_DB}''?sslmode=disable'
+clever env set --app "$APP_api" 'DATABASE_URL' 'postgres://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"':8080''/''${POSTGRESQL_ADDON_DB}''?sslmode=disable'
 clever env set --app "$APP_api" 'DB_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)

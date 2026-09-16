@@ -206,7 +206,11 @@ pub struct NewApp {
 
 #[derive(Debug, Clone)]
 pub struct AddonInfo {
+    /// `addon_xxx`.
     pub id: String,
+    /// Id réel (`postgresql_xxx`, `mysql_xxx`, `redis_xxx`...) : celui que
+    /// les network groups attendent pour un membre de kind `addon`.
+    pub real_id: String,
     pub name: String,
     pub provider: String,
     pub plan_slug: String,
@@ -238,7 +242,9 @@ pub trait Platform: Send + Sync {
     fn set_env(&self, app: &str, env: &[EnvVar]) -> impl Future<Output = PResult<()>> + Send;
     fn list_ngs(&self) -> impl Future<Output = PResult<Vec<NgInfo>>> + Send;
     fn create_ng(&self, label: &str, tags: &[String]) -> impl Future<Output = PResult<NgInfo>> + Send;
-    fn link_member(&self, ng: &str, app: &str) -> impl Future<Output = PResult<()>> + Send;
+    /// Ajoute un membre au groupe : `kind` = `application` ou `addon` (id
+    /// réel de l'addon).
+    fn link_member(&self, ng: &str, member: &str, kind: &str) -> impl Future<Output = PResult<()>> + Send;
     fn list_tcp_redirs(&self, app: &str) -> impl Future<Output = PResult<Vec<Redir>>> + Send;
     fn add_tcp_redir(&self, app: &str, namespace: &str) -> impl Future<Output = PResult<Redir>> + Send;
     fn list_udp_redirs(&self, app: &str) -> impl Future<Output = PResult<Vec<Redir>>> + Send;
@@ -338,7 +344,7 @@ impl Api {
 impl Platform for Api {
     async fn list_addons(&self) -> PResult<Vec<AddonInfo>> {
         let all = clevercloud_sdk::v2::addon::list(&self.client, &self.owner).await.map_err(|e| e.to_string())?;
-        Ok(all.into_iter().map(|a| AddonInfo { id: a.id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug }).collect())
+        Ok(all.into_iter().map(|a| AddonInfo { id: a.id, real_id: a.real_id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug }).collect())
     }
 
     async fn create_addon(&self, addon: &NewAddon) -> PResult<AddonInfo> {
@@ -356,7 +362,7 @@ impl Platform for Api {
             options: clevercloud_sdk::v2::addon::Opts { version: addon.version.clone(), encryption: None, services: None },
         };
         let a = clevercloud_sdk::v2::addon::create(&self.client, &self.owner, &opts).await.map_err(|e| e.to_string())?;
-        Ok(AddonInfo { id: a.id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug })
+        Ok(AddonInfo { id: a.id, real_id: a.real_id, name: a.name.unwrap_or_default(), provider: a.provider.id, plan_slug: a.plan.slug })
     }
 
     async fn linked_addons(&self, app: &str) -> PResult<Vec<String>> {
@@ -441,9 +447,9 @@ impl Platform for Api {
         all.into_iter().find(|n| n.label == label).ok_or_else(|| "network group créé mais introuvable".to_string())
     }
 
-    async fn link_member(&self, ng: &str, app: &str) -> PResult<()> {
+    async fn link_member(&self, ng: &str, member: &str, kind: &str) -> PResult<()> {
         let url = format!("{}/v4/networkgroups/organisations/{}/networkgroups/{ng}/members", self.base(), self.owner);
-        let body = json!({ "id": app, "kind": "application", "label": app });
+        let body = json!({ "id": member, "kind": kind, "label": member });
         self.send(reqwest::Method::POST, &url, Some(&body)).await?;
         Ok(())
     }

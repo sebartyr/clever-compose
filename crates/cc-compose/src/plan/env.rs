@@ -12,13 +12,31 @@ use crate::diagnostic::{Diagnostic, Diagnostics};
 
 type Memberships = IndexMap<String, Vec<(String, Vec<String>)>>;
 
-/// Services substitués par un addon : nom → fournisseur.
-pub type Addons = IndexMap<String, &'static str>;
+/// Un service substitué par un addon.
+#[derive(Debug, Clone, Copy)]
+pub struct AddonRef {
+    pub provider: &'static str,
+    /// Membre du network group : joint par son FQDN de membre sur
+    /// `ADDON_NG_PORT`, sinon par son hôte public.
+    pub private: bool,
+}
+
+/// Services substitués par un addon : nom → fournisseur et mode d'accès.
+pub type Addons = IndexMap<String, AddonRef>;
 
 /// Ce qu'un nom d'hôte désigne.
 enum Target {
     Member(String, String),
+    /// Addon public : variables `*_ADDON_HOST`/`_PORT` de la liaison.
     Addon(String, &'static str),
+    /// Addon privé atteint par le réseau `net` : FQDN de membre, port fixe.
+    PrivateAddon(String, &'static str, String),
+}
+
+/// Le réseau par lequel `consumer` atteint l'addon privé `addon`, s'il y en
+/// a un.
+pub fn shared_net(addon: &str, consumer_service: &Service, memberships: &Memberships) -> Option<String> {
+    consumer_service.networks.keys().find(|net| memberships.get(*net).is_some_and(|m| m.iter().any(|(s, _)| s == addon))).cloned()
 }
 
 /// Le membre (`member/<service>@<réseau>`) que `consumer` atteint sous
@@ -75,15 +93,19 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
                     rest = &after[userinfo_len + host.len()..];
                     continue;
                 }
-                Some(Target::Addon(service, provider)) => {
+                Some(Target::Addon(service, provider)) | Some(Target::PrivateAddon(service, provider, _)) => {
                     // URL entière reconstruite depuis l'addon (§6.2, cas 1).
+                    let private_net = match lookup(host, consumer, consumer_service, project, memberships, addons, p, &mut Diagnostics::default()) {
+                        Some(Target::PrivateAddon(_, _, net)) => Some(net),
+                        _ => None,
+                    };
                     referenced.insert(service.clone());
                     let url_end = pos + 3 + after.len();
                     let url_start = literal.rfind(|c: char| c.is_whitespace() || c == ',' || c == ';').map(|i| i + 1).unwrap_or(0);
                     let prefix_in_literal = literal[url_start..].to_string();
                     let full = format!("{prefix_in_literal}{}", &rest[..url_end]);
                     literal.truncate(url_start);
-                    if let Some(t) = super::addons::rebuild_url(&full, &service, provider) {
+                    if let Some(t) = super::addons::rebuild_url(&full, &service, provider, private_net.as_deref()) {
                         if !literal.is_empty() {
                             segments.push(Segment::Literal(std::mem::take(&mut literal)));
                         }
@@ -134,6 +156,23 @@ pub fn rewrite(key: &str, value: &str, consumer: &str, consumer_service: &Servic
                     }
                     continue;
                 }
+                Some(Target::PrivateAddon(service, _, net)) => {
+                    // Membre du groupe : FQDN de membre, port fixe.
+                    referenced.insert(service.clone());
+                    segments.push(Segment::Literal(std::mem::take(&mut literal)));
+                    segments.push(member_ref(&service, &net));
+                    rest = &rest[token_end..];
+                    if followed_by_port {
+                        let port_end = rest[1..].find(|c: char| !c.is_ascii_digit()).map(|i| i + 1).unwrap_or(rest.len());
+                        segments.push(Segment::Literal(format!(":{}", cc_compose_model::plan::ADDON_NG_PORT)));
+                        rest = &rest[port_end..];
+                    } else {
+                        // Hôte seul : l'application supposera le port par défaut
+                        // du protocole, pas celui du groupe.
+                        diags.push(Diagnostic::warning("addon-private-port", format!("`{key}` reçoit le FQDN de `{service}` dans le network group, où l'addon écoute sur {} et non sur son port par défaut ; donnez le port à l'application (`{key}={token}:{}` si elle accepte `hôte:port`, ou sa variable de port), ou `x-clever.private: false`", cc_compose_model::plan::ADDON_NG_PORT, cc_compose_model::plan::ADDON_NG_PORT)).with_path(p));
+                    }
+                    continue;
+                }
                 None => {}
             }
         }
@@ -161,8 +200,14 @@ fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Proj
     if host == consumer {
         return None;
     }
-    if let Some(provider) = addons.get(host) {
-        return Some(Target::Addon(host.to_string(), provider));
+    if let Some(a) = addons.get(host) {
+        if a.private {
+            if let Some(net) = shared_net(host, consumer_service, memberships) {
+                return Some(Target::PrivateAddon(host.to_string(), a.provider, net));
+            }
+            diags.push(Diagnostic::warning("addon-private-unreachable", format!("`{host}` est un addon membre de ses réseaux mais `{consumer}` n'en partage aucun : joint par son hôte public")).with_path(p));
+        }
+        return Some(Target::Addon(host.to_string(), a.provider));
     }
     if let Some((service, net)) = resolve_alias(host, consumer, consumer_service, memberships) {
         return Some(Target::Member(service, net));
@@ -184,7 +229,8 @@ pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Members
     for net in consumer_service.networks.keys() {
         if let Some(members) = memberships.get(net) {
             for (service, aliases) in members {
-                if service == consumer || !referenced.contains(service) || addons.contains_key(service) {
+                // Un addon public n'a pas de membre ; un addon privé en a un.
+                if service == consumer || !referenced.contains(service) || addons.get(service).is_some_and(|a| !a.private) {
                     continue;
                 }
                 for a in aliases {

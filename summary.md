@@ -227,6 +227,33 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 - Une version de tag moins précise que celle servie (`8` pour `8.10.1`,
   `4.0` pour `4.0.3`) désigne la seule qui la prolonge ; plusieurs
   candidates donnent `addon-version-ambiguous`.
+- **Addons membres du network group par défaut (décision du propriétaire,
+  16/09/2026 : « je veux que ce soit via NG par défaut »).** Constaté sur la
+  plateforme : le membre se déclare avec l'**id réel** (`postgresql_xxx`,
+  `mysql_xxx`, `redis_xxx` ; avec `addon_xxx` le membre est accepté mais
+  n'a jamais de peer), kind `addon` ; le service répond sur
+  `<realId>.m.<ng>.cc-ng.cloud:8080` (port indiqué par le propriétaire,
+  vérifié : PostgreSQL 16.15, MySQL 8.4, Redis PONG) avec les identifiants
+  de la liaison. Un plan partagé n'a pas de VM donc pas de peer. Plan :
+  `Addon.private` (vrai sauf `x-clever.private: false`, forcé faux pour
+  Mongo/ES non vérifiés avec `addon-private-unverified` si demandé),
+  `Membership` avec `member: addon/<svc>` sur les réseaux du service, plan
+  par défaut = moins cher **dédié** (`addon-private-shared` si un plan
+  partagé est imposé), câblage : hôte = `MemberFqdn` du membre, port = 8080
+  (`ADDON_NG_PORT` dans le modèle), user/password/db = variables de la
+  liaison ; `CC_COMPOSE_DNS_MAP` porte l'alias ; `addon-private-port`
+  quand l'application ne reçoit qu'un hôte sans port (elle supposerait le
+  port par défaut). Exécuteur : `AddonInfo.real_id`, `link_member(kind)`.
+  Terraform : `networkgroups` sur la ressource addon, FQDN depuis `.id`
+  (id réel). Script : `clever ng link "$ADDON_REAL_x"`. Vérifié en réel :
+  WordPress (`WORDPRESS_DB_HOST: db:3306` → `mysql_…:8080`) sur MySQL
+  `xxs_sml` membre du groupe, page d'installation servie, second `up`
+  sans changement. Effet de bord : le plan dédié par défaut sert la version
+  demandée, Mastodon/Plausible/Sentry ne sont plus bloqués par
+  `addon-version-shared`.
+- Redirections UDP : pas disponibles nativement pour le moment
+  (propriétaire, 16/09/2026). DocumentDB : mis de côté (pas dans le provider
+  Terraform). Pas de contribution externe pour le moment.
 - **Règle (propriétaire, 16/09/2026) : la compatibilité Terraform suit le
   provider.** L'export s'aligne sur le provider publié (schéma embarqué,
   version dans `data/PROVENANCE.md`) ; à chaque version, régénérer le

@@ -25,10 +25,16 @@ resource "clevercloud_networkgroup" "default" {
 }
 
 resource "clevercloud_postgresql" "db" {
-  name    = "nextcloud-db"
-  plan    = "dev"
-  region  = "par"
-  version = "15"
+  name          = "nextcloud-db"
+  plan          = "xxs_sml"
+  region        = "par"
+  version       = "17"
+  networkgroups = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
 }
 
 resource "clevercloud_docker" "nc" {
@@ -39,11 +45,12 @@ resource "clevercloud_docker" "nc" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_EXPAND = "POSTGRES_HOST,POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
-    POSTGRES_DB       = "$${POSTGRESQL_ADDON_DB}"
-    POSTGRES_HOST     = "$${POSTGRESQL_ADDON_HOST}"
-    POSTGRES_PASSWORD = "$${POSTGRESQL_ADDON_PASSWORD}"
-    POSTGRES_USER     = "$${POSTGRESQL_ADDON_USER}"
+    CC_COMPOSE_DNS_MAP = "db=${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CC_COMPOSE_EXPAND  = "POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
+    POSTGRES_DB        = "$${POSTGRESQL_ADDON_DB}"
+    POSTGRES_HOST      = "${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    POSTGRES_PASSWORD  = "$${POSTGRESQL_ADDON_PASSWORD}"
+    POSTGRES_USER      = "$${POSTGRESQL_ADDON_USER}"
   }
   networkgroups      = [
     {

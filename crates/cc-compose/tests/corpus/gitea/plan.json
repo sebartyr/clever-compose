@@ -19,14 +19,15 @@
       "service": "db",
       "name": "gitea-db",
       "provider": "postgresql-addon",
-      "plan": "dev",
+      "plan": "xxs_sml",
       "region": "par",
-      "version": "15",
+      "version": "17",
       "tags": [
         "compose-project=gitea",
         "compose-service=db",
         "compose-spec=9aa14d857c9c7c91984add8639f6f607"
-      ]
+      ],
+      "private": true
     },
     {
       "resource": "app",
@@ -76,10 +77,24 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "DB_HOST,DB_NAME,DB_USER,DB_PASSWD"
+              "literal": "DB_NAME,DB_USER,DB_PASSWD"
             }
           ]
         },
@@ -88,20 +103,12 @@
           "value": [
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "POSTGRESQL_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/db@default"
               }
             },
             {
-              "literal": ":"
-            },
-            {
-              "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "POSTGRESQL_ADDON_PORT"
-              }
+              "literal": ":8080"
             }
           ]
         },
@@ -167,6 +174,15 @@
       "group": "ng/default",
       "aliases": [
         "gitea"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "addon/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
       ]
     }
   ]

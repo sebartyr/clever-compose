@@ -19,14 +19,15 @@
       "service": "db",
       "name": "init-scripts-db",
       "provider": "postgresql-addon",
-      "plan": "dev",
+      "plan": "xxs_sml",
       "region": "par",
       "version": "15",
       "tags": [
         "compose-project=init-scripts",
         "compose-service=db",
         "compose-spec=9fbb301c3c1c91de1fe99c5ae8acc5b9"
-      ]
+      ],
+      "private": true
     },
     {
       "resource": "app",
@@ -147,6 +148,20 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
@@ -182,20 +197,12 @@
             },
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "POSTGRESQL_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/db@default"
               }
             },
             {
-              "literal": ":"
-            },
-            {
-              "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "POSTGRESQL_ADDON_PORT"
-              }
+              "literal": ":8080"
             },
             {
               "literal": "/"
@@ -243,6 +250,15 @@
       "group": "ng/default",
       "aliases": [
         "api"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "addon/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
       ]
     }
   ]

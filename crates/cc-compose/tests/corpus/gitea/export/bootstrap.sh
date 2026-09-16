@@ -12,8 +12,9 @@ clever ng create 'gitea-default' -o "$ORG" --tags 'compose-project=gitea,compose
 NG_default="$(clever ng get 'gitea-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'gitea-db' --plan 'dev' --region 'par' --version '15' -o "$ORG"
+clever addon create 'postgresql-addon' 'gitea-db' --plan 'xxs_sml' --region 'par' --version '17' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "gitea-db") | .addonId')"
+ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "gitea-db") | .realId')"
 
 # Applications, créées sans déploiement
 APP_gitea="$(clever create -t docker 'gitea-gitea' -o "$ORG" -r 'par' -F json | jq -r .id)"
@@ -24,13 +25,15 @@ clever scale --app "$APP_gitea" --min-flavor 'XS' --max-flavor 'XS' --min-instan
 
 # Liaisons aux network groups
 clever ng link "$APP_gitea" 'gitea-default' -o "$ORG"
+clever ng link "$ADDON_REAL_db" 'gitea-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
 clever service link-addon "$ADDON_db" --app "$APP_gitea"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_gitea" 'CC_COMPOSE_EXPAND' 'DB_HOST,DB_NAME,DB_USER,DB_PASSWD'
-clever env set --app "$APP_gitea" 'DB_HOST' '${POSTGRESQL_ADDON_HOST}'':''${POSTGRESQL_ADDON_PORT}'
+clever env set --app "$APP_gitea" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_gitea" 'CC_COMPOSE_EXPAND' 'DB_NAME,DB_USER,DB_PASSWD'
+clever env set --app "$APP_gitea" 'DB_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"':8080'
 clever env set --app "$APP_gitea" 'DB_NAME' '${POSTGRESQL_ADDON_DB}'
 clever env set --app "$APP_gitea" 'DB_PASSWD' '${POSTGRESQL_ADDON_PASSWORD}'
 clever env set --app "$APP_gitea" 'DB_TYPE' 'postgres'

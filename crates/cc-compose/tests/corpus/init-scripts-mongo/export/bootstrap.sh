@@ -16,6 +16,7 @@ clever addon create 'mongodb-addon' 'init-scripts-mongo-mongo' --plan 'xs_sml' -
 ADDON_mongo="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-mongo") | .addonId')"
 clever addon create 'redis-addon' 'init-scripts-mongo-cache' --plan 's_mono' --region 'par' --version '8.10.1' -o "$ORG"
 ADDON_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .addonId')"
+ADDON_REAL_cache="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "init-scripts-mongo-cache") | .realId')"
 
 # Applications, créées sans déploiement
 APP_mongo_init="$(clever create -t docker 'init-scripts-mongo-mongo-init' -o "$ORG" -r 'par' --task '' -F json | jq -r .id)"
@@ -31,6 +32,7 @@ clever scale --app "$APP_api" --min-flavor 'XS' --max-flavor 'XS' --min-instance
 
 # Liaisons aux network groups
 clever ng link "$APP_api" 'init-scripts-mongo-default' -o "$ORG"
+clever ng link "$ADDON_REAL_cache" 'init-scripts-mongo-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
 clever service link-addon "$ADDON_mongo" --app "$APP_mongo_init"

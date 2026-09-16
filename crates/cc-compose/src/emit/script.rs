@@ -9,7 +9,7 @@ use std::fmt::Write;
 
 use cc_compose_model::plan::*;
 
-use super::{ident, member_parts};
+use super::{ident, member_parts, MemberKind};
 use crate::diagnostic::{Diagnostic, Diagnostics};
 
 /// Citation shell d'un littéral : simples guillemets, `'` échappé.
@@ -28,7 +28,8 @@ fn template(t: &Template, plan: &Plan, app: &App, project_rel: &str) -> String {
         match seg {
             Segment::Literal(s) => out.push_str(&sq(s)),
             Segment::Ref(Reference::MemberFqdn { member }) => match member_parts(plan, &member.0) {
-                Some((service, net)) => out.push_str(&format!("\"${{APP_{}}}.m.${{NG_{}}}.cc-ng.cloud\"", ident(&service), ident(&net))),
+                Some((MemberKind::App, service, net)) => out.push_str(&format!("\"${{APP_{}}}.m.${{NG_{}}}.cc-ng.cloud\"", ident(&service), ident(&net))),
+                Some((MemberKind::Addon, service, net)) => out.push_str(&format!("\"${{ADDON_REAL_{}}}.m.${{NG_{}}}.cc-ng.cloud\"", ident(&service), ident(&net))),
                 None => out.push_str(&sq(&format!("<{}>", member.0))),
             },
             // Expansée par le shim au démarrage : littérale.
@@ -79,6 +80,9 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
             let version = a.version.as_ref().map(|v| format!(" --version {}", sq(v))).unwrap_or_default();
             let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version);
             let _ = writeln!(s, "ADDON_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .addonId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
+            if a.private {
+                let _ = writeln!(s, "ADDON_REAL_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .realId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
+            }
         }
         let _ = writeln!(s);
     }
@@ -104,9 +108,15 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
     if !memberships.is_empty() {
         let _ = writeln!(s, "# Liaisons aux network groups");
         for m in &memberships {
-            let (Some(service), Some(net)) = (m.member.0.strip_prefix("app/"), m.group.0.strip_prefix("ng/")) else { continue };
+            let Some(net) = m.group.0.strip_prefix("ng/") else { continue };
             let group = groups.iter().find(|g| g.network == net).map(|g| g.name.as_str()).unwrap_or(net);
-            let _ = writeln!(s, "clever ng link \"$APP_{}\" {} -o \"$ORG\"", ident(service), sq(group));
+            // Une application par son id ; un addon par son id réel (doc : les
+            // network groups attendent `postgresql_xxx`, pas `addon_xxx`).
+            if let Some(service) = m.member.0.strip_prefix("app/") {
+                let _ = writeln!(s, "clever ng link \"$APP_{}\" {} -o \"$ORG\"", ident(service), sq(group));
+            } else if let Some(service) = m.member.0.strip_prefix("addon/") {
+                let _ = writeln!(s, "clever ng link \"$ADDON_REAL_{}\" {} -o \"$ORG\"", ident(service), sq(group));
+            }
         }
         let _ = writeln!(s);
     }

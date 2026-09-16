@@ -26,7 +26,8 @@
         "compose-project=private-registry",
         "compose-service=search",
         "compose-spec=2e1635890a217ca2cfc876398bf542ca"
-      ]
+      ],
+      "private": false
     },
     {
       "resource": "app",

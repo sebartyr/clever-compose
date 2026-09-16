@@ -292,7 +292,17 @@ pub struct Addon {
     /// Version demandée par le tag de l'image, si le fournisseur la porte.
     pub version: Option<String>,
     pub tags: Vec<String>,
+    /// Membre des network groups de son service (`x-clever.private`, vrai
+    /// par défaut) : les consommateurs le joignent par son FQDN de membre sur
+    /// le port [`ADDON_NG_PORT`], avec les mêmes identifiants. Sinon, par son
+    /// hôte public.
+    #[serde(default)]
+    pub private: bool,
 }
+
+/// Port sur lequel un addon membre d'un network group sert son protocole
+/// (constaté le 16/09/2026 pour PostgreSQL, MySQL et Redis dédiés).
+pub const ADDON_NG_PORT: u16 = 8080;
 
 /// Un network group par réseau Compose (§7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -309,6 +319,7 @@ pub struct NetworkGroup {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Membership {
     pub id: ResourceId,
+    /// `app/<service>` ou `addon/<service>` (addon privé).
     pub member: ResourceId,
     pub group: ResourceId,
     /// Noms par lesquels les autres membres désignent celui-ci (nom du

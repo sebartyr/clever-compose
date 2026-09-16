@@ -12,8 +12,9 @@ clever ng create 'nextcloud-default' -o "$ORG" --tags 'compose-project=nextcloud
 NG_default="$(clever ng get 'nextcloud-default' -o "$ORG" -F json | jq -r .id)"
 
 # Addons managés (facturés selon le plan)
-clever addon create 'postgresql-addon' 'nextcloud-db' --plan 'dev' --region 'par' --version '15' -o "$ORG"
+clever addon create 'postgresql-addon' 'nextcloud-db' --plan 'xxs_sml' --region 'par' --version '17' -o "$ORG"
 ADDON_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "nextcloud-db") | .addonId')"
+ADDON_REAL_db="$(clever addon list -o "$ORG" -F json | jq -r '.[] | select(.name == "nextcloud-db") | .realId')"
 
 # Applications, créées sans déploiement
 APP_nc="$(clever create -t docker 'nextcloud-nc' -o "$ORG" -r 'par' -F json | jq -r .id)"
@@ -24,14 +25,16 @@ clever scale --app "$APP_nc" --min-flavor 'XS' --max-flavor 'XS' --min-instances
 
 # Liaisons aux network groups
 clever ng link "$APP_nc" 'nextcloud-default' -o "$ORG"
+clever ng link "$ADDON_REAL_db" 'nextcloud-default' -o "$ORG"
 
 # Liaisons aux addons (injection de leurs variables)
 clever service link-addon "$ADDON_db" --app "$APP_nc"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_nc" 'CC_COMPOSE_EXPAND' 'POSTGRES_HOST,POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER'
+clever env set --app "$APP_nc" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_nc" 'CC_COMPOSE_EXPAND' 'POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER'
 clever env set --app "$APP_nc" 'POSTGRES_DB' '${POSTGRESQL_ADDON_DB}'
-clever env set --app "$APP_nc" 'POSTGRES_HOST' '${POSTGRESQL_ADDON_HOST}'
+clever env set --app "$APP_nc" 'POSTGRES_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_nc" 'POSTGRES_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
 clever env set --app "$APP_nc" 'POSTGRES_USER' '${POSTGRESQL_ADDON_USER}'
 

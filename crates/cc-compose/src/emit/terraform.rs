@@ -25,7 +25,7 @@ use std::path::Path as FsPath;
 use cc_compose_model::plan::*;
 use serde_json::{json, Map, Value as J};
 
-use super::{ident, member_parts};
+use super::{ident, member_parts, MemberKind};
 use crate::diagnostic::{Diagnostic, Diagnostics};
 
 pub struct Options<'a> {
@@ -161,6 +161,26 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 if let (Some(v), true) = (&a.version, has_version) {
                     body["version"] = json!(v);
                 }
+                // Addon privé : membre de ses groupes (même alias que les
+                // applications, validé par le provider contre `cc-ng.cloud`).
+                let members: Vec<J> = plan
+                    .resources
+                    .iter()
+                    .filter_map(|r| match r {
+                        Resource::Membership(m) if m.member == a.id => {
+                            let net = m.group.0.strip_prefix("ng/")?;
+                            Some(json!({
+                                "networkgroup_id": format!("${{clevercloud_networkgroup.{}.id}}", ident(net)),
+                                "fqdn": format!("{}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", a.service, ident(net)),
+                            }))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if !members.is_empty() {
+                    check_attrs(&schema, resource, &["networkgroups"], diags);
+                    body["networkgroups"] = J::Array(members);
+                }
                 addon_resources.entry(resource.to_string()).or_insert_with(|| J::Object(Map::new())).as_object_mut().unwrap().insert(ident(&a.service), body);
             }
             Resource::Membership(_) | Resource::Redirection(_) | Resource::Domain(_) => {}
@@ -193,7 +213,16 @@ fn template(t: &Template, plan: &Plan, app: &App, opts: &Options<'_>, variables:
         match seg {
             Segment::Literal(s) => out.push_str(&s.replace('$', "$$").replace('%', "%%")),
             Segment::Ref(Reference::MemberFqdn { member }) => match member_parts(plan, &member.0) {
-                Some((service, net)) => out.push_str(&format!("${{clevercloud_docker.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
+                Some((MemberKind::App, service, net)) => out.push_str(&format!("${{clevercloud_docker.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
+                // `.id` d'une ressource addon est son id réel (`postgresql_xxx`),
+                // celui que le membre porte.
+                Some((MemberKind::Addon, service, net)) => match plan.resources.iter().find_map(|r| match r {
+                    Resource::Addon(a) if a.service == service => addon_resource_type(&a.provider),
+                    _ => None,
+                }) {
+                    Some(resource) => out.push_str(&format!("${{{resource}.{}.id}}.m.${{clevercloud_networkgroup.{}.id}}.cc-ng.cloud", ident(&service), ident(&net))),
+                    None => out.push_str(&format!("<{}>", member.0)),
+                },
                 None => out.push_str(&format!("<{}>", member.0)),
             },
             // Expansée par le shim au démarrage : reste littérale.

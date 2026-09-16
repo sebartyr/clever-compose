@@ -10,7 +10,7 @@
 
 use std::sync::OnceLock;
 
-use cc_compose_model::plan::{Reference, ResourceId, Segment, Template};
+use cc_compose_model::plan::{Reference, ResourceId, Segment, Template, ADDON_NG_PORT};
 use serde::Deserialize;
 
 use crate::compose::model::Service;
@@ -210,7 +210,7 @@ pub fn seg(addon: &str, provider: &str, role: Role) -> Option<Segment> {
 /// URL complète reconstruite depuis les attributs de l'addon, au format
 /// attendu par l'application : schéma, chemin et query d'origine conservés
 /// (§6.2, cas 1 et 3).
-pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Template> {
+pub fn rebuild_url(original: &str, addon: &str, provider: &str, private_net: Option<&str>) -> Option<Template> {
     let (scheme, rest) = original.split_once("://")?;
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let (_authority, tail) = rest.split_at(authority_end);
@@ -221,15 +221,28 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Templa
             segs.push(s);
         }
     };
+    // Addon privé : hôte = FQDN de membre, port fixe ; identifiants et base
+    // restent ceux de la liaison.
+    let host_port = |segs: &mut Vec<Segment>| match private_net {
+        Some(net) => {
+            segs.push(Segment::Ref(Reference::MemberFqdn { member: ResourceId(format!("member/{addon}@{net}")) }));
+            segs.push(Segment::Literal(format!(":{}", ADDON_NG_PORT)));
+        }
+        None => {
+            push(segs, seg(addon, provider, Role::Host));
+            if provider != "es-addon" {
+                push(segs, Some(Segment::Literal(":".into())));
+                push(segs, seg(addon, provider, Role::Port));
+            }
+        }
+    };
     match provider {
         "redis-addon" => {
             // `redis://default:<password>@<host>:<port>` (doc Clever pour Docs).
             lit(&mut segs, "default:");
             push(&mut segs, seg(addon, provider, Role::Password));
             lit(&mut segs, "@");
-            push(&mut segs, seg(addon, provider, Role::Host));
-            lit(&mut segs, ":");
-            push(&mut segs, seg(addon, provider, Role::Port));
+            host_port(&mut segs);
             lit(&mut segs, tail);
         }
         "es-addon" => {
@@ -240,7 +253,7 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Templa
             lit(&mut segs, ":");
             push(&mut segs, seg(addon, provider, Role::Password));
             lit(&mut segs, "@");
-            push(&mut segs, seg(addon, provider, Role::Host));
+            host_port(&mut segs);
             lit(&mut segs, tail);
         }
         _ => {
@@ -248,9 +261,7 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Templa
             lit(&mut segs, ":");
             push(&mut segs, seg(addon, provider, Role::Password));
             lit(&mut segs, "@");
-            push(&mut segs, seg(addon, provider, Role::Host));
-            lit(&mut segs, ":");
-            push(&mut segs, seg(addon, provider, Role::Port));
+            host_port(&mut segs);
             // Le chemin est la base : celle de l'addon.
             let query = tail.find(['?', '#']).map(|i| &tail[i..]).unwrap_or("");
             lit(&mut segs, "/");
@@ -265,11 +276,31 @@ pub fn rebuild_url(original: &str, addon: &str, provider: &str) -> Option<Templa
 
 /// Plan retenu : `wanted` (slug) s'il existe, sinon le moins cher servi
 /// dans la région.
-pub fn choose_plan<'a>(provider: &'a Provider, region: &str, wanted: Option<&str>) -> Result<&'a PlanInfo, String> {
+/// Fournisseurs dont l'accès par le network group est vérifié (port
+/// [`ADDON_NG_PORT`], identifiants de la liaison) ; les autres restent
+/// publics tant qu'un test ne l'a pas confirmé.
+pub const NG_VERIFIED: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon"];
+
+/// Plan retenu : `wanted` (slug) s'il existe, sinon le moins cher servi
+/// dans la région — dédié si l'addon doit être membre d'un network group
+/// (un plan partagé n'a pas d'instance, donc pas de peer).
+pub fn choose_plan<'a>(provider: &'a Provider, region: &str, wanted: Option<&str>, dedicated: bool) -> Result<&'a PlanInfo, String> {
     if let Some(w) = wanted {
         return provider.plans.iter().find(|p| p.slug == w || p.name.eq_ignore_ascii_case(w)).ok_or_else(|| format!("plan `{w}` inconnu ; disponibles : {}", provider.plans.iter().map(|p| p.slug.as_str()).collect::<Vec<_>>().join(", ")));
     }
-    provider.plans.iter().filter(|p| p.zones.is_empty() || p.zones.iter().any(|z| z == region)).min_by(|a, b| a.price.partial_cmp(&b.price).unwrap()).ok_or_else(|| format!("aucun plan de {} dans la région {region}", provider.name))
+    provider
+        .plans
+        .iter()
+        .filter(|p| p.zones.is_empty() || p.zones.iter().any(|z| z == region))
+        .filter(|p| !dedicated || !is_shared(p))
+        .min_by(|a, b| a.price.partial_cmp(&b.price).unwrap())
+        .ok_or_else(|| format!("aucun plan{} de {} dans la région {region}", if dedicated { " dédié" } else { "" }, provider.name))
+}
+
+/// Plan partagé (cluster mutualisé, pas d'instance dédiée) : la clé
+/// s'écrit `Type` chez PostgreSQL et `TYPE` chez MySQL.
+pub fn is_shared(plan: &PlanInfo) -> bool {
+    plan.features.iter().any(|(k, v)| k.eq_ignore_ascii_case("type") && v.eq_ignore_ascii_case("shared"))
 }
 
 /// Limite de connexions d'un plan, si le catalogue la donne.

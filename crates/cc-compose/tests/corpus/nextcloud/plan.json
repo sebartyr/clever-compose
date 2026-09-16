@@ -19,14 +19,15 @@
       "service": "db",
       "name": "nextcloud-db",
       "provider": "postgresql-addon",
-      "plan": "dev",
+      "plan": "xxs_sml",
       "region": "par",
-      "version": "15",
+      "version": "17",
       "tags": [
         "compose-project=nextcloud",
         "compose-service=db",
         "compose-spec=a8756149457c4f7cfba9e5a2388e71c4"
-      ]
+      ],
+      "private": true
     },
     {
       "resource": "app",
@@ -73,10 +74,24 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "POSTGRES_HOST,POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
+              "literal": "POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
             }
           ]
         },
@@ -97,9 +112,8 @@
           "value": [
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "POSTGRESQL_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/db@default"
               }
             }
           ]
@@ -146,6 +160,15 @@
       "group": "ng/default",
       "aliases": [
         "nc"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "addon/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
       ]
     }
   ]

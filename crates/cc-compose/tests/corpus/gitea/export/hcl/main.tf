@@ -25,10 +25,16 @@ resource "clevercloud_networkgroup" "default" {
 }
 
 resource "clevercloud_postgresql" "db" {
-  name    = "gitea-db"
-  plan    = "dev"
-  region  = "par"
-  version = "15"
+  name          = "gitea-db"
+  plan          = "xxs_sml"
+  region        = "par"
+  version       = "17"
+  networkgroups = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "db.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
 }
 
 resource "clevercloud_docker" "gitea" {
@@ -39,12 +45,13 @@ resource "clevercloud_docker" "gitea" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_EXPAND = "DB_HOST,DB_NAME,DB_USER,DB_PASSWD"
-    DB_HOST           = "$${POSTGRESQL_ADDON_HOST}:$${POSTGRESQL_ADDON_PORT}"
-    DB_NAME           = "$${POSTGRESQL_ADDON_DB}"
-    DB_PASSWD         = "$${POSTGRESQL_ADDON_PASSWORD}"
-    DB_TYPE           = "postgres"
-    DB_USER           = "$${POSTGRESQL_ADDON_USER}"
+    CC_COMPOSE_DNS_MAP = "db=${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CC_COMPOSE_EXPAND  = "DB_NAME,DB_USER,DB_PASSWD"
+    DB_HOST            = "${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080"
+    DB_NAME            = "$${POSTGRESQL_ADDON_DB}"
+    DB_PASSWD          = "$${POSTGRESQL_ADDON_PASSWORD}"
+    DB_TYPE            = "postgres"
+    DB_USER            = "$${POSTGRESQL_ADDON_USER}"
   }
   networkgroups      = [
     {

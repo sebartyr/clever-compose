@@ -26,7 +26,8 @@
         "compose-project=init-scripts-mongo",
         "compose-service=mongo",
         "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
-      ]
+      ],
+      "private": false
     },
     {
       "resource": "addon",
@@ -41,7 +42,8 @@
         "compose-project=init-scripts-mongo",
         "compose-service=cache",
         "compose-spec=3909e8e24f11e2d03b03f848ab3f283c"
-      ]
+      ],
+      "private": true
     },
     {
       "resource": "app",
@@ -238,6 +240,15 @@
       "group": "ng/default",
       "aliases": [
         "api"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/cache@default",
+      "member": "addon/cache",
+      "group": "ng/default",
+      "aliases": [
+        "cache"
       ]
     }
   ]

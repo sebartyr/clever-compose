@@ -19,12 +19,21 @@ pub fn ident(s: &str) -> String {
 }
 
 /// Le service d'un membre `member/<service>@<réseau>` et son réseau.
-pub fn member_parts(plan: &Plan, member: &str) -> Option<(String, String)> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberKind {
+    App,
+    Addon,
+}
+
+/// Nature, service et réseau d'un membre (`member/<service>@<réseau>`).
+pub fn member_parts(plan: &Plan, member: &str) -> Option<(MemberKind, String, String)> {
     plan.resources.iter().find_map(|r| match r {
         Resource::Membership(m) if m.id.0 == member => {
-            let service = m.member.0.strip_prefix("app/")?.to_string();
             let net = m.group.0.strip_prefix("ng/")?.to_string();
-            Some((service, net))
+            if let Some(s) = m.member.0.strip_prefix("app/") {
+                return Some((MemberKind::App, s.to_string(), net));
+            }
+            m.member.0.strip_prefix("addon/").map(|s| (MemberKind::Addon, s.to_string(), net))
         }
         _ => None,
     })

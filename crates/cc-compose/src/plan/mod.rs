@@ -125,19 +125,29 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             diags.push(Diagnostic::warning("addon-declined", format!("`{name}` ({}) reste un conteneur éphémère (`x-clever.ephemeral: true`) ; un addon `{}` managé est possible", rec.kind, rec.provider)).with_path(&p.child("image")));
             continue;
         }
-        if x.private == Some(true) {
-            diags.push(Diagnostic::error("addon-private-unsupported", format!("`{name}` : `x-clever.private: true` (addon rattaché au network group) n'est pas encore pris en charge : l'addon est joint par son hôte public ; retirez la clé")).with_path(&p.child("x-clever").child("private")));
-            continue;
+        // Membre du network group par défaut (décision du 16/09/2026) ;
+        // vérifié pour PostgreSQL, MySQL et Redis, pas pour les autres.
+        let mut private = x.private.unwrap_or(true);
+        if private && !addons::NG_VERIFIED.contains(&rec.provider) {
+            if x.private == Some(true) {
+                diags.push(Diagnostic::error("addon-private-unverified", format!("`{name}` : le rattachement d'un addon {} à un network group n'a pas été vérifié (port de service dans le groupe inconnu) ; retirez `x-clever.private` pour le joindre par son hôte public", rec.kind)).with_path(&p.child("x-clever").child("private")));
+                continue;
+            }
+            private = false;
+        }
+        if s.networks.is_empty() {
+            private = false;
         }
         let declared = addons::declared(&rec, s);
-        addons.insert(name.clone(), rec.provider);
+        addons.insert(name.clone(), env::AddonRef { provider: rec.provider, private });
         addon_infos.insert(name.clone(), (rec, declared));
     }
 
-    // Réseaux et appartenances (les addons sont hors network group, §6.4).
+    // Réseaux et appartenances : les services, et les addons privés (un
+    // addon public est hors network group).
     let mut memberships: IndexMap<String, Vec<(String, Vec<String>)>> = IndexMap::new(); // réseau -> [(service, alias)]
     for (name, s) in &project.services {
-        if addons.contains_key(name) {
+        if addons.get(name).is_some_and(|a| !a.private) {
             continue;
         }
         for (net, cfg) in &s.networks {
@@ -205,13 +215,20 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             diags.push(Diagnostic::error("addon-provider-unknown", format!("fournisseur `{}` absent du catalogue embarqué", rec.provider)).with_path(&p));
             continue;
         };
-        let plan = match addons::choose_plan(provider, &region, x.plan.as_deref()) {
+        let private = addons[name].private;
+        let plan = match addons::choose_plan(provider, &region, x.plan.as_deref(), private) {
             Ok(pl) => pl.clone(),
             Err(e) => {
                 diags.push(Diagnostic::error("addon-plan", e).with_path(&p.child("x-clever").child("plan")));
                 continue;
             }
         };
+        // Un plan partagé n'a pas de VM, donc pas de peer dans le groupe.
+        if private && addons::is_shared(&plan) {
+            let cheapest = addons::choose_plan(provider, &region, None, true).ok();
+            diags.push(Diagnostic::error("addon-private-shared", format!("`{name}` : le plan `{}` est partagé, sans instance dédiée, donc injoignable par le network group ; choisissez un plan dédié{} ou `x-clever.private: false` pour joindre l'addon par son hôte public", plan.slug, cheapest.map(|c| format!(" (`x-clever.plan: {}`, {} €/mois HT)", c.slug, c.price)).unwrap_or_default())).with_path(&p.child("x-clever").child("plan")));
+            continue;
+        }
         // Version : celle de x-clever, sinon celle du tag ; jamais un
         // rabattement silencieux (§6.1).
         let version = match (x.version.clone(), rec.version.clone()) {
@@ -246,12 +263,12 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         // Un plan partagé (`dev`) sert la version de son cluster, quoi qu'on
         // demande (constaté le 16/09/2026 : 16 demandé, 15 servi) : jamais en
         // silence (§6.1).
-        let version = if plan.features.get("Type").map(|t| t == "Shared").unwrap_or(false) {
+        let version = if addons::is_shared(&plan) {
             match provider.shared_versions.get(&region) {
                 Some(served) => {
                     let asked = x.version.clone().or_else(|| rec.version.clone());
                     if let Some(a) = asked.filter(|a| !served.starts_with(a.as_str())) {
-                        let dedicated = provider.plans.iter().filter(|p| p.features.get("Type").map(|t| t == "Dedicated").unwrap_or(false) && (p.zones.is_empty() || p.zones.iter().any(|z| *z == region))).min_by(|a, b| a.price.partial_cmp(&b.price).unwrap());
+                        let dedicated = addons::choose_plan(provider, &region, None, true).ok();
                         diags.push(Diagnostic::error("addon-version-shared", format!("`{name}` : le plan `{}` est partagé et sert {} {served} dans `{region}`, pas {a} ; `x-clever.version: {served}` pour l'accepter, ou un plan dédié pour {a}{}", plan.slug, provider.name, dedicated.map(|p| format!(" (`x-clever.plan: {}`, {} €/mois HT)", p.slug, p.price)).unwrap_or_default())).with_path(&p.child("image")));
                         continue;
                     }
@@ -263,7 +280,8 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             version
         };
         // Coût annoncé (§6) : la substitution est facturée.
-        diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
+        let access = if private { format!(", membre du network group (joint sur le port {ADDON_NG_PORT}, `x-clever.private: false` pour l'hôte public)") } else { ", joint par son hôte public".to_string() };
+        diags.push(Diagnostic::warning("addon-substitution", format!("`{name}` ({}:{}) devient un addon {} plan `{}` ({}) : {} €/mois HT{}{access}. Confirmation requise au `up` (`--yes`) ; `x-clever.plan` pour changer de plan, `x-clever.ephemeral: true` pour garder un conteneur sans persistance", rec.kind, version.clone().unwrap_or_else(|| "latest".into()), provider.name, plan.slug, plan.name, plan.price, plan.features.get("Max connection limit").map(|c| format!(", {c} connexions max")).unwrap_or_default())).with_path(&p.child("image")));
         // Falaises sémantiques (§6.4).
         if let Some(cmd) = &s.command {
             // Redis déclare son mot de passe par `--requirepass` : ce n'est
@@ -321,6 +339,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             region,
             version,
             tags: tags(name),
+            private,
         }));
     }
     if diags.has_errors() {
@@ -381,9 +400,10 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
     }
     for (net, members) in &memberships {
         for (service, aliases) in members {
+            let kind = if addons.contains_key(service) { "addon" } else { "app" };
             resources.push(Resource::Membership(Membership {
                 id: ResourceId(format!("member/{service}@{net}")),
-                member: ResourceId(format!("app/{service}")),
+                member: ResourceId(format!("{kind}/{service}")),
                 group: ResourceId(format!("ng/{net}")),
                 aliases: aliases.clone(),
             }));
@@ -529,7 +549,23 @@ fn plan_service(
         if let Some(lit) = t.as_literal() {
             if let Some((addon_name, role)) = correlate(k, &lit, addon_infos) {
                 let provider = addon_infos[&addon_name].0.provider;
-                if let Some(seg) = addons::seg(&addon_name, provider, role) {
+                // Addon privé atteint par un réseau commun : hôte et port du
+                // membre ; les autres rôles restent ceux de la liaison.
+                let private_net = addons.get(&addon_name).filter(|a| a.private).and_then(|_| env::shared_net(&addon_name, s, memberships));
+                let seg = match (role, &private_net) {
+                    (addons::Role::Host, Some(net)) => {
+                        // Sans variable de port corrélée, l'application supposera
+                        // le port par défaut du protocole, pas 8080.
+                        let has_port = s.environment.iter().any(|(k2, v2)| k2 != k && v2.as_deref().is_some_and(|v2| correlate(k2, v2, addon_infos).is_some_and(|(a2, r2)| a2 == addon_name && r2 == addons::Role::Port)));
+                        if !has_port {
+                            diags.push(Diagnostic::warning("addon-private-port", format!("`{k}` reçoit le FQDN de `{addon_name}` dans le network group, où l'addon écoute sur {ADDON_NG_PORT} et non sur son port par défaut ; aucune variable de port n'est corrélée : donnez le port à l'application (`{k}=…:{ADDON_NG_PORT}` si elle l'accepte, ou une variable de port), ou `x-clever.private: false`")).with_path(&ep));
+                        }
+                        Some(Segment::Ref(Reference::MemberFqdn { member: ResourceId(format!("member/{addon_name}@{net}")) }))
+                    }
+                    (addons::Role::Port, Some(_)) => Some(Segment::Literal(ADDON_NG_PORT.to_string())),
+                    _ => addons::seg(&addon_name, provider, role),
+                };
+                if let Some(seg) = seg {
                     t = Template(vec![seg]);
                     referenced.insert(addon_name);
                 }

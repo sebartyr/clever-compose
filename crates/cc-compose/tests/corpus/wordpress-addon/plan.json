@@ -19,14 +19,15 @@
       "service": "db",
       "name": "wordpress-addon-db",
       "provider": "mysql-addon",
-      "plan": "dev",
+      "plan": "xxs_sml",
       "region": "par",
       "version": "8.4",
       "tags": [
         "compose-project=wordpress-addon",
         "compose-service=db",
         "compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c"
-      ]
+      ],
+      "private": true
     },
     {
       "resource": "app",
@@ -73,10 +74,24 @@
       },
       "env": [
         {
+          "key": "CC_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
           "key": "CC_COMPOSE_EXPAND",
           "value": [
             {
-              "literal": "WORDPRESS_DB_HOST,WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME"
+              "literal": "WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME"
             }
           ]
         },
@@ -85,9 +100,8 @@
           "value": [
             {
               "ref": {
-                "ref": "addon_env",
-                "addon": "addon/db",
-                "var": "MYSQL_ADDON_HOST"
+                "ref": "member_fqdn",
+                "member": "member/db@default"
               }
             }
           ]
@@ -137,6 +151,15 @@
         "compose-project=wordpress-addon",
         "compose-service=wordpress",
         "compose-spec=a964eb627f2fac67e8cbb8509eb6ad4c"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "addon/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
       ]
     },
     {

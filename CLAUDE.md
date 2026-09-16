@@ -61,7 +61,8 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
   direct avec le même client signé, derrière le trait `Platform`.
 - **Pas de CI GitHub Actions** (coût). Les tests se lancent en local.
 - **Hôte direct des addons** (sans proxy) : jamais proposé. Un addon se
-  joint par son hôte public ou, à terme, par le network group.
+  joint par le network group (défaut, décision du 16/09/2026) ou par son
+  hôte public (`x-clever.private: false`).
 - Réponses en français ; commits avec le trailer de co-signature.
 
 ---
@@ -137,6 +138,13 @@ s'exécute sur la plateforme ou depuis le poste.
   dédié). MongoDB n'existe qu'en 4.0.3, Redis en 8.10.1.
 - Addon Elasticsearch : hôte nu servi en HTTPS seul, `ES_ADDON_URI` embarque
   les identifiants.
+- **Addon membre d'un network group** : déclaré avec son **id réel**
+  (`postgresql_xxx`, pas `addon_xxx`, sinon pas de peer), kind `addon` ;
+  joignable sur `<realId>.m.<ng>.cc-ng.cloud` **port 8080** avec les
+  identifiants de la liaison (vérifié PostgreSQL, MySQL, Redis dédiés ; pas
+  Mongo ni ES). Un plan partagé n'a pas d'instance donc pas de peer : en
+  privé le plan par défaut est le moins cher dédié. Les redirections UDP ne
+  sont pas disponibles nativement pour le moment.
 - Les images Redis, Valkey et Elasticsearch n'ont aucun mécanisme
   `/docker-entrypoint-initdb.d` : montage refusé, reprise par `seed`.
 
@@ -163,8 +171,8 @@ s'exécute sur la plateforme ou depuis le poste.
 Niveau service : `region`, `flavor` (ou `min_flavor`/`max_flavor` :
 scaling vertical), `min_instances`/`max_instances` (horizontal), `task`,
 `http_port`, `protocol`, `domains`, `ephemeral`, `plan`, `version`,
-`tcp_namespace`, `init` (`task` par défaut, `local`), `private` (refusé pour
-l'instant). Niveau projet : `network_groups` (`per-network` | `single` |
+`tcp_namespace`, `init` (`task` par défaut, `local`), `private` (vrai par
+défaut : addon membre du groupe ; `false` : hôte public). Niveau projet : `network_groups` (`per-network` | `single` |
 `none`). Les clés `x-*` sont ignorées par Compose : le fichier reste
 utilisable en local.
 
@@ -173,7 +181,8 @@ utilisable en local.
 `addon-substitution`, `addon-version-unavailable`, `addon-version-shared`,
 `addon-version-ambiguous`, `addon-init-task`, `addon-init-local`,
 `addon-init-scripts`, `addon-tuning-args`, `addon-multiple-databases`,
-`addon-no-superuser`, `addon-connections`, `addon-private-unsupported`,
+`addon-no-superuser`, `addon-connections`, `addon-private-shared`,
+`addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,
 `network-groups-unspecified`, `network-groups-merged`, `service-unreachable`,
 `proxy-resolver`, `port-assumed-http`, `redirection-tcp-multiple`,
 `replicas-fixed`, `resources-capped`, `terraform-task`, `terraform-udp`.
@@ -255,14 +264,15 @@ clever-compose logs --org ORG [-p PROJET] [SERVICE...] [--since 1h] [-n N] [-f]
 
 ## 10. Ouvert, reporté, décidé
 
-- Reporté : `x-clever.private` (addon dans le groupe ; le provider sait le
-  faire, il manque la conception côté application) ; DocumentDB sur
-  PostgreSQL comme alternative à l'addon MongoDB 4.0.3 ; les autres points
+- Reporté : DocumentDB sur PostgreSQL comme alternative à l'addon MongoDB
+  4.0.3 (pas dans le provider Terraform, mis de côté) ; accès par le groupe
+  pour Mongo et ES (à vérifier) ; les autres points
   « choix vs défaut » proposés et non retenus (service à service par domaine
   public, protocole exigé, addon public ou groupe).
 - SDK Rust : PR #81 (network groups) à rebaser, bug `v2::plan::list` sur
   `/v2/products/addonproviders`, routes applications à contribuer.
-- Provider Terraform : PR candidates ci-dessus (§7).
+- Provider Terraform : PR candidates ci-dessus (§7). Pas de contribution
+  externe pour le moment (décision du 16/09/2026).
 - Résolution du `domainName` par le DNS des network groups : commentaire
   posté sur axo#3168 ; si elle aboutit, le stub DNS devient inutile au profit
   d'un `search` dans `resolv.conf`.

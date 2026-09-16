@@ -27,11 +27,13 @@ pub struct State {
     pub app_ids: BTreeMap<String, String>,   // service -> app id
     pub ng_ids: BTreeMap<String, String>,    // réseau -> ng id
     pub addon_ids: BTreeMap<String, String>, // service -> addon id
+    /// service -> id réel de l'addon (membre de network group, FQDN).
+    pub addon_real_ids: BTreeMap<String, String>,
 }
 
 pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log: &mut Log) -> Result<State, String> {
     let project_tag = format!("compose-project={}", plan.project);
-    let mut state = State { app_ids: BTreeMap::new(), ng_ids: BTreeMap::new(), addon_ids: BTreeMap::new() };
+    let mut state = State { app_ids: BTreeMap::new(), ng_ids: BTreeMap::new(), addon_ids: BTreeMap::new(), addon_real_ids: BTreeMap::new() };
 
     // 0. Addons managés, par nom ; création confirmée (facturée).
     let addons: Vec<&Addon> = plan.resources.iter().filter_map(|r| if let Resource::Addon(a) = r { Some(a) } else { None }).collect();
@@ -49,6 +51,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                         log(&format!("addon {} : existe ({})", a.name, x.id));
                     }
                     state.addon_ids.insert(a.service.clone(), x.id.clone());
+                    state.addon_real_ids.insert(a.service.clone(), x.real_id.clone());
                 }
                 None if opts.dry_run => log(&format!("addon {} : à créer ({} plan {}{})", a.name, a.provider, a.plan, a.version.as_ref().map(|v| format!(" version {v}")).unwrap_or_default())),
                 None if !opts.confirm_addons => {
@@ -58,6 +61,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                     let created = platform.create_addon(&NewAddon { name: a.name.clone(), provider: a.provider.clone(), plan: a.plan.clone(), region: a.region.clone(), version: a.version.clone() }).await?;
                     log(&format!("addon {} : créé ({})", a.name, created.id));
                     state.addon_ids.insert(a.service.clone(), created.id);
+                    state.addon_real_ids.insert(a.service.clone(), created.real_id);
                 }
             }
         }
@@ -137,14 +141,20 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     let ngs = platform.list_ngs().await?;
     for r in &plan.resources {
         let Resource::Membership(m) = r else { continue };
-        let (Some(service), Some(net)) = (m.member.0.strip_prefix("app/"), m.group.0.strip_prefix("ng/")) else { continue };
-        let (Some(app_id), Some(ng_id)) = (state.app_ids.get(service), state.ng_ids.get(net)) else { continue };
-        let already = ngs.iter().find(|n| &n.id == ng_id).is_some_and(|n| n.members.iter().any(|mm| &mm.id == app_id));
+        let Some(net) = m.group.0.strip_prefix("ng/") else { continue };
+        // Une application par son id, un addon par son id réel (kind `addon`).
+        let (service, member_id, kind) = match (m.member.0.strip_prefix("app/"), m.member.0.strip_prefix("addon/")) {
+            (Some(s), _) => (s, state.app_ids.get(s), "application"),
+            (_, Some(s)) => (s, state.addon_real_ids.get(s), "addon"),
+            _ => continue,
+        };
+        let (Some(member_id), Some(ng_id)) = (member_id, state.ng_ids.get(net)) else { continue };
+        let already = ngs.iter().find(|n| &n.id == ng_id).is_some_and(|n| n.members.iter().any(|mm| &mm.id == member_id));
         if already {
             log(&format!("membre {service}@{net} : déjà lié"));
         } else {
-            platform.link_member(ng_id, app_id).await?;
-            log(&format!("membre {service}@{net} : lié"));
+            platform.link_member(ng_id, member_id, kind).await?;
+            log(&format!("membre {service}@{net} : lié ({kind})"));
         }
     }
 
@@ -369,10 +379,13 @@ pub fn resolve(t: &Template, plan: &Plan, app: &App, state: &State, project_dir:
         match seg {
             Segment::Literal(s) => out.push_str(s),
             Segment::Ref(Reference::MemberFqdn { member }) => {
-                let (service, net) = crate::emit::member_parts(plan, &member.0).ok_or_else(|| format!("membre inconnu {}", member.0))?;
-                let app_id = state.app_ids.get(&service).ok_or_else(|| format!("application `{service}` sans id"))?;
+                let (kind, service, net) = crate::emit::member_parts(plan, &member.0).ok_or_else(|| format!("membre inconnu {}", member.0))?;
+                let member_id = match kind {
+                    crate::emit::MemberKind::App => state.app_ids.get(&service).ok_or_else(|| format!("application `{service}` sans id"))?,
+                    crate::emit::MemberKind::Addon => state.addon_real_ids.get(&service).ok_or_else(|| format!("addon `{service}` sans id réel"))?,
+                };
                 let ng_id = state.ng_ids.get(&net).ok_or_else(|| format!("réseau `{net}` sans id"))?;
-                out.push_str(&format!("{app_id}.m.{ng_id}.cc-ng.cloud"));
+                out.push_str(&format!("{member_id}.m.{ng_id}.cc-ng.cloud"));
             }
             Segment::Ref(Reference::AddonEnv { var, .. }) => out.push_str(&format!("${{{var}}}")),
             Segment::Ref(Reference::Secret { name }) => {
