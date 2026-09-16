@@ -218,7 +218,9 @@ export const App = defineComponent({
     const selected = ref(null);
     const busy = ref(false);
     const error = ref('');
-    const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false });
+    const logs = reactive({ lines: [], running: false, title: '', cancel: null, progress: false, tail: false });
+    // Une opération (up, down…) bloque les autres ; un suivi de logs, non.
+    const opRunning = computed(() => logs.running && !logs.tail);
     const opts = reactive({ yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, branches: false });
     const seed = reactive({ service: '', dump: '', local: false, uploading: false });
     const uploadDump = async (e) => {
@@ -297,8 +299,9 @@ export const App = defineComponent({
       await loadPlan();
     };
 
-    const run = (title, starter) => {
-      logs.lines = []; logs.running = true; logs.title = title;
+    const run = (title, starter, tail = false) => {
+      if (logs.running && logs.cancel) logs.cancel();
+      logs.lines = []; logs.running = true; logs.title = title; logs.tail = tail;
       // Une ligne de progression (préfixe \u0001, temps écoulé) remplace la
       // précédente au lieu de s'empiler.
       const ctl = starter((line) => {
@@ -309,8 +312,9 @@ export const App = defineComponent({
         } else { logs.lines.push(line); logs.progress = false; }
       });
       logs.cancel = ctl.cancel;
-      ctl.done.then(() => { logs.lines.push('✔ terminé'); }).catch((e) => { logs.lines.push('erreur : ' + e.message); }).finally(async () => {
+      ctl.done.then(() => { logs.lines.push(tail ? '— fin du flux —' : '✔ terminé'); }).catch((e) => { if (e.name !== 'AbortError') logs.lines.push('erreur : ' + e.message); }).finally(async () => {
         logs.running = false; logs.cancel = null;
+        if (tail) return;
         await refreshPlatform();
         await loadInventory();
         if (current.value?.type === 'local') viewPlatform.value = !!inventory.value;
@@ -323,7 +327,7 @@ export const App = defineComponent({
     const doSeed = () => { dialog.seed = false; run('seed ' + seed.service, (onLog) => api.seed(current.value.id, { service: seed.service, dump: seed.dump, local: seed.local, yes: opts.yes, no_wait: opts.no_wait }, onLog)); };
     const doLogs = (service) => {
       const services = service ? [service] : logQuery.services.split(',').map((s) => s.trim()).filter(Boolean);
-      run('logs ' + current.value.name + (services.length ? ' ' + services.join(' ') : ''), (onLog) => api.logs(current.value.name, { services, since: logQuery.since, follow: logQuery.follow }, onLog));
+      run('logs ' + current.value.name + (services.length ? ' ' + services.join(' ') : ''), (onLog) => api.logs(current.value.name, { services, since: logQuery.since, follow: logQuery.follow }, onLog), true);
     };
     const doExport = async () => {
       busy.value = true;
@@ -354,7 +358,7 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
     });
 
-    return { status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div class="layout">
@@ -399,14 +403,14 @@ export const App = defineComponent({
                 <label class="switch" title="N'attend pas la fin des déploiements"><input type="checkbox" v-model="opts.no_wait"> --no-wait</label>
               </span>
               <cc-button :outlined="true" :waiting="busy" :disabled="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
-              <cc-button :primary="true" :disabled="errors > 0 || logs.running" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
-              <cc-button :outlined="true" :disabled="!plan || logs.running" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
+              <cc-button :primary="true" :disabled="errors > 0 || opRunning" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
+              <cc-button :outlined="true" :disabled="!plan || opRunning" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
               <cc-button :outlined="true" :disabled="errors > 0" title="Terraform (JSON et HCL) et script clever-tools" @cc-click="doExport">Export</cc-button>
             </template>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Logs des applications et addons du projet" @cc-click="doLogs()">Logs</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Arrête les applications sans rien supprimer (comme docker compose stop)" @cc-click="doStop">Stop</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="logs.running" title="Relance les applications arrêtées" @cc-click="doStart">Start</cc-button>
-            <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="logs.running" title="Supprime les applications et network groups ; les addons seulement avec --yes" @cc-click="dialog.down = true">Down</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="opRunning" title="Logs des applications et addons du projet" @cc-click="doLogs()">Logs</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="opRunning" title="Arrête les applications sans rien supprimer (comme docker compose stop)" @cc-click="doStop">Stop</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :outlined="true" :disabled="opRunning" title="Relance les applications arrêtées" @cc-click="doStart">Start</cc-button>
+            <cc-button v-if="onPlatform || current.type === 'platform'" :danger="true" :outlined="true" :disabled="opRunning" title="Supprime les applications et network groups ; les addons seulement avec --yes" @cc-click="dialog.down = true">Down</cc-button>
           </section>
           <p v-if="status" class="status"><cc-loader v-if="busy" a11y-name="en cours"></cc-loader> {{ status }}</p>
           <nav class="tabs">
