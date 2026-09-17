@@ -323,6 +323,15 @@ async fn api_of(s: &State, c: &Client) -> Result<crate::exec::platform::Api, Api
 
 // ---------------------------------------------------------------- plateforme
 
+/// Un nom de projet reçu dans l'URL : la forme des noms Compose
+/// (`normalize_project_name` : minuscules, chiffres, `-`, `_`, première
+/// lettre alphanumérique). Il entre dans des clés S3, des chemins
+/// temporaires et des tags : rien d'autre n'y passe.
+fn project_param(project: &str) -> Result<String, ApiError> {
+    let ok = !project.is_empty() && project.len() <= 128 && project.chars().next().is_some_and(|c| c.is_ascii_alphanumeric() && !c.is_ascii_uppercase()) && project.chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase() || c == '-' || c == '_');
+    if ok { Ok(project.to_string()) } else { Err(bad(format!("`{project}` : nom de projet invalide (minuscules, chiffres, `-`, `_`)"))) }
+}
+
 async fn platform_projects(AxState(s): AxState<Shared>, org: Client) -> Result<Json<J>, ApiError> {
     let api = api_of(&s, &org).await?;
     let projects = crate::exec::inspect::projects(&api).await.map_err(internal)?;
@@ -333,6 +342,7 @@ async fn platform_projects(AxState(s): AxState<Shared>, org: Client) -> Result<J
 /// diagramme : applications (instances, dernier déploiement, domaines),
 /// addons, network groups et leurs membres.
 async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Result<Json<J>, ApiError> {
+    let project = project_param(&project)?;
     let api = api_of(&s, &org).await?;
     let inv = crate::exec::inspect::discover(&project, &api).await.map_err(internal)?;
     let mut apps = Vec::new();
@@ -367,14 +377,16 @@ struct LogsQuery {
     limit: Option<usize>,
 }
 
-async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, Query(q): Query<LogsQuery>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let project = project_param(&project)?;
     let opts = crate::exec::inspect::LogsOptions { services: q.services.map(|v| v.split(',').filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(), since: q.since, follow: q.follow.unwrap_or(false), limit: q.limit };
-    stream_task(s, format!("logs {project}"), move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await })
+    Ok(stream_task(s, format!("logs {project}"), move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await }))
 }
 
 /// `ps` tel que la CLI l'affiche (exécution distante).
-async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, format!("ps {project}"), move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &mut log).await })
+async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let project = project_param(&project)?;
+    Ok(stream_task(s, format!("ps {project}"), move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &mut log).await }))
 }
 
 #[derive(Deserialize, Default)]
@@ -385,23 +397,27 @@ struct DownBody {
     dry_run: bool,
 }
 
-async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, body: Option<Json<DownBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let project = project_param(&project)?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
-    stream_task(s, format!("down {project}"), move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
+    Ok(stream_task(s, format!("down {project}"), move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await }))
 }
 
-async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, format!("stop {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, false, &mut log).await })
+async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let project = project_param(&project)?;
+    Ok(stream_task(s, format!("stop {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, false, &mut log).await }))
 }
 
-async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, format!("start {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await })
+async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let project = project_param(&project)?;
+    Ok(stream_task(s, format!("start {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await }))
 }
 
 /// Manifeste, plan et fichiers texte du bucket d'assets du projet, sous
 /// l'organisation du client (jetons validés, `X-CC-Org`) : le bucket est
 /// celui du serveur, chacun n'y lit que le préfixe de son organisation.
 async fn assets_get(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
+    let project = project_param(&project)?;
     let api = api_of(&s, &c).await?;
     let configured = std::env::var(crate::exec::assets::ENV_BUCKET).is_ok();
     let Some((cellar, manifest)) = crate::exec::assets::open(api.owner(), &project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false, "configured": configured }))) };
@@ -413,13 +429,16 @@ async fn assets_get(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<Strin
 /// Rapatrie le bucket d'un projet dans un répertoire temporaire et
 /// l'enregistre comme projet local.
 async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
+    let project = project_param(&project)?;
     let o = owner(&s, &c).await?;
     let api = api_of(&s, &c).await?;
     let Some((cellar, manifest)) = crate::exec::assets::open(api.owner(), &project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
     let (_plan, files) = crate::exec::assets::fetch(&cellar, api.owner(), &manifest).await.map_err(internal)?;
-    let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-assets-{project}", std::process::id()));
+    // Un répertoire par rapatriement (deux clients, ou deux organisations,
+    // peuvent ouvrir un projet du même nom) ; `project` est validé, la
+    // jointure ne peut pas remplacer la racine.
+    let root = super::local::fresh_temp_dir(&s.locals, &format!("assets-{project}")).map_err(internal)?;
     let dir = root.join(&project);
-    let _ = std::fs::remove_dir_all(&root);
     for (path, bytes) in files {
         let Some(target) = safe_file(&dir, &path).ok() else { continue };
         if let Some(parent) = target.parent() {
@@ -959,6 +978,23 @@ mod tests {
         // Depuis le poste : identifiants du serveur, organisation du serveur ;
         // assets non configurés dans ce test → `present: false`.
         assert_eq!(get(LOOPBACK).await, StatusCode::OK);
+    }
+
+    /// Un nom de projet de l'URL entre dans des clés S3 et des chemins :
+    /// seule la forme Compose passe (percent-décodage d'axum compris).
+    #[tokio::test]
+    async fn project_name_in_url_is_validated() {
+        let (s, _, _d) = state(true);
+        let get = |uri: &'static str| {
+            let s = s.clone();
+            async move { app(&s).oneshot(request("GET", uri, LOOPBACK, &[], false, None)).await.unwrap().status() }
+        };
+        assert_eq!(get("/api/platform/projects/..%2F..%2Fetc/assets").await, StatusCode::BAD_REQUEST);
+        assert_eq!(get("/api/platform/projects/%2Fsrv/assets").await, StatusCode::BAD_REQUEST);
+        assert_eq!(get("/api/platform/projects/Demo/assets").await, StatusCode::BAD_REQUEST);
+        assert_eq!(get("/api/platform/projects/demo-1_a/assets").await, StatusCode::OK);
+        assert!(project_param("").is_err());
+        assert!(project_param("-x").is_err());
     }
 
     /// Anti-CSRF et anti-rebinding : `Host` inconnu, `Origin` étrangère,

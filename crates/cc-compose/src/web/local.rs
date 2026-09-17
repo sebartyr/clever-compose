@@ -62,8 +62,9 @@ impl Locals {
     /// répertoire racine, c'est lui le projet.
     pub fn add_archive(&self, name: &str, bytes: &[u8], owner: Option<&str>) -> Result<String, String> {
         let stem = Path::new(name).file_name().and_then(|s| s.to_str()).unwrap_or("archive").trim_end_matches(".zip").trim_end_matches(".tgz").trim_end_matches(".tar.gz").trim_end_matches(".tar").to_string();
-        let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-{}", std::process::id(), self.next.load(std::sync::atomic::Ordering::SeqCst)));
-        let target = root.join(&stem);
+        let safe_stem: String = stem.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '-' }).collect();
+        let root = fresh_temp_dir(self, "archive")?;
+        let target = root.join(if safe_stem.is_empty() { "archive" } else { safe_stem.as_str() });
         std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
         let lower = name.to_ascii_lowercase();
         if lower.ends_with(".zip") {
@@ -104,19 +105,13 @@ impl Locals {
         let Some(p) = inner.remove(id) else { return false };
         drop(inner);
         if p.temporary {
-            // Le répertoire temporaire est le parent créé par `add_archive`.
-            let mut root = p.dir.clone();
-            while let Some(parent) = root.parent() {
-                if parent.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("clever-compose-ui-")) {
-                    root = parent.to_path_buf();
-                    break;
-                }
-                if parent == std::env::temp_dir() {
-                    break;
-                }
-                root = parent.to_path_buf();
+            // Le répertoire à supprimer est la racine créée par
+            // `fresh_temp_dir` (un ancêtre `clever-compose-ui-…`) ; sans
+            // elle, rien n'est supprimé : jamais de remontée vers `/`.
+            let root = p.dir.ancestors().find(|a| a.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(TEMP_PREFIX)));
+            if let Some(root) = root {
+                let _ = std::fs::remove_dir_all(root);
             }
-            let _ = std::fs::remove_dir_all(root);
         }
         true
     }
@@ -124,6 +119,26 @@ impl Locals {
     pub fn list(&self, owner: Option<&str>) -> Vec<(String, PathBuf, bool)> {
         self.inner.lock().unwrap().values().filter(|p| visible(p, owner)).map(|p| (p.id.clone(), p.dir.clone(), p.temporary)).collect()
     }
+}
+
+const TEMP_PREFIX: &str = "clever-compose-ui-";
+
+/// Un répertoire temporaire neuf, propre à ce serveur et à cette
+/// opération (`clever-compose-ui-<pid>-<n>-<quoi>`), créé en 0700 :
+/// jamais réutilisé, jamais partagé entre deux dépôts.
+pub fn fresh_temp_dir(locals: &Locals, what: &str) -> Result<PathBuf, String> {
+    let n = locals.next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let root = std::env::temp_dir().join(format!("{TEMP_PREFIX}{}-{n}-{what}", std::process::id()));
+    if root.exists() {
+        return Err(format!("{} existe déjà", root.display()));
+    }
+    std::fs::create_dir_all(&root).map_err(|e| format!("{} : {e}", root.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700));
+    }
+    Ok(root)
 }
 
 /// Un chemin d'archive ramené sous `target`, sans sortie possible.
@@ -190,4 +205,31 @@ fn extract_tar<R: Read>(reader: R, target: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Retirer un projet temporaire ne supprime que la racine créée par
+    /// `fresh_temp_dir` ; un répertoire enregistré temporaire sans cette
+    /// racine (jamais le cas en pratique) n'est pas touché, et surtout
+    /// rien au-dessus.
+    #[test]
+    fn remove_only_deletes_our_temp_root() {
+        let locals = Locals::default();
+        let root = fresh_temp_dir(&locals, "test").unwrap();
+        let project = root.join("p");
+        std::fs::create_dir_all(&project).unwrap();
+        let id = locals.add_dir(project.clone(), true, None).unwrap();
+        assert!(locals.remove(&id, None));
+        assert!(!root.exists());
+
+        let foreign = std::env::temp_dir().join(format!("cc-compose-foreign-{}", std::process::id()));
+        std::fs::create_dir_all(&foreign).unwrap();
+        let id = locals.add_dir(foreign.clone(), true, None).unwrap();
+        assert!(locals.remove(&id, None));
+        assert!(foreign.exists(), "un répertoire hors de nos racines n'est pas supprimé");
+        let _ = std::fs::remove_dir_all(&foreign);
+    }
 }

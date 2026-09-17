@@ -561,6 +561,18 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Nom de projet validé, répertoires temporaires neufs (17/09/2026)** :
+  audit #12, S9. `{project}` des routes plateforme entrait tel quel
+  (percent-décodé par axum) dans les clés S3, `temp_dir().join(project)`
+  (un chemin absolu remplace la racine) et les tags ; `Locals::remove`
+  remontait les parents jusqu'à `/` faute de racine reconnue ;
+  `add_archive` nommait sa racine avec `next.load` (deux dépôts
+  simultanés, même répertoire). `project_param` : forme des noms Compose
+  (minuscules, chiffres, `-`, `_`, 128 max), 400 sinon, sur `inventory`,
+  `logs`, `ps`, `down`, `stop`, `start`, `assets`, `assets/open`.
+  `fresh_temp_dir` : `clever-compose-ui-<pid>-<n>-<quoi>` en 0700,
+  compteur atomique, refus si le chemin existe ; `remove` ne supprime que
+  l'ancêtre `clever-compose-ui-…`, sinon rien. Tests.
 - **`seed` web : plan hors du runtime (17/09/2026)** : audit #12, P1.
   `local_seed` construisait `Registry` et appelait `seed_plan` (donc
   `images.resolve` → `block_on` du runtime du registre) dans la tâche
