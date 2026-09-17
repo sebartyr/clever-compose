@@ -64,7 +64,7 @@ fn main() {
 fn build_ui(root: &std::path::Path) {
     let web = root.join("web");
     let dist = web.join("dist");
-    for f in ["src", "index.html", "package.json", "package-lock.json", "vite.config.js"] {
+    for f in ["src", "index.html", "package.json", "package-lock.json", "vite.config.ts", "tsconfig.json"] {
         println!("cargo:rerun-if-changed={}", web.join(f).display());
     }
     println!("cargo:rerun-if-env-changed=CLEVER_COMPOSE_UI_DIST");

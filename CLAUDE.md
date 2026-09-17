@@ -129,10 +129,13 @@ mêmes commits déployés (vérifié en réel).
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons
   valides, l'interface n'affiche que l'écran de connexion ; front Vue 3 + `@clevercloud/components` dans `web/` à la
-  racine, templates en chaînes ; bâti par Vite depuis `build.rs` (feature
-  `ui`, `npm ci` + `npm run build`, `CLEVER_COMPOSE_UI_DIST` pour un
-  build déjà fait) et embarqué en `web/dist` ; plus de mode CDN, décision
-  du 17/09/2026).
+  racine, **SFC TypeScript** (`src/App.vue`, `src/components/*.vue`,
+  `api.ts`, `graph.ts`, `types.ts` pour les formes de l'API ; `cc-*` sont
+  des web components, `isCustomElement` dans `vite.config.ts`) ; bâti par
+  Vite depuis `build.rs` (feature `ui`, `npm ci` + `npm run build` =
+  `vue-tsc --noEmit` puis `vite build`, `CLEVER_COMPOSE_UI_DIST` pour un
+  build déjà fait) et embarqué en `web/dist` ; plus de mode CDN ni de
+  templates en chaînes, décisions du 17/09/2026 ; CSP sans `unsafe-eval`).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
   (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe
   `<propriétaire>/<projet>/` (lecture authentifiée, sous l'organisation du

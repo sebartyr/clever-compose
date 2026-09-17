@@ -561,6 +561,22 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Front en `.vue` et TypeScript (17/09/2026)** : « on peut pas faire du
+  ts et du .vue ? ». `app.js` (620 lignes, quatre composants en templates
+  de chaînes), `diagram.js`, `graph.js`, `api.js`, `main.js` → `App.vue`,
+  `components/{Diagram,SessionPanel,LogPanel,NodeDetail}.vue` (`<script
+  setup lang="ts">`, props et émissions typées), `api.ts` (réponses
+  typées), `graph.ts`, `ansi.ts`, `dom.ts`, `types.ts` (formes de l'API
+  telles que `web/api.rs` les sérialise ; plan et inventaire gardés
+  souples, `Json`), `env.d.ts` (`@clevercloud/components` sans types).
+  `@vitejs/plugin-vue` avec `isCustomElement` pour `cc-*`, `vue-tsc
+  --noEmit` avant `vite build` (TypeScript épinglé en 5.x : `vue-tsc` ne
+  connaît pas encore tsgo 7). Comportement inchangé, transcription un
+  pour un. Gains : templates précompilés donc CSP sans `unsafe-eval` et
+  bundle sans compilateur Vue ; types vérifiés au `cargo build`. Vérifié
+  en Chromium headless jusqu'à la connexion. Un `await emit('scaling')`
+  sans effet dans l'ancien `Detail` (le spinner ne s'affichait jamais)
+  n'a pas été reproduit.
 - **Plus de mode CDN : l'interface est bâtie au `cargo build`
   (17/09/2026)** : « je veux abandonner le mode sans build qui me semble
   inutile et juste embarquer le résultat du build dans le binaire ».

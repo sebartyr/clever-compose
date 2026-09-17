@@ -4,13 +4,14 @@
 //   nodes  : { id, kind: app|task|addon, label, sub, status, data }
 //   groups : { id, label, members: [nodeId] }   (network groups)
 //   edges  : { from, to, kind: depends|link }
+import type { Graph, GraphEdge, GraphGroup, GraphNode, Inventory, NodeStatus, Plan } from './types';
 
-const providerLabel = (p) => ({ 'postgresql-addon': 'PostgreSQL', 'mysql-addon': 'MySQL', 'redis-addon': 'Redis', 'mongodb-addon': 'MongoDB', 'es-addon': 'Elasticsearch', 'config-provider': 'Config' })[p] || p;
+const providerLabel = (p: string): string => ({ 'postgresql-addon': 'PostgreSQL', 'mysql-addon': 'MySQL', 'redis-addon': 'Redis', 'mongodb-addon': 'MongoDB', 'es-addon': 'Elasticsearch', 'config-provider': 'Config' } as Record<string, string>)[p] || p;
 
-export function graphFromPlan(plan) {
-  const nodes = [];
-  const groups = [];
-  const edges = [];
+export function graphFromPlan(plan: Plan): Graph {
+  const nodes: GraphNode[] = [];
+  const groups: GraphGroup[] = [];
+  const edges: GraphEdge[] = [];
   for (const r of plan.resources) {
     if (r.resource === 'app') {
       const image = r.source.type === 'synthetic' ? r.source.image : `build ${r.source.context}`;
@@ -18,7 +19,7 @@ export function graphFromPlan(plan) {
         ? `${r.scaling.min_flavor} ×${r.scaling.min_instances}`
         : `${r.scaling.min_flavor}..${r.scaling.max_flavor} ×${r.scaling.min_instances}..${r.scaling.max_instances}`;
       nodes.push({ id: r.id, kind: r.kind === 'task' ? 'task' : 'app', label: r.service, sub: `${image} · ${scale}${r.run === 'local' ? ' · locale' : ''}`, status: 'planned', data: r });
-      for (const d of r.depends_on) edges.push({ from: d, to: r.id, kind: d.startsWith('addon/') ? 'link' : 'depends' });
+      for (const d of r.depends_on as string[]) edges.push({ from: d, to: r.id, kind: d.startsWith('addon/') ? 'link' : 'depends' });
     } else if (r.resource === 'addon') {
       const engine = r.options?.documentdb ? ' + DocumentDB' : '';
       nodes.push({ id: r.id, kind: 'addon', label: r.service, sub: `${providerLabel(r.provider)}${engine} ${r.version || ''} · ${r.plan}${r.private ? '' : ' · hôte public'}`, status: 'planned', data: r });
@@ -45,15 +46,15 @@ export function graphFromPlan(plan) {
   return { nodes, groups, edges };
 }
 
-export function graphFromInventory(inv) {
-  const nodes = [];
-  const groups = [];
-  const edges = [];
-  const byPlatformId = new Map();
+export function graphFromInventory(inv: Inventory): Graph {
+  const nodes: GraphNode[] = [];
+  const groups: GraphGroup[] = [];
+  const edges: GraphEdge[] = [];
+  const byPlatformId = new Map<string, string>();
   for (const a of inv.apps) {
     const up = a.instances.filter((i) => i.state === 'UP').length;
     const deploying = a.instances.some((i) => i.state !== 'UP');
-    let status = 'stopped';
+    let status: NodeStatus = 'stopped';
     if (a.instances.length && !deploying) status = 'up';
     else if (deploying) status = 'deploying';
     else if (a.last_deployment?.state === 'FAIL' || a.last_deployment?.state === 'CANCELLED') status = 'failed';
@@ -70,25 +71,50 @@ export function graphFromInventory(inv) {
     byPlatformId.set(a.id, id);
   }
   for (const g of inv.network_groups) {
-    groups.push({ id: g.id, label: g.label, members: g.members.map((m) => byPlatformId.get(m.id)).filter(Boolean) });
+    groups.push({ id: g.id, label: g.label, members: g.members.map((m) => byPlatformId.get(m.id)).filter((x): x is string => !!x) });
   }
   return { nodes, groups, edges };
+}
+
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface Box {
+  id: string;
+  label: string;
+  members: string[];
+  kind: 'group' | 'loose';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface Layout {
+  W: number;
+  H: number;
+  boxes: Box[];
+  positions: Map<string, Position>;
+  width: number;
+  height: number;
 }
 
 /** Disposition : chaque network group est une boîte, les nœuds y sont
  * rangés par profondeur de dépendance (colonnes) ; les nœuds hors groupe
  * vont dans une boîte « hors network group ». */
-export function layout(graph) {
+export function layout(graph: Graph): Layout {
   const W = 200;
   const H = 66;
   const GX = 40;
   const GY = 22;
   const PAD = 18;
   const TITLE = 28;
-  const depth = new Map();
-  const deps = (id) => graph.edges.filter((e) => e.to === id).map((e) => e.from);
-  const depthOf = (id, seen = new Set()) => {
-    if (depth.has(id)) return depth.get(id);
+  const depth = new Map<string, number>();
+  const deps = (id: string) => graph.edges.filter((e) => e.to === id).map((e) => e.from);
+  const depthOf = (id: string, seen = new Set<string>()): number => {
+    if (depth.has(id)) return depth.get(id)!;
     if (seen.has(id)) return 0;
     seen.add(id);
     const d = deps(id).reduce((m, f) => Math.max(m, depthOf(f, seen) + 1), 0);
@@ -97,26 +123,26 @@ export function layout(graph) {
   };
   for (const n of graph.nodes) depthOf(n.id);
 
-  const placed = new Map();
-  const boxes = [];
+  const placed = new Map<string, Position>();
+  const boxes: Box[] = [];
   let y = 0;
   const inGroup = new Set(graph.groups.flatMap((g) => g.members));
-  const containers = [...graph.groups.map((g) => ({ id: g.id, label: g.label, members: g.members, kind: 'group' }))];
+  const containers: Omit<Box, 'x' | 'y' | 'width' | 'height'>[] = graph.groups.map((g) => ({ id: g.id, label: g.label, members: g.members, kind: 'group' as const }));
   const loose = graph.nodes.filter((n) => !inGroup.has(n.id)).map((n) => n.id);
   if (loose.length) containers.push({ id: 'loose', label: 'hors network group', members: loose, kind: 'loose' });
   let maxWidth = 0;
   for (const c of containers) {
-    const members = c.members.map((id) => graph.nodes.find((n) => n.id === id)).filter(Boolean);
-    const cols = new Map();
+    const members = c.members.map((id) => graph.nodes.find((n) => n.id === id)).filter((n): n is GraphNode => !!n);
+    const cols = new Map<number, GraphNode[]>();
     for (const n of members) {
       const d = depth.get(n.id) || 0;
       if (!cols.has(d)) cols.set(d, []);
-      cols.get(d).push(n);
+      cols.get(d)!.push(n);
     }
     const colKeys = [...cols.keys()].sort((a, b) => a - b);
     let rows = 0;
     colKeys.forEach((d, ci) => {
-      cols.get(d).forEach((n, ri) => {
+      cols.get(d)!.forEach((n, ri) => {
         placed.set(n.id, { x: PAD + ci * (W + GX), y: y + TITLE + PAD + ri * (H + GY) });
         rows = Math.max(rows, ri + 1);
       });

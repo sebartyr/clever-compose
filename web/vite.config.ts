@@ -1,11 +1,13 @@
 // Build de l'interface : tout est dans `dist/`, embarqué dans le binaire
-// par le `build.rs` de la CLI. Vue avec son compilateur de templates,
-// puisque les composants sont écrits en templates de chaînes.
+// par le `build.rs` de la CLI. Les composants sont des SFC compilés ici :
+// aucun compilateur de templates dans le bundle. Les balises `cc-*` sont
+// des web components (@clevercloud/components), pas des composants Vue.
 import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
   base: './',
-  resolve: { alias: { vue: 'vue/dist/vue.esm-bundler.js' } },
+  plugins: [vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('cc-') } } })],
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022' },
   // Proxy de développement vers `clever-compose api` : le serveur vérifie
   // `Host` et `Origin` (anti-CSRF) ; on lui présente les siens, la page et

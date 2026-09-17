@@ -10,12 +10,11 @@ use axum::response::{IntoResponse, Response};
 #[folder = "../../web/dist/"]
 struct Assets;
 
-/// Politique de sécurité de la page : tout vient de la page elle-même ;
-/// `unsafe-eval` pour le compilateur de templates de Vue (templates en
-/// chaînes, CLAUDE.md §3), `unsafe-inline` pour les styles posés par les
-/// composants ; jamais d'inclusion dans un cadre (les jetons sont dans
-/// l'onglet), aucun formulaire vers ailleurs.
-const CSP: &str = "default-src 'self' data: blob:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+/// Politique de sécurité de la page : tout vient de la page elle-même
+/// (templates Vue précompilés par Vite : aucun `eval`) ; `unsafe-inline`
+/// pour les styles posés par les composants ; jamais d'inclusion dans un
+/// cadre (les jetons sont dans l'onglet), aucun formulaire vers ailleurs.
+const CSP: &str = "default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 /// En-têtes de sécurité des fichiers de l'interface.
 fn secured(mut r: Response) -> Response {

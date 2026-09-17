@@ -214,10 +214,12 @@ revient sur l'origine de l'interface, à condition qu'elle soit listée en
 `--cors`.
 
 Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
-est bâti par Vite au `cargo build` (feature `ui`) et embarqué dans le
+est écrit en composants `.vue` TypeScript et bâti par Vite au `cargo
+build` (feature `ui`, `vue-tsc` vérifie les types) puis embarqué dans le
 binaire, dépendances comprises : rien n'est chargé depuis un CDN à
 l'usage, la page s'ouvre hors ligne. `cd web && npm run dev` sert
-l'interface en développement, avec un proxy vers `clever-compose api`.
+l'interface en développement, avec un proxy vers `clever-compose api` ;
+`npm run typecheck` vérifie les types seuls.
 
 ## Extension `x-clever`
 
