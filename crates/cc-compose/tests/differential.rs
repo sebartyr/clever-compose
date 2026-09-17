@@ -70,7 +70,7 @@ fn unescape_dollars(v: J) -> J {
 }
 
 fn ours(dir: &Path) -> Result<J, String> {
-    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
+    let opts = Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine: false };
     let mut diags = Diagnostics::default();
     let project = load(&opts, &mut diags);
     let rendered = diags.render_all().join("\n");

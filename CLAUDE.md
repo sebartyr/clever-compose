@@ -115,7 +115,9 @@ mêmes commits déployés (vérifié en réel).
   (`Client::from_host` : pair loopback, sans en-tête de proxy ; un reverse
   proxy vers loopback ne les reçoit pas) ; middleware `same_site`
   (anti-CSRF/rebinding : `Host` admis, `Origin`/`Sec-Fetch-Site` sur les
-  méthodes mutantes) ; projets locaux
+  méthodes mutantes) ; un projet **déposé** (archive, assets rapatriés,
+  client à jetons) est chargé avec `confine: true` : aucun fichier hors de
+  son répertoire (`env_file`, `secrets`, `include`, bind, `~`…) ; projets locaux
   par propriétaire (`Locals`, id Clever Cloud), répertoire du poste et
   **exécution locale des tâches** (`run: local`, `seed --local`)
   réservés à l'usage local : `--local-exec auto|on|off` (`auto` : refusée
@@ -243,7 +245,9 @@ utilisable en local.
 `addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,
 `network-groups-unspecified`, `network-groups-merged`, `service-unreachable`,
 `proxy-resolver`, `port-assumed-http`, `redirection-tcp-multiple`,
-`replicas-fixed`, `resources-capped`, `terraform-task`, `terraform-udp`.
+`replicas-fixed`, `resources-capped`, `terraform-task`, `terraform-udp`,
+`path-outside-project` (projet déposé sur un serveur : `Options::confine`,
+aucun fichier lu hors de son répertoire, `tests/confine.rs`).
 
 ---
 

@@ -20,6 +20,9 @@ pub struct Config {
     pub working_dir: PathBuf,
     pub files: Vec<PathBuf>,
     pub env: Vars,
+    /// Racine sous laquelle tout fichier lu doit rester (projet déposé),
+    /// voir `paths::check_confined`.
+    pub confine: Option<PathBuf>,
 }
 
 pub struct Loader<'a> {
@@ -44,12 +47,18 @@ impl<'a> Loader<'a> {
             dict = self.load_file(file, config, dict, included, &mut Vec::new())?;
         }
         let dict = transform::set_defaults(dict)?;
-        paths::resolve(dict, &config.working_dir)
+        paths::resolve(dict, &config.working_dir, config.confine.as_deref())
+    }
+
+    /// Un fichier lu par le chargeur (compose, include, extends, env) doit
+    /// rester sous la racine d'un projet déposé.
+    fn confined(config: &Config, file: &FsPath, p: &Path, span: super::node::Span) -> LoadResult<()> {
+        paths::check_confined(&file.to_string_lossy(), config.confine.as_deref(), p, span)
     }
 
     /// `loadYamlFile` : un fichier fusionné dans `dict`.
     fn load_file(&mut self, file: &FsPath, config: &Config, dict: Node, included: &[PathBuf], tracker: &mut Vec<(PathBuf, String)>) -> LoadResult<Node> {
-        let (cfg, _) = self.read_and_interpolate(file, &config.env)?;
+        let (cfg, _) = self.read_and_interpolate(file, config)?;
         let mut cfg = cfg;
         let resets = ResetPaths::collect(&mut cfg);
 
@@ -69,7 +78,9 @@ impl<'a> Loader<'a> {
         merge::enforce_unicity(merged)
     }
 
-    fn read_and_interpolate(&mut self, file: &FsPath, env: &Vars) -> LoadResult<(Node, usize)> {
+    fn read_and_interpolate(&mut self, file: &FsPath, config: &Config) -> LoadResult<(Node, usize)> {
+        let env = &config.env;
+        Self::confined(config, file, &Path::root(), Default::default())?;
         let display = file.strip_prefix(&self.root).unwrap_or(file).display().to_string();
         let idx = self.files.add(display.clone());
         let source = std::fs::read_to_string(file).map_err(|e| Diagnostic::error("file-unreadable", format!("{display} : {e}")))?;
@@ -138,6 +149,7 @@ impl<'a> Loader<'a> {
             let mut env = config.env.clone();
             let mut from_files = Vars::new();
             for f in &env_files {
+                Self::confined(config, f, &p, span)?;
                 let content = std::fs::read_to_string(f).map_err(|e| Diagnostic::error("env-file-unreadable", format!("{} : {e}", f.display())).at(&p, span))?;
                 let lookup = |k: &str| env.get(k).cloned();
                 dotenv::parse(&content, &mut from_files, &lookup).map_err(|e| Diagnostic::error("env-file-invalid", format!("{} : {e}", f.display())).at(&p, span))?;
@@ -145,7 +157,7 @@ impl<'a> Loader<'a> {
             for (k, v) in from_files {
                 env.entry(k).or_insert(v);
             }
-            let sub = Config { working_dir: project_directory, files: abs, env };
+            let sub = Config { working_dir: project_directory, files: abs, env, confine: config.confine.clone() };
             let imported = self.load_model(&sub, included)?;
             import_resources(imported, model)?;
         }
@@ -243,14 +255,14 @@ impl<'a> Loader<'a> {
             // Comme `loadYamlFile` avec include, extends, validation et
             // défauts sautés : canonicalisation, OmitEmpty, unicité, puis
             // chemins relatifs au répertoire du fichier de base.
-            let (mut node, _) = self.read_and_interpolate(abs, &config.env)?;
+            let (mut node, _) = self.read_and_interpolate(abs, config)?;
             let _ = ResetPaths::collect(&mut node);
             let node = merge::enforce_unicity(node)?;
             let node = transform::canonical(node)?;
             let node = transform::omit_empty(node);
             let node = merge::enforce_unicity(node)?;
             let wd = abs.parent().map(FsPath::to_path_buf).unwrap_or_else(|| config.working_dir.clone());
-            let node = paths::resolve(node, &wd)?;
+            let node = paths::resolve(node, &wd, config.confine.as_deref())?;
             let Some(services) = node.as_map().and_then(|m| m.get("services")).and_then(Node::as_map).cloned() else {
                 return Err(Diagnostic::error("extends-no-services", format!("impossible d'étendre le service `{name}` dans {} : pas de section services", abs.display())).at(p, span));
             };

@@ -561,6 +561,23 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Projet déposé confiné à son répertoire (17/09/2026)** : audit #12,
+  S2. `compose/paths.rs` résolvait `~` et laissait passer les chemins
+  absolus (comportement Compose) : depuis une archive envoyée à un
+  serveur, `env_file: /proc/self/environ` ou `secrets.file:
+  ~/.config/clever-cloud/clever-compose.json` revenaient dans
+  `GET /api/local/{id}/plan`. `Options::confine` → `Config::confine`
+  (racine) → `paths::check_confined` sur chaque chemin résolu
+  (`build.context`/`dockerfile`/`additional_contexts`/`ssh`,
+  `configs.file`, `secrets.file`, `env_file`, `label_file`, `include.*`,
+  `develop.watch`, `extends.file`, bind `source`, volume `device`) et sur
+  chaque fichier lu par le chargeur (compose, include, extends, env) ;
+  diagnostic `path-outside-project` avec chemin et position. Vérification
+  lexicale plus canonique (liens). Côté web, `Locals::get` dit si un
+  projet est déposé (temporaire ou à propriétaire) : `compute` et
+  `project_name` confinent alors ; un répertoire du poste ouvert en local
+  et la CLI restent libres. `tests/confine.rs` : neuf clés, `~`, et un
+  projet sain.
 - **Requête du poste, anti-CSRF et anti-rebinding (17/09/2026)** : audit
   #12, S5. Le prêt des identifiants du serveur reposait sur « écoute
   loopback » seul (un reverse proxy vers `127.0.0.1` les prêtait à tous)

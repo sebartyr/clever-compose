@@ -25,6 +25,9 @@ pub struct Options {
     pub env_files: Vec<PathBuf>,
     /// Profils actifs (`--profile`, `COMPOSE_PROFILES`).
     pub profiles: Vec<String>,
+    /// Projet déposé (archive envoyée à un serveur, assets rapatriés) :
+    /// aucun fichier lu hors de `project_dir` (`path-outside-project`).
+    pub confine: bool,
 }
 
 pub struct Project {
@@ -63,7 +66,7 @@ fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic,
         opts.profiles.clone()
     };
 
-    let config = Config { working_dir: working_dir.clone(), files: paths, env: env.clone() };
+    let config = Config { working_dir: working_dir.clone(), files: paths, env: env.clone(), confine: opts.confine.then(|| working_dir.clone()) };
     let tree = {
         let mut loader = Loader::new(&mut files, working_dir.clone());
         loader.load_model(&config, &[])

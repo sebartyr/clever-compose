@@ -465,7 +465,7 @@ where
 
 async fn local_list(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {
     let o = owner(&s, &c).await?;
-    let list: Vec<J> = s.locals.list(o.as_deref()).into_iter().map(|(id, dir, temporary)| json!({ "id": id, "dir": dir, "temporary": temporary, "name": project_name(&dir) })).collect();
+    let list: Vec<J> = s.locals.list(o.as_deref()).into_iter().map(|(id, dir, temporary)| json!({ "id": id, "dir": dir, "temporary": temporary, "name": project_name(&dir, temporary || o.is_some()) })).collect();
     Ok(Json(json!({ "projects": list })))
 }
 
@@ -519,13 +519,15 @@ pub fn local_execution_allowed(s: &State, c: &Client) -> bool {
 
 const LOCAL_EXECUTION_REFUSED: &str = "exécution locale réservée au poste : sur ce serveur, laissez la plateforme exécuter la tâche (retirez `x-clever.init: local`, ou décochez « exécuter depuis ce poste »)";
 
-async fn project_dir(s: &State, id: &str, c: &Client) -> Result<PathBuf, ApiError> {
+/// Un projet local visible du client : son répertoire, et s'il est
+/// déposé (fichiers confinés au répertoire, `Options::confine`).
+async fn project_dir(s: &State, id: &str, c: &Client) -> Result<(PathBuf, bool), ApiError> {
     let o = owner(s, c).await?;
     s.locals.get(id, o.as_deref()).ok_or_else(|| ApiError(StatusCode::NOT_FOUND, format!("projet local `{id}` inconnu")))
 }
 
-fn project_name(dir: &Path) -> String {
-    let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
+fn project_name(dir: &Path, confine: bool) -> String {
+    let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine };
     let mut diags = Diagnostics::default();
     match crate::compose::project::load(&opts, &mut diags) {
         Some(p) => p.name,
@@ -566,8 +568,8 @@ fn text_files(dir: &Path) -> Vec<String> {
 }
 
 async fn local_files(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
-    Ok(Json(json!({ "id": id, "dir": dir, "name": project_name(&dir), "files": text_files(&dir) })))
+    let (dir, confine) = project_dir(&s, &id, &c).await?;
+    Ok(Json(json!({ "id": id, "dir": dir, "name": project_name(&dir, confine), "files": text_files(&dir) })))
 }
 
 #[derive(Deserialize)]
@@ -584,7 +586,7 @@ fn safe_file(dir: &Path, rel: &str) -> Result<PathBuf, ApiError> {
 }
 
 async fn local_file_get(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Query(q): Query<FileQuery>) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, _) = project_dir(&s, &id, &c).await?;
     let path = safe_file(&dir, &q.path)?;
     let content = std::fs::read_to_string(&path).map_err(|e| bad(format!("{} : {e}", q.path)))?;
     Ok(Json(json!({ "path": q.path, "content": content })))
@@ -597,7 +599,7 @@ struct FileBody {
 }
 
 async fn local_file_put(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Json(b): Json<FileBody>) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, _) = project_dir(&s, &id, &c).await?;
     let path = safe_file(&dir, &b.path)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| internal(e.to_string()))?;
@@ -613,9 +615,9 @@ struct PlanQuery {
 }
 
 /// Plan et diagnostics d'un projet local, en JSON structuré.
-fn compute(dir: &Path, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBuf), String> {
+fn compute(dir: &Path, confine: bool, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBuf), String> {
     let resolver = crate::plan::registry::Registry::new()?;
-    let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() };
+    let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine };
     let project_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let popts = crate::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
     let mut diags = Diagnostics::default();
@@ -640,8 +642,8 @@ fn compute(dir: &Path, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBu
 }
 
 async fn local_plan(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Query(q): Query<PlanQuery>) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
-    let (plan, diags, _) = tokio::task::spawn_blocking(move || compute(&dir, q.allow_ephemeral)).await.map_err(|e| internal(e.to_string()))?.map_err(internal)?;
+    let (dir, confine) = project_dir(&s, &id, &c).await?;
+    let (plan, diags, _) = tokio::task::spawn_blocking(move || compute(&dir, confine, q.allow_ephemeral)).await.map_err(|e| internal(e.to_string()))?.map_err(internal)?;
     Ok(Json(json!({ "plan": plan, "diagnostics": diags })))
 }
 
@@ -661,10 +663,10 @@ struct UpBody {
 
 async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let local_ok = local_execution_allowed(&s, &org);
-    let dir = project_dir(&s, &id, &org).await?;
+    let (dir, confine) = project_dir(&s, &id, &org).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
-        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
+        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, confine, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
         for d in diags.as_array().into_iter().flatten() {
             log(&format!("{}{}", if d["severity"] == "error" { "erreur : " } else { "" }, d["rendered"].as_str().unwrap_or("")));
         }
@@ -697,11 +699,11 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
     if b.local && !local_execution_allowed(&s, &org) {
         return Err(ApiError(StatusCode::FORBIDDEN, LOCAL_EXECUTION_REFUSED.into()));
     }
-    let dir = project_dir(&s, &id, &org).await?;
+    let (dir, confine) = project_dir(&s, &id, &org).await?;
     let dump = safe_file(&dir, &b.dump)?;
     Ok(stream_task(s, format!("seed {id} --service {}", b.service), move |state, mut log| async move {
         let d2 = dir.clone();
-        let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, false)).await.map_err(|e| e.to_string())??;
+        let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
         let resolver = crate::plan::registry::Registry::new()?;
         let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
@@ -714,7 +716,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
 /// (`.clever-compose/seed/<nom>`), puisque `seed` attend un fichier du
 /// projet ; renvoie son chemin relatif.
 async fn local_seed_upload(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, mut multipart: Multipart) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, _) = project_dir(&s, &id, &c).await?;
     let Some(field) = multipart.next_field().await.map_err(|e| bad(e.to_string()))? else { return Err(bad("aucun fichier reçu")) };
     let name = field.file_name().map(str::to_string).unwrap_or_else(|| "dump".into());
     let name = Path::new(&name).file_name().and_then(|n| n.to_str()).unwrap_or("dump").to_string();
@@ -749,7 +751,7 @@ fn main_compose(dir: &Path) -> Option<PathBuf> {
 /// Pose la scalabilité d'un service dans `x-clever` du compose, sans
 /// toucher au reste du fichier ; la CLI et `up` la reprennent ensuite.
 async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Json(b): Json<ScalingBody>) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, _) = project_dir(&s, &id, &c).await?;
     let path = main_compose(&dir).ok_or_else(|| bad("aucun fichier compose dans le projet"))?;
     let text = std::fs::read_to_string(&path).map_err(|e| internal(e.to_string()))?;
     let d = crate::plan::flavors::docker();
@@ -780,9 +782,9 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
 
 /// Pousse les assets du projet dans le bucket configuré, sans `up`.
 async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, confine) = project_dir(&s, &id, &c).await?;
     Ok(stream_task(s, format!("assets {id}"), move |_state, mut log| async move {
-        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, false)).await.map_err(|e| e.to_string())??;
+        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
         crate::exec::assets::sync(&plan, &project_dir, &opts, &mut log).await
@@ -799,10 +801,10 @@ struct ExportBody {
 
 /// Export Terraform + script, renvoyé en fichiers (contenu texte).
 async fn local_export(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, body: Option<Json<ExportBody>>) -> Result<Json<J>, ApiError> {
-    let dir = project_dir(&s, &id, &c).await?;
+    let (dir, confine) = project_dir(&s, &id, &c).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     let result = tokio::task::spawn_blocking(move || -> Result<J, String> {
-        let (plan, diags, project_dir) = compute(&dir, b.allow_ephemeral)?;
+        let (plan, diags, project_dir) = compute(&dir, confine, b.allow_ephemeral)?;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let out = std::env::temp_dir().join(format!("clever-compose-export-{}-{}", std::process::id(), plan.spec_hash));
         let _ = std::fs::remove_dir_all(&out);

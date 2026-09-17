@@ -37,7 +37,7 @@ fn corpus_plans_match_golden_files() {
         let fixture = fixture_from_file(&dir.join("images.json")).unwrap();
         let topts: PlanTestOptions = std::fs::read_to_string(dir.join("plan-options.json")).ok().map(|s| serde_json::from_str(&s).unwrap()).unwrap_or_default();
         let opts = PlanOptions {
-            project: Options { project_dir: dir.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new() },
+            project: Options { project_dir: dir.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine: false },
             allow_ephemeral: topts.allow_ephemeral,
             private_registries: Some(topts.private_registries.clone()),
         };

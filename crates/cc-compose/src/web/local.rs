@@ -89,9 +89,11 @@ impl Locals {
         self.add_dir(dir, true, owner)
     }
 
-    /// Le répertoire d'un projet, s'il est visible de `owner`.
-    pub fn get(&self, id: &str, owner: Option<&str>) -> Option<PathBuf> {
-        self.inner.lock().unwrap().get(id).filter(|p| visible(p, owner)).map(|p| p.dir.clone())
+    /// Le répertoire d'un projet, s'il est visible de `owner`, et s'il
+    /// est **déposé** (archive, assets rapatriés, ou envoyé par un client
+    /// à jetons) : ses fichiers sont alors confinés à son répertoire.
+    pub fn get(&self, id: &str, owner: Option<&str>) -> Option<(PathBuf, bool)> {
+        self.inner.lock().unwrap().get(id).filter(|p| visible(p, owner)).map(|p| (p.dir.clone(), p.temporary || p.owner.is_some()))
     }
 
     pub fn remove(&self, id: &str, owner: Option<&str>) -> bool {

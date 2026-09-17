@@ -161,6 +161,13 @@ n'existe qu'en usage local). Les jetons ne sortent pas de l'onglet et
 n'autorisent que ce que l'utilisateur peut déjà faire sur ses
 organisations.
 
+Un projet déposé (archive envoyée, assets rapatriés, ou envoyé par un
+client à jetons) ne peut lire que ses propres fichiers : un `env_file`,
+un `secrets.file`, un `include`, un bind ou un `~` qui sortent de son
+répertoire sont refusés (`path-outside-project`). La CLI, et un
+répertoire du poste ouvert en usage local, gardent le comportement
+Compose.
+
 Contre le CSRF et le DNS rebinding, `/api/*` vérifie `Host` (en écoute
 locale ou avec `--public-url` : l'adresse d'écoute, `localhost`, l'hôte de
 `--public-url` et ceux de `--cors`, sinon 421) et, sur `POST`/`PUT`/`DELETE`,

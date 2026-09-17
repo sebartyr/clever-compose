@@ -301,7 +301,7 @@ fn main() -> ExitCode {
 
 impl ProjectArgs {
     fn to_options(&self) -> compose::project::Options {
-        let mut opts = compose::project::Options { project_dir: self.project_directory.clone().unwrap_or_else(|| PathBuf::from(".")), files: self.files.clone(), project_name: self.project_name.clone(), env_files: self.env_file.clone(), profiles: self.profile.clone() };
+        let mut opts = compose::project::Options { project_dir: self.project_directory.clone().unwrap_or_else(|| PathBuf::from(".")), files: self.files.clone(), project_name: self.project_name.clone(), env_files: self.env_file.clone(), profiles: self.profile.clone(), confine: false };
         // Comme docker compose : sans --project-directory, le répertoire du
         // premier -f est celui du projet.
         if self.project_directory.is_none() {
