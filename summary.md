@@ -561,6 +561,18 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Shim : DNS amont connecté, table UDP bornée ; fichiers sensibles
+  créés avec leur mode (17/09/2026)** : audit #12, S11 et S12. Le stub
+  DNS liait un socket sur `0.0.0.0:0` sans `connect` et prenait le
+  premier datagramme reçu : en `--net host`, un pair pouvait injecter une
+  réponse. Socket connecté à l'amont (le noyau écarte les autres
+  sources), réponse acceptée seulement avec l'id de transaction de la
+  question, autres ids ignorés jusqu'au délai. Relais UDP : au plus 4096
+  sources suivies, expiration à 60 s. `secrets::materialize` et
+  `auth::save` ouvrent le fichier avec son mode final (`OpenOptionsExt`)
+  au lieu d'écrire puis `chmod`. `Mutex::lock().unwrap()` du serveur →
+  `unwrap_or_else(|e| e.into_inner())` : une panique sous verrou ne
+  condamne plus les requêtes suivantes.
 - **En-têtes de sécurité, clé comparée en temps constant (17/09/2026)** :
   audit #12, S10. Fichiers de l'interface servis avec
   `Content-Security-Policy` (page et, hors `ui-bundled`, esm.sh et

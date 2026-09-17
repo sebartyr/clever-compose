@@ -86,7 +86,20 @@ pub fn save(s: &Stored) -> Result<PathBuf, String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("{} : {e}", parent.display()))?;
     }
     let text = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| format!("{} : {e}", path.display()))?;
+    // Créé en 0600 dès l'ouverture (jamais lisible par d'autres, même un
+    // instant), puis mode imposé si le fichier existait déjà.
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    {
+        use std::io::Write;
+        let mut f = opts.open(&path).map_err(|e| format!("{} : {e}", path.display()))?;
+        f.write_all(text.as_bytes()).map_err(|e| format!("{} : {e}", path.display()))?;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

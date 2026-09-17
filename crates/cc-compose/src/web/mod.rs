@@ -261,7 +261,7 @@ impl State {
             };
         };
         let key = t.key();
-        if let Some(v) = self.validated.lock().unwrap().get(&key) {
+        if let Some(v) = self.validated.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
             if v.at.elapsed() < VALIDATION_TTL {
                 return Ok((v.api.clone(), v.email.clone()));
             }
@@ -279,7 +279,7 @@ impl State {
             }
         };
         slog(&format!("jetons validés : {} (cache {} s)", email.as_deref().unwrap_or("utilisateur sans email"), VALIDATION_TTL.as_secs()));
-        let mut cache = self.validated.lock().unwrap();
+        let mut cache = self.validated.lock().unwrap_or_else(|e| e.into_inner());
         cache.retain(|_, v| v.at.elapsed() < VALIDATION_TTL);
         cache.insert(key, Validated { api: api.clone(), user, email: email.clone(), at: std::time::Instant::now() });
         Ok((api, email))
@@ -293,7 +293,7 @@ impl State {
             return self.api_for(c).await.map(|_| None);
         };
         self.api_for(c).await?;
-        Ok(self.validated.lock().unwrap().get(&t.key()).and_then(|v| v.user.clone()))
+        Ok(self.validated.lock().unwrap_or_else(|e| e.into_inner()).get(&t.key()).and_then(|v| v.user.clone()))
     }
 }
 

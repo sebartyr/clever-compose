@@ -48,7 +48,7 @@ impl Locals {
         if !temporary && !["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].iter().any(|f| dir.join(f).is_file()) {
             return Err(format!("{} : aucun compose.yaml / docker-compose.yml", dir.display()));
         }
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(p) = inner.values().find(|p| p.dir == dir && visible(p, owner)) {
             return Ok(p.id.clone());
         }
@@ -96,11 +96,11 @@ impl Locals {
     /// est **déposé** (archive, assets rapatriés, ou envoyé par un client
     /// à jetons) : ses fichiers sont alors confinés à son répertoire.
     pub fn get(&self, id: &str, owner: Option<&str>) -> Option<(PathBuf, bool)> {
-        self.inner.lock().unwrap().get(id).filter(|p| visible(p, owner)).map(|p| (p.dir.clone(), p.temporary || p.owner.is_some()))
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).get(id).filter(|p| visible(p, owner)).map(|p| (p.dir.clone(), p.temporary || p.owner.is_some()))
     }
 
     pub fn remove(&self, id: &str, owner: Option<&str>) -> bool {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if !inner.get(id).is_some_and(|p| visible(p, owner)) {
             return false;
         }
@@ -119,7 +119,7 @@ impl Locals {
     }
 
     pub fn list(&self, owner: Option<&str>) -> Vec<(String, PathBuf, bool)> {
-        self.inner.lock().unwrap().values().filter(|p| visible(p, owner)).map(|p| (p.id.clone(), p.dir.clone(), p.temporary)).collect()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|p| visible(p, owner)).map(|p| (p.id.clone(), p.dir.clone(), p.temporary)).collect()
     }
 }
 

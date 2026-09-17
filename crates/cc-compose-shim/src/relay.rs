@@ -94,9 +94,16 @@ pub async fn serve_tcp(relay: TcpRelay) {
     }
 }
 
+/// Sources UDP suivies au plus : 4040 est public, des sources forgées ne
+/// doivent pas épuiser sockets et mémoire. Au-delà, les nouvelles sources
+/// sont ignorées jusqu'à expiration d'entrées.
+const UDP_MAX_SOURCES: usize = 4096;
+/// Une source sans trafic retour depuis ce délai est oubliée.
+const UDP_IDLE: Duration = Duration::from_secs(60);
+
 /// Redirection UDP : chaque source distante reçoit son propre socket vers la
 /// cible, pour que les réponses reviennent à la bonne source. Une entrée
-/// inactive depuis deux minutes est fermée.
+/// inactive depuis [`UDP_IDLE`] est fermée ; au plus [`UDP_MAX_SOURCES`].
 pub async fn serve_udp(relay: UdpRelay) {
     let target = local(relay.target_port);
     let listen = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PLATFORM_TCP_PORT));
@@ -123,6 +130,9 @@ pub async fn serve_udp(relay: UdpRelay) {
             match t.get(&from) {
                 Some(s) => s.clone(),
                 None => {
+                    if t.len() >= UDP_MAX_SOURCES {
+                        continue;
+                    }
                     let Ok(s) = UdpSocket::bind("127.0.0.1:0").await else { continue };
                     if s.connect(target).await.is_err() {
                         continue;
@@ -133,8 +143,8 @@ pub async fn serve_udp(relay: UdpRelay) {
                     let (inbound, table, s2) = (inbound.clone(), table.clone(), s.clone());
                     tokio::spawn(async move {
                         let mut rbuf = vec![0u8; 65535];
-                        // Réponses vers le client d'origine, jusqu'à 2 min sans trafic.
-                        while let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(120), s2.recv(&mut rbuf)).await {
+                        // Réponses vers le client d'origine, jusqu'à UDP_IDLE sans trafic.
+                        while let Ok(Ok(n)) = tokio::time::timeout(UDP_IDLE, s2.recv(&mut rbuf)).await {
                             let _ = inbound.send_to(&rbuf[..n], from).await;
                         }
                         table.lock().await.remove(&from);

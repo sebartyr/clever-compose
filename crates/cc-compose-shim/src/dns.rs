@@ -113,16 +113,27 @@ pub async fn start() -> Result<(), String> {
 }
 
 impl Stub {
+    /// Relaie la question à l'amont : socket **connecté** à l'amont (le
+    /// noyau écarte les datagrammes d'une autre source ; en `--net host`
+    /// le port éphémère est joignable par les pairs du network group) et
+    /// réponse acceptée seulement avec l'id de transaction de la question.
     async fn forward(&self, data: &[u8]) -> Option<Vec<u8>> {
+        let id = data.get(..2).map(|b| [b[0], b[1]])?;
         for up in &self.upstream {
-            let Ok(sock) = UdpSocket::bind("0.0.0.0:0").await else { continue };
-            if sock.send_to(data, up).await.is_err() {
+            let bind: &str = if up.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+            let Ok(sock) = UdpSocket::bind(bind).await else { continue };
+            if sock.connect(up).await.is_err() || sock.send(data).await.is_err() {
                 continue;
             }
             let mut buf = vec![0u8; 4096];
-            match tokio::time::timeout(Duration::from_secs(3), sock.recv_from(&mut buf)).await {
-                Ok(Ok((n, _))) => return Some(buf[..n].to_vec()),
-                _ => continue,
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+            loop {
+                match tokio::time::timeout_at(deadline, sock.recv(&mut buf)).await {
+                    Ok(Ok(n)) if n >= 2 && buf[..2] == id => return Some(buf[..n].to_vec()),
+                    // Autre id : réponse étrangère ou tardive, on attend la nôtre.
+                    Ok(Ok(_)) => continue,
+                    _ => break,
+                }
             }
         }
         None
