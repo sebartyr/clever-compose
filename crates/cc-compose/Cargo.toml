@@ -16,7 +16,10 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22"
-getrandom = "0.3"
+getrandom = { version = "0.3", optional = true }
+# La même version que celle d'oauth10a (client signé du SDK), avec
+# `multipart` pour l'envoi d'un projet à un serveur distant (`remote.rs`).
+reqwest = { version = "0.12", default-features = false, features = ["multipart", "json", "rustls-tls-webpki-roots"] }
 cc-compose-model.workspace = true
 clevercloud-sdk = "1.0.1"
 git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
@@ -32,21 +35,29 @@ sha2.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net"] }
 clap = { version = "4", features = ["derive", "wrap_help", "env"] }
-axum = { version = "0.8", features = ["json", "multipart"] }
-tokio-stream = "0.1"
-rust-embed = { version = "8", features = ["include-exclude"] }
-mime_guess = "2"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+axum = { version = "0.8", features = ["json", "multipart"], optional = true }
+tokio-stream = { version = "0.1", optional = true }
+rust-embed = { version = "8", features = ["include-exclude"], optional = true }
+mime_guess = { version = "2", optional = true }
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
 tar = "0.4"
 flate2 = "1"
 rusty-s3 = "0.10"
 quick-xml = "0.37"
 
+# Trois binaires possibles :
+#   cargo build --release                                   CLI + API + interface
+#   cargo build --release --no-default-features --features api   CLI + API (interface servie ailleurs)
+#   cargo build --release --no-default-features             CLI seule (exécution locale ou distante par --api-url)
 [features]
-default = []
-# Interface web empaquetée par Vite (`web/dist`, `npm run build`) ; sinon la
-# page charge Vue et @clevercloud/components depuis esm.sh à l'usage.
-ui-bundled = []
+default = ["ui"]
+# Serveur HTTP : commande `api`, routes JSON/SSE.
+api = ["dep:axum", "dep:tokio-stream", "dep:zip", "dep:getrandom"]
+# Interface embarquée (sources ESM + CDN) : commande `ui`.
+ui = ["api", "dep:rust-embed", "dep:mime_guess"]
+# Interface empaquetée par Vite (`web/dist`, `npm run build`) au lieu des
+# sources + CDN.
+ui-bundled = ["ui"]
 
 [dev-dependencies]
 pretty_assertions = "1"

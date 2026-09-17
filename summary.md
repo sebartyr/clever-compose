@@ -394,6 +394,26 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Trois binaires et exécution distante (17/09/2026)** : demandes « un
+  binaire uniquement CLI, un uniquement API et un UI+API » et « indiquer
+  une URL d'API à la CLI pour de l'exécution distante ». Features cargo
+  `api` (axum, tokio-stream, zip, getrandom optionnels) < `ui` (rust-embed,
+  mime_guess) < `ui-bundled`, défaut `ui` ; `web` et les commandes `ui`/`api`
+  sous `cfg`. `remote.rs` : client reqwest (même 0.12 qu'oauth10a, feature
+  `multipart`) ; `--api-url`/`--api-key` globaux (`CC_API_URL`/`CC_API_KEY`) ;
+  up/seed/export envoient le projet en tar.gz (exclusions `.git`,
+  `node_modules`, `target`, `.terraform`, fichiers > 64 Mio), lisent le SSE
+  et retirent le projet temporaire ; down/stop/start/ps/logs visent le
+  projet par son nom (calculé comme en local) ; `ps` gagne une route SSE.
+  Organisation par requête (`X-CC-Org`, extracteur `ReqOrg`, `api_of(s,
+  org)`) : la session du serveur est partagée, l'en-tête évite qu'un client
+  change l'organisation des autres. Clé d'API (`--api-key`, middleware
+  `require_key`, exemptions `/api/info`, callback OAuth, `OPTIONS`) ;
+  l'interface la demande une fois par onglet (sessionStorage) quand
+  `/api/info` la déclare requise. Vérifié en local : 401 sans clé, export
+  distant écrit `main.tf` et `bootstrap.sh`, `up --dry-run` distant passe
+  par le serveur jusqu'à la plateforme, projet temporaire retiré ; les
+  trois variantes compilent, clippy strict sur chacune.
 - **Consumer de repli et connexion obligatoire (17/09/2026)** : demandes
   « renseigner des consumers en var d'env, fallback sur ceux de la CLI
   clever qui peuvent être écrits en dur » et « si la danse OAuth est

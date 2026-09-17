@@ -14,8 +14,23 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 struct Cli {
     #[command(flatten)]
     project: ProjectArgs,
+    #[command(flatten)]
+    remote: RemoteArgs,
     #[command(subcommand)]
     command: Command,
+}
+
+/// Exécution distante : les commandes plateforme passent par un serveur
+/// `clever-compose api`, avec ses identifiants.
+#[derive(Args, Clone)]
+#[command(next_help_heading = "Exécution distante")]
+struct RemoteArgs {
+    /// URL d'un serveur `clever-compose api` ; up, seed, down, stop, start, ps, logs, export et orgs s'y exécutent (plan et config restent locaux)
+    #[arg(long, global = true, env = "CC_API_URL", value_name = "URL")]
+    api_url: Option<String>,
+    /// Clé exigée par ce serveur (son --api-key)
+    #[arg(long, global = true, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
+    api_key: Option<String>,
 }
 
 /// Options de lecture du compose, comme `docker compose`.
@@ -182,6 +197,7 @@ enum Command {
     /// Organisations accessibles avec les identifiants (id et nom)
     Orgs,
     /// Interface web locale : diagramme des ressources, plan, up, down, logs, édition du compose
+    #[cfg(feature = "ui")]
     Ui {
         /// Organisation initiale (sinon choisie dans l'interface)
         #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
@@ -195,8 +211,12 @@ enum Command {
         /// Base publique du serveur si un proxy est devant (callback OAuth), ex. https://compose.exemple
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
+        /// Clé exigée des clients (CLI distante : CC_API_KEY) ; sinon aucune vérification
+        #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
+        api_key: Option<String>,
     },
-    /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL)
+    /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL) ou une CLI distante (--api-url)
+    #[cfg(feature = "api")]
     Api {
         /// Organisation initiale (sinon choisie dans l'interface)
         #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
@@ -210,6 +230,9 @@ enum Command {
         /// Base publique de l'API si un proxy est devant (callback OAuth), ex. https://api.exemple
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
+        /// Clé exigée des clients (CLI distante : CC_API_KEY) ; sinon aucune vérification
+        #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
+        api_key: Option<String>,
     },
     /// Fixture des configurations d'images du projet, lues sur les registres (tests hors ligne)
     #[command(hide = true)]
@@ -242,6 +265,11 @@ fn build_version() -> &'static str {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let opts = cli.project.to_options();
+    if let Some(url) = cli.remote.api_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+        if let Some(r) = remote_dispatch(url, cli.remote.api_key.clone(), &opts, &cli.command) {
+            return r;
+        }
+    }
     match cli.command {
         Command::Plan { plan, json } => cmd_plan(opts, &plan, json),
         Command::Config { format } => cmd_config(opts, format),
@@ -254,8 +282,10 @@ fn main() -> ExitCode {
         Command::Logs { org, services, since, limit, follow } => cmd_logs(opts, &org.org, cc_compose::exec::inspect::LogsOptions { services, since, follow, limit }),
         Command::Export { plan, what, output, branches } => cmd_export(opts, &plan, what, &output, branches),
         Command::Images => cmd_images(opts),
-        Command::Ui { org, listen, no_open, public_url } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: true, origins: Vec::new(), public_url, initial_dir: None, open_browser: !no_open }),
-        Command::Api { org, listen, cors, public_url } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, initial_dir: None, open_browser: false }),
+        #[cfg(feature = "ui")]
+        Command::Ui { org, listen, no_open, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: true, origins: Vec::new(), public_url, api_key, initial_dir: None, open_browser: !no_open }),
+        #[cfg(feature = "api")]
+        Command::Api { org, listen, cors, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
     }
 }
@@ -555,6 +585,38 @@ fn cmd_logs(opts: compose::project::Options, org: &str, lopts: cc_compose::exec:
     run_stateless(cc_compose::exec::inspect::logs(&project, &api, &lopts, &mut log))
 }
 
+/// Les commandes qui parlent à la plateforme passent par le serveur ;
+/// `None` pour celles qui restent locales (plan, config, images, ui, api).
+fn remote_dispatch(url: &str, key: Option<String>, opts: &compose::project::Options, command: &Command) -> Option<ExitCode> {
+    use cc_compose::remote::Op;
+    let (op, org) = match command {
+        Command::Up { org, plan, dry_run, yes, no_wait, assets } => (Op::Up { yes: *yes, dry_run: *dry_run, no_wait: *no_wait, allow_ephemeral: plan.allow_ephemeral, assets: *assets }, Some(org.org.clone())),
+        Command::Seed { org, service, file, local, yes, no_wait, .. } => (Op::Seed { service: service.clone(), dump: file.clone(), local: *local, yes: *yes, no_wait: *no_wait }, Some(org.org.clone())),
+        Command::Down { org, all, dry_run, yes } => (Op::Down { all: *all, dry_run: *dry_run, yes: *yes }, Some(org.org.clone())),
+        Command::Stop { org } => (Op::Stop, Some(org.org.clone())),
+        Command::Start { org } => (Op::Start, Some(org.org.clone())),
+        Command::Ps { org } => (Op::Ps, Some(org.org.clone())),
+        Command::Logs { org, services, since, limit, follow } => (Op::Logs { services: services.clone(), since: since.clone(), limit: *limit, follow: *follow }, Some(org.org.clone())),
+        Command::Export { plan, what, output, branches } => {
+            if *branches {
+                return Some(fail("export --branches écrit dans le dépôt du poste : incompatible avec --api-url"));
+            }
+            (Op::Export { terraform: !matches!(what, ExportWhat::Script), script: !matches!(what, ExportWhat::Terraform), allow_ephemeral: plan.allow_ephemeral, output: output.clone() }, None)
+        }
+        Command::Orgs => (Op::Orgs, None),
+        _ => return None,
+    };
+    let remote = match cc_compose::remote::Remote::new(url, key, org) {
+        Ok(r) => r,
+        Err(e) => return Some(fail(&e)),
+    };
+    let project = project_name(opts);
+    let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
+    let mut log = ui_log(matches!(command, Command::Logs { .. }));
+    Some(run_stateless(cc_compose::remote::run(&remote, op, &project_dir, &project, &mut log)))
+}
+
+#[cfg(feature = "api")]
 fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_compose::web::ServeOptions) -> ExitCode {
     // Identifiants de l'environnement, sinon connexion depuis l'interface :
     // consumer CLEVER_CONSUMER_KEY/SECRET (danse avec callback) ou, à

@@ -10,6 +10,7 @@
 //! par l'interface et extraite dans un répertoire temporaire.
 
 mod api;
+#[cfg(feature = "ui")]
 mod assets;
 mod local;
 
@@ -63,6 +64,9 @@ pub struct State {
     pub origins: Vec<String>,
     /// Request tokens en attente d'autorisation → (secret, URL de retour).
     pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
+    /// exposé au-delà du poste.
+    pub api_key: Option<String>,
     /// Connexion par la console en cours (`cli_token` attendu), ou son
     /// dernier échec.
     pub console_login: std::sync::Mutex<ConsoleLogin>,
@@ -84,6 +88,8 @@ pub struct ServeOptions {
     pub origins: Vec<String>,
     /// Base publique si le serveur est derrière un proxy (callback OAuth).
     pub public_url: Option<String>,
+    /// Clé d'API exigée des clients ; `None` : aucune vérification.
+    pub api_key: Option<String>,
     pub initial_dir: Option<std::path::PathBuf>,
     pub open_browser: bool,
 }
@@ -93,6 +99,10 @@ impl State {
     pub fn api(&self) -> Result<Api, String> {
         self.session.read().unwrap().as_ref().map(|s| s.api.clone()).ok_or_else(|| "aucun identifiant : renseignez un jeton dans l'interface (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN au lancement)".to_string())
     }
+}
+
+async fn api_only() -> (axum::http::StatusCode, &'static str) {
+    (axum::http::StatusCode::NOT_FOUND, "API seule : l'interface est servie ailleurs (clever-compose ui, binaire avec la feature `ui`, pour l'embarquer)")
 }
 
 /// Lance le serveur et bloque jusqu'à Ctrl-C. `session` peut être absente :
@@ -113,10 +123,13 @@ pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: OauthConsum
     if session.is_none() {
         eprintln!("aucun identifiant dans l'environnement : l'interface demandera la connexion ({})", if oauth.builtin { "par la console Clever Cloud, consumer de clever-tools" } else { "danse OAuth avec le consumer CLEVER_CONSUMER_KEY" });
     }
-    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default(), console_login: Default::default() });
+    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), console_login: Default::default() });
     let app = api::router(state.clone());
-    let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "API seule : l'interface est servie ailleurs (clever-compose ui pour l'embarquer)") }) };
-    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::cors));
+    #[cfg(feature = "ui")]
+    let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
+    #[cfg(not(feature = "ui"))]
+    let app = app.fallback(api_only);
+    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::require_key)).layer(axum::middleware::from_fn_with_state(state.clone(), api::cors));
     let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| format!("écoute sur {listen} : {e}"))?;
     let url = format!("http://{}/", listener.local_addr().map_err(|e| e.to_string())?);
     if o.ui {

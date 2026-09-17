@@ -7,4 +7,6 @@ pub mod emit;
 pub mod exec;
 pub mod plan;
 pub mod ui;
+#[cfg(feature = "api")]
 pub mod web;
+pub mod remote;

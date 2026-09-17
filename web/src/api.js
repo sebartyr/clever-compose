@@ -7,10 +7,19 @@
 export const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL : '').replace(/\/$/, '');
 const u = (path) => API_BASE + path;
 
+// Clé d'API du serveur (`--api-key`), gardée pour l'onglet (sessionStorage)
+// et envoyée en `Authorization: Bearer` ; sans clé configurée côté serveur,
+// rien n'est envoyé.
+let apiKey = '';
+try { apiKey = sessionStorage.getItem('clever-compose.api-key') || ''; } catch { /* stockage indisponible */ }
+export const hasApiKey = () => !!apiKey;
+export const setApiKey = (k) => { apiKey = k || ''; try { if (apiKey) sessionStorage.setItem('clever-compose.api-key', apiKey); else sessionStorage.removeItem('clever-compose.api-key'); } catch { /* stockage indisponible */ } };
+const headers = (body) => ({ ...(body ? { 'Content-Type': 'application/json' } : {}), ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) });
+
 async function json(method, url, body) {
   const res = await fetch(u(url), {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: headers(body),
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -48,7 +57,7 @@ export const api = {
   async uploadDump(id, file) {
     const form = new FormData();
     form.append('file', file, file.name);
-    const res = await fetch(u(`/api/local/${encodeURIComponent(id)}/seed/upload`), { method: 'POST', body: form });
+    const res = await fetch(u(`/api/local/${encodeURIComponent(id)}/seed/upload`), { method: 'POST', headers: headers(), body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -57,7 +66,7 @@ export const api = {
   async upload(file) {
     const form = new FormData();
     form.append('file', file, file.name);
-    const res = await fetch(u('/api/local/upload'), { method: 'POST', body: form });
+    const res = await fetch(u('/api/local/upload'), { method: 'POST', headers: headers(), body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -70,7 +79,7 @@ export const api = {
     const done = (async () => {
       const res = await fetch(u(url), {
         method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
+        headers: headers(body),
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });

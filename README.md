@@ -11,9 +11,16 @@ clever-tools). Cadrage complet dans `CLAUDE.md`, décisions et état dans
 
 ```sh
 rustup target add x86_64-unknown-linux-musl   # une fois : cible du shim
-cargo build --release
+cargo build --release                                            # CLI + API + interface
+cargo build --release --no-default-features --features api      # CLI + API (interface servie ailleurs)
+cargo build --release --no-default-features                     # CLI seule
 # binaire : target/release/clever-compose, autonome
 ```
+
+Trois binaires selon les features : `ui` (défaut, commandes `ui` et
+`api`), `api` (commande `api` seulement, pas d'interface embarquée), ou
+rien (CLI seule, qui peut tout de même s'exécuter à distance contre un
+serveur `api`, voir plus bas). `ui-bundled` empaquette le front Vite.
 
 Le shim (PID 1 des conteneurs, crate `cc-compose-shim`) est compilé pour
 musl par le `build.rs` de la CLI (dans `target/shim-build/`, relancé quand
@@ -39,7 +46,7 @@ clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
 clever-compose orgs                               # organisations accessibles avec les identifiants
 clever-compose ui     [--listen 127.0.0.1:7777] [--no-open] [--public-url URL]   # interface web locale
-clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL]  # API seule, interface déployée à part
+clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part ou CLI distante
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -124,6 +131,29 @@ applications par nom et tags et leur applique le nouveau scaling sans les
 recréer ; un addon existant n'est jamais recréé, un changement de plan
 d'addon est signalé et reste manuel. Le `.env` du projet (ou `--env-file`)
 est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
+
+### Exécution distante depuis la CLI
+
+Une CLI (même bâtie sans les features) peut confier les commandes
+plateforme à un serveur `clever-compose api`, avec les identifiants de ce
+serveur :
+
+```sh
+clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE"        # côté serveur (CLEVER_TOKEN/… ou consumer)
+CC_API_URL=https://api.exemple CC_API_KEY="$CLE" clever-compose up --yes   # côté poste (ou --api-url / --api-key)
+```
+
+`up`, `seed`, `down`, `stop`, `start`, `ps`, `logs`, `export` et `orgs`
+passent alors par le serveur : le projet est envoyé en `.tar.gz` (sans
+`.git`, `node_modules`, `target`), extrait dans un répertoire temporaire
+du serveur et retiré après ; le journal revient en direct. `plan` et
+`config` restent locaux. L'organisation de la CLI (`--org`/`CC_ORG`) est
+transmise par requête (`X-CC-Org`), sans changer celle de l'interface.
+Limites : `seed --local` et `export --branches` agissent sur le poste,
+donc refusés à distance ; l'export distant ne rend que `main.tf` et
+`bootstrap.sh`, pas les dépôts synthétiques. `--api-key` protège tout
+`/api/*` (sauf `/api/info`) par `Authorization: Bearer` ; l'interface la
+demande une fois par onglet. Sans clé, le serveur est à réserver au poste.
 
 ### Interface déployée à part
 

@@ -54,6 +54,24 @@ pub async fn cors(AxState(s): AxState<Shared>, req: axum::extract::Request, next
     r
 }
 
+/// Clé d'API (`--api-key`) : exigée en `Authorization: Bearer` sur tout
+/// `/api/*` sauf `/api/info` (qui dit qu'une clé est requise) et le
+/// callback OAuth (appelé par Clever Cloud). Sans clé configurée, rien
+/// n'est vérifié : le serveur est local.
+pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    if let Some(key) = &s.api_key {
+        let path = req.uri().path();
+        let exempt = !path.starts_with("/api/") || path == "/api/info" || path == "/api/session/oauth/callback" || req.method() == axum::http::Method::OPTIONS;
+        if !exempt {
+            let given = req.headers().get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(str::trim);
+            if given != Some(key.as_str()) {
+                return ApiError(StatusCode::UNAUTHORIZED, "clé d'API absente ou invalide (--api-key du serveur, CC_API_KEY côté client)".into()).into_response();
+            }
+        }
+    }
+    next.run(req).await
+}
+
 pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
@@ -65,6 +83,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/platform/projects", get(platform_projects))
         .route("/api/platform/projects/{project}/inventory", get(inventory))
         .route("/api/platform/projects/{project}/logs", get(logs))
+        .route("/api/platform/projects/{project}/ps", post(ps))
         .route("/api/platform/projects/{project}/down", post(down))
         .route("/api/platform/projects/{project}/stop", post(stop))
         .route("/api/platform/projects/{project}/start", post(start))
@@ -107,7 +126,7 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
     let org = s.session.read().unwrap().as_ref().map(|x| x.org.clone()).unwrap_or_default();
     let stamp = env!("CC_BUILD_STAMP");
     let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
-    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok() }))
+    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some() }))
 }
 
 /// Session courante : identifiants posés ?, organisation choisie, danse
@@ -311,18 +330,36 @@ async fn orgs(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiError> {
     Ok(Json(json!({ "orgs": orgs })))
 }
 
-fn api_of(s: &State) -> Result<crate::exec::platform::Api, ApiError> {
+/// Organisation demandée par la requête (`X-CC-Org`, posé par la CLI en
+/// exécution distante) ; sinon celle de la session. La session est
+/// partagée par tous les clients du serveur, l'en-tête permet à chacun
+/// de viser la sienne sans la changer pour les autres.
+#[derive(Clone, Default)]
+pub struct ReqOrg(Option<String>);
+
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for ReqOrg {
+    type Rejection = std::convert::Infallible;
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, _s: &S) -> Result<Self, Self::Rejection> {
+        Ok(ReqOrg(parts.headers.get("x-cc-org").and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)))
+    }
+}
+
+fn api_of(s: &State, org: &ReqOrg) -> Result<crate::exec::platform::Api, ApiError> {
     let api = s.api().map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    let api = match &org.0 {
+        Some(o) => api.for_owner(o),
+        None => api,
+    };
     if api.owner().is_empty() {
-        return Err(ApiError(StatusCode::BAD_REQUEST, "aucune organisation choisie".into()));
+        return Err(ApiError(StatusCode::BAD_REQUEST, "aucune organisation choisie (interface, ou en-tête X-CC-Org)".into()));
     }
     Ok(api)
 }
 
 // ---------------------------------------------------------------- plateforme
 
-async fn platform_projects(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s)?;
+async fn platform_projects(AxState(s): AxState<Shared>, org: ReqOrg) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s, &org)?;
     let projects = crate::exec::inspect::projects(&api).await.map_err(internal)?;
     Ok(Json(json!({ "projects": projects })))
 }
@@ -330,8 +367,8 @@ async fn platform_projects(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiEr
 /// L'état d'un projet sur la plateforme, dans une forme prête pour le
 /// diagramme : applications (instances, dernier déploiement, domaines),
 /// addons, network groups et leurs membres.
-async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s)?;
+async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s, &org)?;
     let inv = crate::exec::inspect::discover(&project, &api).await.map_err(internal)?;
     let mut apps = Vec::new();
     for a in &inv.apps {
@@ -365,9 +402,14 @@ struct LogsQuery {
     limit: Option<usize>,
 }
 
-async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let opts = crate::exec::inspect::LogsOptions { services: q.services.map(|v| v.split(',').filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(), since: q.since, follow: q.follow.unwrap_or(false), limit: q.limit };
-    stream_task(s, move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await })
+    stream_task(s, move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await })
+}
+
+/// `ps` tel que la CLI l'affiche (exécution distante).
+async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).map_err(|e| e.1)?, &mut log).await })
 }
 
 #[derive(Deserialize, Default)]
@@ -378,17 +420,17 @@ struct DownBody {
     dry_run: bool,
 }
 
-async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let b = body.map(|Json(b)| b).unwrap_or_default();
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state).map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
 }
 
-async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state).map_err(|e| e.1)?, false, &mut log).await })
+async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).map_err(|e| e.1)?, false, &mut log).await })
 }
 
-async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state).map_err(|e| e.1)?, true, &mut log).await })
+async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).map_err(|e| e.1)?, true, &mut log).await })
 }
 
 /// Manifeste, plan et fichiers texte du bucket d'assets du projet.
@@ -609,7 +651,7 @@ struct UpBody {
     assets: bool,
 }
 
-async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: ReqOrg, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, move |state, mut log| async move {
@@ -619,7 +661,7 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, bod
         }
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes, assets: b.assets };
-        crate::exec::reconcile::up(&plan, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
+        crate::exec::reconcile::up(&plan, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
 
@@ -636,7 +678,7 @@ struct SeedBody {
     no_wait: bool,
 }
 
-async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: ReqOrg, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let dump = safe_file(&dir, &b.dump)?;
     Ok(stream_task(s, move |state, mut log| async move {
@@ -646,7 +688,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, J
         let resolver = crate::plan::registry::Registry::new()?;
         let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
-        crate::exec::reconcile::up(&plan, &api_of(&state).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
+        crate::exec::reconcile::up(&plan, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
 

@@ -2,7 +2,7 @@
 // détail d'une ressource, éditeur du compose, diagnostics, exports, journal
 // des opérations. Toutes les commandes de la CLI sont ici.
 import { computed, defineComponent, onMounted, reactive, ref, watch } from 'vue';
-import { api } from './api.js';
+import { api, hasApiKey, setApiKey } from './api.js';
 import { Diagram } from './diagram.js';
 import { graphFromInventory, graphFromPlan } from './graph.js';
 
@@ -230,6 +230,14 @@ export const App = defineComponent({
     // dans un autre onglet, le serveur récupère les jetons et l'interface
     // interroge la session jusqu'à ce qu'elle soit ouverte.
     const login = reactive({ started: false, mode: '', url: '', error: '', opened: false });
+    // Clé d'API du serveur (`--api-key`) : demandée avant tout le reste
+    // quand /api/info la dit requise et qu'aucune n'est en sessionStorage.
+    const key = reactive({ needed: false, value: '', error: '' });
+    const submitKey = async () => {
+      setApiKey(key.value.trim());
+      key.error = '';
+      try { await api.session(); key.needed = false; await boot(); } catch (e) { key.error = e.message; setApiKey(''); }
+    };
     let loginTimer = null;
     const startLogin = async () => {
       login.error = ''; login.started = true;
@@ -440,7 +448,11 @@ export const App = defineComponent({
     watch(() => opts.allow_ephemeral, loadPlan);
     // Ce qui s'affiche une fois la session ouverte.
     const boot = async () => {
-      await refreshSession();
+      if (info.value.api_key && !hasApiKey()) { key.needed = true; return; }
+      try { await refreshSession(); } catch (e) {
+        if (/401|clé/.test(e.message)) { setApiKey(''); key.needed = true; key.error = e.message; return; }
+        throw e;
+      }
       if (!session.value.authenticated) { await startLogin(); return; }
       await refreshLocals();
       // Liens directs : ?project=<nom> (plateforme) ou ?local=<id>.
@@ -460,10 +472,21 @@ export const App = defineComponent({
     const sideOpen = ref(false);
     watch(current, () => { sideOpen.value = false; });
 
-    return { login, startLogin, openLoginTab, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { key, submitKey, login, startLogin, openLoginTab, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
-    <div v-if="!session.authenticated" class="login">
+    <div v-if="key.needed" class="login">
+      <cc-block>
+        <div slot="header-title">Clé d'API du serveur</div>
+        <div slot="content" class="login-body">
+          <p>Ce serveur exige une clé (<code>--api-key</code>). Elle reste dans cet onglet.</p>
+          <cc-notice v-if="key.error" intent="danger" :message="key.error"></cc-notice>
+          <cc-input-text label="Clé" :secret="true" :value="key.value" @cc-input="e => key.value = e.detail" @cc-requestimplicitsubmit="submitKey"></cc-input-text>
+          <p><cc-button :primary="true" :disabled="!key.value.trim()" title="Vérifie la clé auprès du serveur" @cc-click="submitKey">Continuer</cc-button></p>
+        </div>
+      </cc-block>
+    </div>
+    <div v-else-if="!session.authenticated" class="login">
       <cc-block>
         <div slot="header-title">Connexion à Clever Cloud</div>
         <div slot="content" class="login-body">

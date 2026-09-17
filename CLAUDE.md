@@ -300,9 +300,15 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
   seed --service SVC --dump FICHIER [--local]
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
-  orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL]
-  api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL]
+  orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ]
+  api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]
+  options globales : --api-url URL (CC_API_URL) --api-key CLÉ (CC_API_KEY) : exécution distante
 ```
+Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
+`--api-url` (`remote.rs`) envoie le projet en `.tar.gz` à `/api/local/upload`
+et rejoue les routes SSE ; l'organisation passe en `X-CC-Org` (extracteur
+`ReqOrg`), la clé en `Authorization: Bearer` (middleware `require_key`,
+`/api/info` et le callback OAuth exemptés).
 `api` sert l'API sans l'interface (front Vite bâti à part avec
 `VITE_API_URL`, sinon même origine) ; CORS limité aux origines `--cors`,
 qui sont aussi les seuls retours admis après la danse OAuth (`?return=`).
