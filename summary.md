@@ -402,10 +402,9 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'URL », « le front passe les user tokens à chaque requête », « le
   login se fait via danse ». `auth::DEFAULT_CONSUMER_KEY` = consumer
   « clever-compose » du propriétaire (`4cUX75…`, base URL
-  `http://127.0.0.1:7777/`) ; `DEFAULT_CONSUMER_SECRET` laissé vide dans
-  cette session (lecture du secret refusée par le classifieur d'auto
-  mode) : tant qu'il est vide, `Consumer::from_env` exige l'environnement
-  comme avant ; l'environnement prime toujours. Retiré : `remote.rs`,
+  `http://127.0.0.1:7777/`) ; `DEFAULT_CONSUMER_SECRET` fourni par le propriétaire
+  (capture de la console ; lecture vérifiée par un request token, les
+  variantes I/l et 0/O refusées) ; l'environnement prime toujours. Retiré : `remote.rs`,
   `--api-url`/`--api-key` globaux, `login --api-url`, `Stored.api_url`,
   route `GET /api/session/login/{request_token}`, en-têtes
   `X-CC-Consumer-*`, feature `multipart` de reqwest. Le front garde

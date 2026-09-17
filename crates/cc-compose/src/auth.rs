@@ -30,11 +30,11 @@ pub struct Consumer {
 /// consumer public identifie l'application, il ne donne accès à rien
 /// sans l'autorisation de l'utilisateur.
 pub const DEFAULT_CONSUMER_KEY: &str = "4cUX75GQHaKwJIBnjj63eXrKNiWlqe";
-/// À renseigner (secret du consumer ci-dessus). Vide : seul
-/// l'environnement peut fournir un consumer.
-pub const DEFAULT_CONSUMER_SECRET: &str = "";
+pub const DEFAULT_CONSUMER_SECRET: &str = "x1pMMlJBXy9u5QL1YjvTEXGe0IK4xh";
 
 pub const CONSUMER_HINT: &str = "CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET requis dans l'environnement (consumer OAuth créé dans la console Clever Cloud) : aucun consumer par défaut dans cette compilation";
+
+/// Vérifié le 17/09/2026 : request token accepté avec ces constantes.
 
 impl Consumer {
     /// L'environnement d'abord, sinon le consumer embarqué.
