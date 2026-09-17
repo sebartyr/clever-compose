@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -31,8 +31,8 @@ clever ng link "$APP_wordpress" 'wordpress-addon-default' -o "$ORG"
 clever service link-addon "$ADDON_db" --app "$APP_wordpress"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_wordpress" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
-clever env set --app "$APP_wordpress" 'CC_COMPOSE_EXPAND' 'WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME'
+clever env set --app "$APP_wordpress" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_wordpress" 'CLEVER_COMPOSE_EXPAND' 'WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_NAME' '${MYSQL_ADDON_DB}'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_PASSWORD' '${MYSQL_ADDON_PASSWORD}'

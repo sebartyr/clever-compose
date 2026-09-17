@@ -25,16 +25,16 @@ serveur `api`, voir plus bas). `ui-bundled` empaquette le front Vite.
 Le shim (PID 1 des conteneurs, crate `cc-compose-shim`) est compilé pour
 musl par le `build.rs` de la CLI (dans `target/shim-build/`, relancé quand
 ses sources changent) et embarqué dans le binaire. Sans la cible musl, le
-build passe avec un avertissement et la CLI demande `CC_SHIM_PATH` à
-l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
+build passe avec un avertissement et la CLI demande `CLEVER_COMPOSE_SHIM_PATH` à
+l'usage ; `CLEVER_COMPOSE_SHIM_BIN` au build embarque un shim déjà compilé.
 
 ## Usage
 
 ```sh
 clever-compose login                     # danse OAuth 1.0 dans le navigateur (consumer clever-compose, callback local
                                          # 127.0.0.1:8080) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
-                                         # (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN ; CLEVER_CONSUMER_KEY/SECRET pour un autre consumer)
-export CC_ORG=orga_xxx                   # ou --org
+                                         # (ou CLEVER_TOKEN/CLEVER_SECRET, CLEVER_COMPOSE_API_TOKEN ; CLEVER_CONSUMER_KEY/SECRET pour un autre consumer)
+export CLEVER_COMPOSE_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
 clever-compose up     [--dry-run] [--yes] [--no-wait] [--allow-ephemeral] [--assets]
@@ -83,7 +83,7 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   id réel attendu dans la variable `addon_<service>_real_id`), UDP.
 - `--assets` (ou `x-clever.assets: true` au niveau projet) conserve les
   fichiers du projet (compose, fichiers montés, scripts) et le plan dans un
-  bucket Cellar que vous créez vous-même, configuré par `CC_ASSETS_BUCKET`
+  bucket Cellar que vous créez vous-même, configuré par `CLEVER_COMPOSE_ASSETS_BUCKET`
   et les variables de l'addon (`CELLAR_ADDON_HOST`, `CELLAR_ADDON_KEY_ID`,
   `CELLAR_ADDON_KEY_SECRET`) ; un seul bucket, un préfixe `<projet>/` par
   projet. L'interface lit alors un projet déployé sans son dossier et peut
@@ -122,8 +122,8 @@ la page part vers l'autorisation Clever Cloud et le callback ramène les
 jetons dans le fragment de l'URL.
 
 Sur une application Clever Cloud : `clever-compose ui --listen 0.0.0.0:8080
---api-key …` (ou `CC_LISTEN=0.0.0.0:8080` ; le port par défaut est 8080, celui
-qu'attend la plateforme) (variables `CC_API_KEY`, et `CLEVER_CONSUMER_*` si le consumer
+--api-key …` (ou `CLEVER_COMPOSE_LISTEN=0.0.0.0:8080` ; le port par défaut est 8080, celui
+qu'attend la plateforme) (variables `CLEVER_COMPOSE_API_KEY`, et `CLEVER_CONSUMER_*` si le consumer
 embarqué n'a pas cette base URL) ; rien d'autre à configurer.
 
 Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
@@ -150,7 +150,7 @@ est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
 
 ### Clé d'API
 
-`--api-key CLÉ` (ou `CC_API_KEY`) sur `ui`/`api` exige `Authorization:
+`--api-key CLÉ` (ou `CLEVER_COMPOSE_API_KEY`) sur `ui`/`api` exige `Authorization:
 Bearer CLÉ` sur tout `/api/*` sauf `/api/info` ; l'interface la demande une
 fois par onglet. Sans clé, le serveur est à réserver au poste. La CLI, elle,
 se suffit à elle-même : elle parle directement à Clever Cloud, jamais à un
@@ -209,7 +209,7 @@ segmentation qu'en local), `single` (un seul groupe pour le projet) ou
 | `depends_on` | ordre de déploiement ; `service_completed_successfully` → Clever Task |
 | `healthcheck` HTTP | `CC_HEALTH_CHECK_PATH` (2xx exigé) |
 | `deploy.replicas`, `resources.limits.{memory,cpus}` | instances fixes (avertissement : pas d'autoscaling sans `x-clever`), plus petite flavor couvrant mémoire et vCPU |
-| réseaux | network groups selon `x-clever.network_groups`, table DNS `CC_COMPOSE_DNS_MAP` + stub DNS du shim |
+| réseaux | network groups selon `x-clever.network_groups`, table DNS `CLEVER_COMPOSE_DNS_MAP` + stub DNS du shim |
 | postgres, mysql/mariadb, redis/valkey, mongo (DocumentDB : PostgreSQL dédié avec l'option, API MongoDB 7.0 ; `x-clever.engine: mongodb` pour l'addon MongoDB 4.0.3), elasticsearch | addon managé sur un plan dédié, **membre du network group par défaut** : joint sur `<id>.m.<ng>.cc-ng.cloud`, port 8080 (4040 pour DocumentDB, Elasticsearch en HTTP clair), identifiants de la liaison expansés au démarrage par le shim ; `x-clever.private: false` pour l'hôte public (et le plan partagé `dev`) ; scripts d'init rejoués par une tâche (PostgreSQL, MySQL, MongoDB, DocumentDB), `seed` pour tous |
 | `privileged`, `cap_add`, `devices`, `network_mode`, `sysctls`, volumes nommés… | refus avec diagnostic |
 
@@ -217,6 +217,6 @@ segmentation qu'en local), `single` (un seul groupe pour le projet) ou
 
 ```sh
 cargo test                       # différentiel (expected.yaml figés), golden files, terraform validate
-CC_REGEN_ORACLE=1 cargo test     # régénère les expected.yaml avec docker compose
-CC_REGEN_GOLDEN=1 cargo test     # régénère plan.json, diagnostics et exports
+CLEVER_COMPOSE_REGEN_ORACLE=1 cargo test     # régénère les expected.yaml avec docker compose
+CLEVER_COMPOSE_REGEN_GOLDEN=1 cargo test     # régénère plan.json, diagnostics et exports
 ```

@@ -74,7 +74,7 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
+          "key": "CLEVER_COMPOSE_DNS_MAP",
           "value": [
             {
               "literal": "db="
@@ -88,7 +88,7 @@
           ]
         },
         {
-          "key": "CC_COMPOSE_EXPAND",
+          "key": "CLEVER_COMPOSE_EXPAND",
           "value": [
             {
               "literal": "POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"

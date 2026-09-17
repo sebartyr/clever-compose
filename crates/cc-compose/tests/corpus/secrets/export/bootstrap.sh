@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -22,8 +22,8 @@ clever scale --app "$APP_app" --min-flavor 'XS' --max-flavor 'XS' --min-instance
 clever ng link "$APP_app" 'secrets-default' -o "$ORG"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_app" 'CC_COMPOSE_SECRET_API_TOKEN' "${API_TOKEN:?variable API_TOKEN requise pour le secret api_token}"
-clever env set --app "$APP_app" 'CC_COMPOSE_SECRET_DB_PASSWORD' "$(cat '../db_password.txt')"
+clever env set --app "$APP_app" 'CLEVER_COMPOSE_SECRET_API_TOKEN' "${API_TOKEN:?variable API_TOKEN requise pour le secret api_token}"
+clever env set --app "$APP_app" 'CLEVER_COMPOSE_SECRET_DB_PASSWORD' "$(cat '../db_password.txt')"
 clever env set --app "$APP_app" 'DB_PASSWORD_FILE' '/run/secrets/db_password'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)

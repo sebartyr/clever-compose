@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -31,8 +31,8 @@ clever ng link "$ADDON_REAL_search" 'private-registry-default' -o "$ORG"
 clever service link-addon "$ADDON_search" --app "$APP_app"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_app" 'CC_COMPOSE_DNS_MAP' 'search='"${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"
-clever env set --app "$APP_app" 'CC_COMPOSE_EXPAND' 'ES_URL'
+clever env set --app "$APP_app" 'CLEVER_COMPOSE_DNS_MAP' 'search='"${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_app" 'CLEVER_COMPOSE_EXPAND' 'ES_URL'
 clever env set --app "$APP_app" 'ES_URL' 'http://''${ES_ADDON_USER}'':''${ES_ADDON_PASSWORD}''@'"${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"':8080'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)

@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -31,8 +31,8 @@ clever ng link "$ADDON_REAL_db" 'gitea-default' -o "$ORG"
 clever service link-addon "$ADDON_db" --app "$APP_gitea"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_gitea" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
-clever env set --app "$APP_gitea" 'CC_COMPOSE_EXPAND' 'DB_NAME,DB_USER,DB_PASSWD'
+clever env set --app "$APP_gitea" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_gitea" 'CLEVER_COMPOSE_EXPAND' 'DB_NAME,DB_USER,DB_PASSWD'
 clever env set --app "$APP_gitea" 'DB_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"':8080'
 clever env set --app "$APP_gitea" 'DB_NAME' '${POSTGRESQL_ADDON_DB}'
 clever env set --app "$APP_gitea" 'DB_PASSWD' '${POSTGRESQL_ADDON_PASSWORD}'

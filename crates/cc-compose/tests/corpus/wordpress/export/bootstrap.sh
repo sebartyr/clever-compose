@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -32,7 +32,7 @@ clever env set --app "$APP_db" 'MYSQL_DATABASE' 'wordpress'
 clever env set --app "$APP_db" 'MYSQL_PASSWORD' 'wordpress'
 clever env set --app "$APP_db" 'MYSQL_ROOT_PASSWORD' 'somewordpress'
 clever env set --app "$APP_db" 'MYSQL_USER' 'wordpress'
-clever env set --app "$APP_wordpress" 'CC_COMPOSE_DNS_MAP' 'db='"${APP_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_wordpress" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${APP_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_HOST' "${APP_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_NAME' 'wordpress'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_PASSWORD' 'wordpress'

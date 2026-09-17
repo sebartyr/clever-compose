@@ -120,7 +120,7 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
+          "key": "CLEVER_COMPOSE_DNS_MAP",
           "value": [
             {
               "literal": "app="

@@ -1,7 +1,7 @@
 //! Test différentiel du parsing (CLAUDE.md §11) : `docker compose config`
 //! est l'oracle. Chaque répertoire de `tests/corpus/` contient un projet ;
 //! `expected.yaml` est la sortie de l'oracle, figée dans le dépôt et
-//! régénérée avec `CC_REGEN_ORACLE=1 cargo test` (docker requis).
+//! régénérée avec `CLEVER_COMPOSE_REGEN_ORACLE=1 cargo test` (docker requis).
 //!
 //! Les deux sorties sont comparées en JSON après canonicalisation.
 
@@ -82,7 +82,7 @@ fn ours(dir: &Path) -> Result<J, String> {
 
 #[test]
 fn corpus_matches_docker_compose_config() {
-    let regen = std::env::var_os("CC_REGEN_ORACLE").is_some();
+    let regen = std::env::var_os("CLEVER_COMPOSE_REGEN_ORACLE").is_some();
     let mut entries: Vec<PathBuf> = std::fs::read_dir(corpus_dir())
         .unwrap()
         .filter_map(|e| e.ok().map(|e| e.path()))

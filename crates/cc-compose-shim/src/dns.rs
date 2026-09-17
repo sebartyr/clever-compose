@@ -1,5 +1,5 @@
 //! Stub DNS (CLAUDE.md §8) pour les noms de services codés en dur dans les
-//! images (`proxy_pass http://app:8000`). Table `CC_COMPOSE_DNS_MAP`
+//! images (`proxy_pass http://app:8000`). Table `CLEVER_COMPOSE_DNS_MAP`
 //! (`alias=fqdn,...`). Règles :
 //!
 //! - pas de cache : chaque requête est résolue en amont et garde son TTL
@@ -25,7 +25,7 @@ use hickory_proto::rr::{Name, RData, Record};
 use tokio::net::UdpSocket;
 
 pub const LISTEN: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 153);
-pub const MAP_VAR: &str = "CC_COMPOSE_DNS_MAP";
+pub const MAP_VAR: &str = "CLEVER_COMPOSE_DNS_MAP";
 const RESOLV: &str = "/etc/resolv.conf";
 
 pub struct Stub {

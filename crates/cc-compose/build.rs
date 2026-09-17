@@ -2,9 +2,9 @@
 //! lui-même (`cargo build -p cc-compose-shim --profile shim --target
 //! x86_64-unknown-linux-musl`, dans un répertoire `target/shim-build`
 //! séparé pour ne pas croiser le verrou du build en cours) et le relance
-//! quand ses sources changent. `$CC_SHIM_BIN` désigne un shim déjà compilé
+//! quand ses sources changent. `$CLEVER_COMPOSE_SHIM_BIN` désigne un shim déjà compilé
 //! et court-circuite la compilation. Si la cible musl manque, un fichier
-//! vide est embarqué et l'outil le signale à l'usage (`CC_SHIM_PATH` permet
+//! vide est embarqué et l'outil le signale à l'usage (`CLEVER_COMPOSE_SHIM_PATH` permet
 //! alors de charger un shim depuis le disque).
 
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ fn main() {
     let commit = std::process::Command::new("git").args(["rev-parse", "--short", "HEAD"]).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_else(|| "inconnu".into());
     let dirty = std::process::Command::new("git").args(["status", "--porcelain", "--untracked-files=no"]).output().ok().is_some_and(|o| !o.stdout.is_empty());
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    println!("cargo:rustc-env=CC_BUILD_STAMP={}{} {}", commit, if dirty { "+" } else { "" }, now);
+    println!("cargo:rustc-env=CLEVER_COMPOSE_BUILD_STAMP={}{} {}", commit, if dirty { "+" } else { "" }, now);
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../.git/index");
     println!("cargo:rerun-if-changed=../../web/src");
@@ -24,28 +24,28 @@ fn main() {
     println!("cargo:rerun-if-changed=../../web/dist");
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("cc-shim");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    println!("cargo:rerun-if-env-changed=CC_SHIM_BIN");
+    println!("cargo:rerun-if-env-changed=CLEVER_COMPOSE_SHIM_BIN");
     println!("cargo:rerun-if-changed={}", root.join("crates/cc-compose-shim/src").display());
     println!("cargo:rerun-if-changed={}", root.join("crates/cc-compose-shim/Cargo.toml").display());
     println!("cargo:rerun-if-changed={}", root.join("crates/cc-compose-model/src").display());
     println!("cargo:rerun-if-changed={}", root.join("Cargo.lock").display());
-    if let Some(given) = std::env::var_os("CC_SHIM_BIN").map(PathBuf::from) {
+    if let Some(given) = std::env::var_os("CLEVER_COMPOSE_SHIM_BIN").map(PathBuf::from) {
         println!("cargo:rerun-if-changed={}", given.display());
         if given.is_file() {
             std::fs::copy(&given, &out).expect("copie du shim");
-            println!("cargo:rustc-env=CC_SHIM_EMBEDDED=1");
+            println!("cargo:rustc-env=CLEVER_COMPOSE_SHIM_EMBEDDED=1");
             return;
         }
-        println!("cargo:warning=CC_SHIM_BIN={} introuvable, compilation du shim", given.display());
+        println!("cargo:warning=CLEVER_COMPOSE_SHIM_BIN={} introuvable, compilation du shim", given.display());
     }
     match build_shim(&root) {
         Ok(bin) => {
             std::fs::copy(&bin, &out).expect("copie du shim");
-            println!("cargo:rustc-env=CC_SHIM_EMBEDDED=1");
+            println!("cargo:rustc-env=CLEVER_COMPOSE_SHIM_EMBEDDED=1");
         }
         Err(e) => {
             std::fs::write(&out, []).expect("shim vide");
-            println!("cargo:warning=shim non embarqué : {e} (CLI utilisable avec CC_SHIM_PATH)");
+            println!("cargo:warning=shim non embarqué : {e} (CLI utilisable avec CLEVER_COMPOSE_SHIM_PATH)");
         }
     }
 }
@@ -66,7 +66,7 @@ fn build_shim(root: &std::path::Path) -> Result<PathBuf, String> {
         .env_remove("CARGO_BUILD_TARGET")
         .env_remove("CARGO_BUILD_RUSTFLAGS")
         .env_remove("CARGO_TARGET_DIR")
-        .env_remove("CC_SHIM_BIN")
+        .env_remove("CLEVER_COMPOSE_SHIM_BIN")
         .env("CARGO_TERM_COLOR", "never")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped());

@@ -1,6 +1,6 @@
 //! Golden files des émetteurs (CLAUDE.md §11 et phase 2) : pour chaque cas
 //! du corpus dont le plan existe, `export/main.tf.json` et
-//! `export/bootstrap.sh` sont figés (`CC_REGEN_GOLDEN=1`). Puis
+//! `export/bootstrap.sh` sont figés (`CLEVER_COMPOSE_REGEN_GOLDEN=1`). Puis
 //! `terraform validate` sur chaque `main.tf.json` quand `terraform` est
 //! disponible (PATH ou `~/.local/bin`), avec le cache de plugins partagé.
 
@@ -33,7 +33,7 @@ fn cases() -> Vec<PathBuf> {
 
 #[test]
 fn corpus_exports_match_golden_files() {
-    let regen = std::env::var_os("CC_REGEN_GOLDEN").is_some();
+    let regen = std::env::var_os("CLEVER_COMPOSE_REGEN_GOLDEN").is_some();
     let mut failures = Vec::new();
     for dir in cases() {
         let fixture = fixture_from_file(&dir.join("images.json")).unwrap();

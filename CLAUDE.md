@@ -28,7 +28,7 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
 
 - **Indépendant de la CLI clever.** L'outil final n'appelle jamais `clever`
   en sous-processus et ne lit jamais `~/.config/clever-cloud/clever-tools.json`.
-  Identifiants : `CC_API_TOKEN` (bearer), `CLEVER_TOKEN` + `CLEVER_SECRET`
+  Identifiants : `CLEVER_COMPOSE_API_TOKEN` (bearer), `CLEVER_TOKEN` + `CLEVER_SECRET`
   (OAuth 1.0), ou `clever-compose login` (`auth.rs` : danse OAuth 1.0
   avec callback local `127.0.0.1:<port>` ; jetons dans
   `~/.config/clever-cloud/clever-compose.json`, notre fichier dans leur
@@ -101,7 +101,7 @@ mêmes commits déployés (vérifié en réel).
   --target x86_64-unknown-linux-musl --target-dir target/shim-build`,
   répertoire séparé pour éviter le verrou du build en cours ; relancé sur
   changement de ses sources, de `cc-compose-model` ou de `Cargo.lock`) et
-  embarqué par `include_bytes!` (`CC_SHIM_BIN` au build ou `CC_SHIM_PATH`
+  embarqué par `include_bytes!` (`CLEVER_COMPOSE_SHIM_BIN` au build ou `CLEVER_COMPOSE_SHIM_PATH`
   à l'exécution pour en charger un autre). `default-members` limite
   `cargo build` à la CLI (décision du 16/09/2026).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
@@ -119,7 +119,7 @@ mêmes commits déployés (vérifié en réel).
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
-  (`CC_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe par projet ; l'outil
+  (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe par projet ; l'outil
   ne crée ni addon ni bucket (décision du 16/09/2026).
 
 Architecture figée à amd64.
@@ -147,14 +147,14 @@ s'exécute sur la plateforme ou depuis le poste.
   `CC_HEALTH_CHECK_PATH`). Tout conteneur doit répondre en HTTP sur 8080,
   worker et tâche compris : le shim porte un répondeur de santé.
 - La plateforme n'expanse pas les variables entre elles : le shim expanse
-  celles listées dans `CC_COMPOSE_EXPAND` au démarrage (identifiants d'addon
+  celles listées dans `CLEVER_COMPOSE_EXPAND` au démarrage (identifiants d'addon
   jamais dupliqués dans la configuration ni dans l'export).
 - Network groups : le nom d'un membre est imposé et déterministe,
   `<app_id>.m.<ng_id>.cc-ng.cloud`, A par peer, TTL 30, liaison à chaud sans
   redémarrage, résolution depuis le conteneur via le résolveur de la VM,
   `resolv.conf` réécrivable en place seulement. Le `domainName` posé par
   l'API est stocké mais **non résolu** (ovd#863, axo#3168) : d'où le stub DNS
-  du shim (127.0.0.153, table `CC_COMPOSE_DNS_MAP` dans l'environnement, pas
+  du shim (127.0.0.153, table `CLEVER_COMPOSE_DNS_MAP` dans l'environnement, pas
   dans l'image).
 - Pas de volume persistant sur le runtime Docker : un service stateful
   devient un addon ou reste éphémère sur choix explicite.
@@ -274,8 +274,8 @@ redirections UDP, tags d'application.
 
 ```sh
 cargo test                       # différentiel (expected.yaml figés), goldens du plan, exports, terraform validate
-CC_REGEN_ORACLE=1 cargo test     # régénère les expected.yaml avec docker compose (oracle, jamais dépendance runtime)
-CC_REGEN_GOLDEN=1 cargo test     # régénère plan.json, plan.diagnostics.txt, export/
+CLEVER_COMPOSE_REGEN_ORACLE=1 cargo test     # régénère les expected.yaml avec docker compose (oracle, jamais dépendance runtime)
+CLEVER_COMPOSE_REGEN_GOLDEN=1 cargo test     # régénère plan.json, plan.diagnostics.txt, export/
 cargo clippy --workspace --all-targets -- -D warnings   # doit passer sans rien (règle depuis le 16/09/2026)
 ```
 
@@ -295,7 +295,7 @@ est une sortie valide. Les cas synthétiques peuvent être annotés en
 `provider_installation { direct {} }` (le poste a un `~/.terraformrc` avec
 `dev_overrides` et un build local du provider). Docker sur ce poste passe par
 `newgrp docker <<'EOF' … EOF`. Tests réels dans l'organisation Test SBRUNAT
-(`CC_ORG=orga_cd3ca43d-…`), avec des identifiants exportés dans un `env.sh`
+(`CLEVER_COMPOSE_ORG=orga_cd3ca43d-…`), avec des identifiants exportés dans un `env.sh`
 du scratchpad, jamais lus par l'outil ; tout projet de test se détruit après
 usage (`down --yes`, `terraform destroy`).
 
@@ -327,7 +327,7 @@ Scalabilité éditée depuis l'interface : `PUT /api/local/{id}/scaling`
 écrit `x-clever` dans le compose par `compose::edit::set_xclever` (édition
 textuelle, formatage conservé) ; `POST …/assets/sync` pousse les assets
 sans `up`.
-`clap` (aide par commande, `--org` ou `CC_ORG`). `plan` affiche un résumé
+`clap` (aide par commande, `--org` ou `CLEVER_COMPOSE_ORG`). `plan` affiche un résumé
 lisible (ressources, coût) puis les diagnostics ; `--json` pour le plan
 brut. Sortie rendue par `ui.rs` (couleurs, progression, bilan ✔/✘).
 

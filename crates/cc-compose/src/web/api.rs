@@ -145,7 +145,7 @@ fn internal(msg: impl Into<String>) -> ApiError {
 }
 
 async fn info(AxState(s): AxState<Shared>) -> Json<J> {
-    let stamp = env!("CC_BUILD_STAMP");
+    let stamp = env!("CLEVER_COMPOSE_BUILD_STAMP");
     let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
     Json(json!({
         "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)),

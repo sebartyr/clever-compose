@@ -8,7 +8,7 @@
 //! L'addon Cellar et le bucket sont créés par l'utilisateur, jamais par
 //! l'outil, et configurés par variables d'environnement :
 //! `CELLAR_ADDON_HOST`, `CELLAR_ADDON_KEY_ID`, `CELLAR_ADDON_KEY_SECRET`
-//! (les noms que l'addon injecte) et `CC_ASSETS_BUCKET` (un seul bucket,
+//! (les noms que l'addon injecte) et `CLEVER_COMPOSE_ASSETS_BUCKET` (un seul bucket,
 //! un préfixe `<projet>/` par projet). `down` retire les objets du projet,
 //! jamais le bucket. Requêtes S3 signées par `rusty-s3` (URL présignées),
 //! envoyées avec `reqwest`.
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use super::reconcile::Log;
 
 /// Variables de configuration des assets.
-pub const ENV_BUCKET: &str = "CC_ASSETS_BUCKET";
+pub const ENV_BUCKET: &str = "CLEVER_COMPOSE_ASSETS_BUCKET";
 pub const ENV_HOST: &str = "CELLAR_ADDON_HOST";
 pub const ENV_KEY: &str = "CELLAR_ADDON_KEY_ID";
 pub const ENV_SECRET: &str = "CELLAR_ADDON_KEY_SECRET";

@@ -19,13 +19,13 @@ pub struct File {
 const SHIM_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cc-shim"));
 
 /// Le binaire du shim : embarqué à la compilation, ou lu sur le disque via
-/// `CC_SHIM_PATH` (développement, compilation croisée pénible en local).
+/// `CLEVER_COMPOSE_SHIM_PATH` (développement, compilation croisée pénible en local).
 pub fn shim_binary() -> Result<Vec<u8>, String> {
-    if let Some(p) = std::env::var_os("CC_SHIM_PATH") {
-        return std::fs::read(&p).map_err(|e| format!("CC_SHIM_PATH : {} : {e}", FsPath::new(&p).display()));
+    if let Some(p) = std::env::var_os("CLEVER_COMPOSE_SHIM_PATH") {
+        return std::fs::read(&p).map_err(|e| format!("CLEVER_COMPOSE_SHIM_PATH : {} : {e}", FsPath::new(&p).display()));
     }
     if SHIM_BYTES.is_empty() {
-        return Err("shim non embarqué dans cette compilation : compilez-le (`cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`) ou indiquez CC_SHIM_PATH".into());
+        return Err("shim non embarqué dans cette compilation : compilez-le (`cargo build -p cc-compose-shim --profile shim --target x86_64-unknown-linux-musl`) ou indiquez CLEVER_COMPOSE_SHIM_PATH".into());
     }
     Ok(SHIM_BYTES.to_vec())
 }

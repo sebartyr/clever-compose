@@ -57,7 +57,7 @@ pub async fn run_task<P: Platform>(app: &App, state: &State, platform: &P, proje
         log(&format!("tâche {} : exécution locale avec `{client}`", app.name));
         let mut c = Command::new("sh");
         c.arg(&runner);
-        c.env("CC_INIT_DIR", work.join("cc-init"));
+        c.env("CLEVER_COMPOSE_INIT_DIR", work.join("cc-init"));
         c.env("TMPDIR", &work);
         for (k, v) in &env {
             c.env(k, v);

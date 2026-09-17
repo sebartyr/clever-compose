@@ -135,13 +135,13 @@ set -eu
 export PGPASSWORD="$POSTGRESQL_ADDON_PASSWORD"
 PSQL="psql -v ON_ERROR_STOP=1 -h $POSTGRESQL_ADDON_HOST -p $POSTGRESQL_ADDON_PORT -U $POSTGRESQL_ADDON_USER -d $POSTGRESQL_ADDON_DB"
 $PSQL -qtAc "CREATE TABLE IF NOT EXISTS cc_compose_init (hash text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
-if [ "$($PSQL -qtAc "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INIT_HASH'")" = "1" ]; then
-  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+if [ "$($PSQL -qtAc "SELECT 1 FROM cc_compose_init WHERE hash = '$CLEVER_COMPOSE_INIT_HASH'")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
 # Variables des images officielles, pour les scripts .sh qui les lisent.
 export POSTGRES_USER="$POSTGRESQL_ADDON_USER" POSTGRES_PASSWORD="$POSTGRESQL_ADDON_PASSWORD" POSTGRES_DB="$POSTGRESQL_ADDON_DB" PGHOST="$POSTGRESQL_ADDON_HOST" PGPORT="$POSTGRESQL_ADDON_PORT" PGUSER="$POSTGRESQL_ADDON_USER" PGDATABASE="$POSTGRESQL_ADDON_DB"
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.sql)    echo "cc-compose init : $f"; $PSQL -f "$f" ;;
@@ -150,8 +150,8 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$PSQL -qtAc "INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')"
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+$PSQL -qtAc "INSERT INTO cc_compose_init (hash) VALUES ('$CLEVER_COMPOSE_INIT_HASH')"
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 const MYSQL_RUNNER: &str = r#"#!/bin/sh
@@ -161,12 +161,12 @@ set -eu
 export MYSQL_PWD="$MYSQL_ADDON_PASSWORD"
 MYSQL="mysql -h $MYSQL_ADDON_HOST -P $MYSQL_ADDON_PORT -u $MYSQL_ADDON_USER $MYSQL_ADDON_DB"
 $MYSQL -e "CREATE TABLE IF NOT EXISTS cc_compose_init (hash VARCHAR(64) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
-if [ "$($MYSQL -N -s -e "SELECT 1 FROM cc_compose_init WHERE hash = '$CC_COMPOSE_INIT_HASH'")" = "1" ]; then
-  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+if [ "$($MYSQL -N -s -e "SELECT 1 FROM cc_compose_init WHERE hash = '$CLEVER_COMPOSE_INIT_HASH'")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
 export MYSQL_USER="$MYSQL_ADDON_USER" MYSQL_PASSWORD="$MYSQL_ADDON_PASSWORD" MYSQL_DATABASE="$MYSQL_ADDON_DB" MYSQL_HOST="$MYSQL_ADDON_HOST"
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.sql)    echo "cc-compose init : $f"; $MYSQL < "$f" ;;
@@ -174,8 +174,8 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$MYSQL -e "INSERT INTO cc_compose_init (hash) VALUES ('$CC_COMPOSE_INIT_HASH')"
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+$MYSQL -e "INSERT INTO cc_compose_init (hash) VALUES ('$CLEVER_COMPOSE_INIT_HASH')"
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 const MONGO_RUNNER: &str = r#"#!/bin/sh
@@ -183,13 +183,13 @@ const MONGO_RUNNER: &str = r#"#!/bin/sh
 # l'addon, une fois par contenu (collection témoin cc_compose_init).
 set -eu
 MONGO="mongo --quiet $MONGODB_ADDON_URI"
-if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
-  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CLEVER_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
 # Variables de l'image officielle, pour les scripts .sh qui les lisent.
 export MONGO_INITDB_DATABASE="$MONGODB_ADDON_DB" MONGO_INITDB_ROOT_USERNAME="$MONGODB_ADDON_USER" MONGO_INITDB_ROOT_PASSWORD="$MONGODB_ADDON_PASSWORD"
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
     *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
@@ -197,8 +197,8 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)         echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})"
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CLEVER_COMPOSE_INIT_HASH', applied_at: new Date()})"
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 const DOCUMENTDB_RUNNER: &str = r#"#!/bin/sh
@@ -208,13 +208,13 @@ const DOCUMENTDB_RUNNER: &str = r#"#!/bin/sh
 set -eu
 URI="$DOCUMENTDB_ADDON_URI"
 MONGO="mongosh --quiet --tls --tlsAllowInvalidCertificates $URI"
-if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
-  echo "cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)"
+if [ "$($MONGO --eval "print(db.cc_compose_init.findOne({_id: '$CLEVER_COMPOSE_INIT_HASH'}) ? 1 : 0)")" = "1" ]; then
+  echo "cc-compose init : scripts déjà appliqués ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
 # Variables de l'image officielle mongo, pour les scripts .sh qui les lisent.
 export MONGO_INITDB_DATABASE="$POSTGRESQL_ADDON_DB" MONGO_INITDB_ROOT_USERNAME="$POSTGRESQL_ADDON_USER" MONGO_INITDB_ROOT_PASSWORD="$POSTGRESQL_ADDON_PASSWORD"
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)      echo "cc-compose init : $f"; sh "$f" ;;
     *.js)      echo "cc-compose init : $f"; $MONGO "$f" ;;
@@ -222,8 +222,8 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)         echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})"
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+$MONGO --eval "db.cc_compose_init.insertOne({_id: '$CLEVER_COMPOSE_INIT_HASH', applied_at: new Date()})"
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 const REDIS_RUNNER: &str = r#"#!/bin/sh
@@ -232,11 +232,11 @@ const REDIS_RUNNER: &str = r#"#!/bin/sh
 set -eu
 export REDISCLI_AUTH="$REDIS_PASSWORD"
 REDIS="redis-cli -h $REDIS_HOST -p $REDIS_PORT"
-if [ "$($REDIS EXISTS "cc_compose_init:$CC_COMPOSE_INIT_HASH")" = "1" ]; then
-  echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
+if [ "$($REDIS EXISTS "cc_compose_init:$CLEVER_COMPOSE_INIT_HASH")" = "1" ]; then
+  echo "cc-compose init : données déjà chargées ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)    echo "cc-compose init : $f"; sh "$f" ;;
     *.redis) echo "cc-compose init : $f"; $REDIS < "$f" ;;
@@ -244,8 +244,8 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)       echo "cc-compose init : $f ignoré" ;;
   esac
 done
-$REDIS SET "cc_compose_init:$CC_COMPOSE_INIT_HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /dev/null
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+$REDIS SET "cc_compose_init:$CLEVER_COMPOSE_INIT_HASH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /dev/null
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 const ES_RUNNER: &str = r#"#!/bin/sh
@@ -260,12 +260,12 @@ chmod 600 "${TMPDIR:-/tmp}/cc-init.netrc"
 # es <méthode> <chemin> [options curl] : corps dans cc-init-es.out, code HTTP
 # dans $CODE (pas de substitution de commande : elle perdrait la variable).
 es() { m="$1"; p="$2"; shift 2; CODE="$(curl -sS --netrc-file "${TMPDIR:-/tmp}/cc-init.netrc" -o "${TMPDIR:-/tmp}/cc-init-es.out" -w '%{http_code}' -X "$m" "$ES$p" "$@")"; }
-es GET "/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH"
+es GET "/cc_compose_init/_doc/$CLEVER_COMPOSE_INIT_HASH"
 if [ "$CODE" = "200" ]; then
-  echo "cc-compose init : données déjà chargées ($CC_COMPOSE_INIT_HASH)"
+  echo "cc-compose init : données déjà chargées ($CLEVER_COMPOSE_INIT_HASH)"
   exit 0
 fi
-for f in "${CC_INIT_DIR:-/cc-init}"/*; do
+for f in "${CLEVER_COMPOSE_INIT_DIR:-/cc-init}"/*; do
   case "$f" in
     *.sh)     echo "cc-compose init : $f"; sh "$f" ;;
     *.ndjson) echo "cc-compose init : $f"
@@ -274,9 +274,9 @@ for f in "${CC_INIT_DIR:-/cc-init}"/*; do
     *)        echo "cc-compose init : $f ignoré" ;;
   esac
 done
-es PUT "/cc_compose_init/_doc/$CC_COMPOSE_INIT_HASH" -H 'Content-Type: application/json' -d "{\"applied_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+es PUT "/cc_compose_init/_doc/$CLEVER_COMPOSE_INIT_HASH" -H 'Content-Type: application/json' -d "{\"applied_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
 case "$CODE" in 2*) ;; *) echo "cc-compose init : témoin non écrit (HTTP $CODE)"; exit 1 ;; esac
-echo "cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)"
+echo "cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)"
 "#;
 
 #[allow(clippy::too_many_arguments)]
@@ -296,7 +296,7 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
         source: Source::Synthetic { image, private_registry: false, files, generated: vec![GeneratedFile { target: "/cc-init.sh".into(), content: script, executable: true }] },
         image: intrinsics,
         shim: ShimConfig { argv: vec!["sh".into(), "/cc-init.sh".into()], workdir: None, user: None, port: PlatformPort::Health { ready_port: None }, tcp: None, udp: None, secrets: Vec::new() },
-        env: vec![EnvVar { key: "CC_COMPOSE_INIT_HASH".into(), value: Template::literal(hash) }],
+        env: vec![EnvVar { key: "CLEVER_COMPOSE_INIT_HASH".into(), value: Template::literal(hash) }],
         depends_on: vec![ResourceId(format!("addon/{service}"))],
         health_check_path: None,
         secrets: Vec::new(),

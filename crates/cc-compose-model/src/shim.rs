@@ -69,7 +69,7 @@ pub struct ShimConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretFile {
-    /// Variable qui porte la valeur (`CC_COMPOSE_SECRET_<NOM>`).
+    /// Variable qui porte la valeur (`CLEVER_COMPOSE_SECRET_<NOM>`).
     pub env: String,
     /// Chemin du fichier dans le conteneur (`/run/secrets/<nom>` par défaut).
     pub target: String,

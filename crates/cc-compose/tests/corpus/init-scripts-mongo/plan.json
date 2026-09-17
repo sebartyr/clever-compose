@@ -72,7 +72,7 @@
         "generated": [
           {
             "target": "/cc-init.sh",
-            "content": "#!/bin/sh\n# Généré par clever-compose : rejoue les scripts d'initialisation contre\n# l'addon, une fois par contenu (collection témoin cc_compose_init).\nset -eu\nMONGO=\"mongo --quiet $MONGODB_ADDON_URI\"\nif [ \"$($MONGO --eval \"print(db.cc_compose_init.findOne({_id: '$CC_COMPOSE_INIT_HASH'}) ? 1 : 0)\")\" = \"1\" ]; then\n  echo \"cc-compose init : scripts déjà appliqués ($CC_COMPOSE_INIT_HASH)\"\n  exit 0\nfi\n# Variables de l'image officielle, pour les scripts .sh qui les lisent.\nexport MONGO_INITDB_DATABASE=\"$MONGODB_ADDON_DB\" MONGO_INITDB_ROOT_USERNAME=\"$MONGODB_ADDON_USER\" MONGO_INITDB_ROOT_PASSWORD=\"$MONGODB_ADDON_PASSWORD\"\nfor f in \"${CC_INIT_DIR:-/cc-init}\"/*; do\n  case \"$f\" in\n    *.sh)      echo \"cc-compose init : $f\"; sh \"$f\" ;;\n    *.js)      echo \"cc-compose init : $f\"; $MONGO \"$f\" ;;\n    *.archive) echo \"cc-compose init : $f\"; mongorestore --quiet --uri=\"$MONGODB_ADDON_URI\" --archive=\"$f\" --nsFrom='*.*' --nsTo=\"$MONGODB_ADDON_DB.*\" ;;\n    *)         echo \"cc-compose init : $f ignoré\" ;;\n  esac\ndone\n$MONGO --eval \"db.cc_compose_init.insertOne({_id: '$CC_COMPOSE_INIT_HASH', applied_at: new Date()})\"\necho \"cc-compose init : terminé ($CC_COMPOSE_INIT_HASH)\"\n",
+            "content": "#!/bin/sh\n# Généré par clever-compose : rejoue les scripts d'initialisation contre\n# l'addon, une fois par contenu (collection témoin cc_compose_init).\nset -eu\nMONGO=\"mongo --quiet $MONGODB_ADDON_URI\"\nif [ \"$($MONGO --eval \"print(db.cc_compose_init.findOne({_id: '$CLEVER_COMPOSE_INIT_HASH'}) ? 1 : 0)\")\" = \"1\" ]; then\n  echo \"cc-compose init : scripts déjà appliqués ($CLEVER_COMPOSE_INIT_HASH)\"\n  exit 0\nfi\n# Variables de l'image officielle, pour les scripts .sh qui les lisent.\nexport MONGO_INITDB_DATABASE=\"$MONGODB_ADDON_DB\" MONGO_INITDB_ROOT_USERNAME=\"$MONGODB_ADDON_USER\" MONGO_INITDB_ROOT_PASSWORD=\"$MONGODB_ADDON_PASSWORD\"\nfor f in \"${CLEVER_COMPOSE_INIT_DIR:-/cc-init}\"/*; do\n  case \"$f\" in\n    *.sh)      echo \"cc-compose init : $f\"; sh \"$f\" ;;\n    *.js)      echo \"cc-compose init : $f\"; $MONGO \"$f\" ;;\n    *.archive) echo \"cc-compose init : $f\"; mongorestore --quiet --uri=\"$MONGODB_ADDON_URI\" --archive=\"$f\" --nsFrom='*.*' --nsTo=\"$MONGODB_ADDON_DB.*\" ;;\n    *)         echo \"cc-compose init : $f ignoré\" ;;\n  esac\ndone\n$MONGO --eval \"db.cc_compose_init.insertOne({_id: '$CLEVER_COMPOSE_INIT_HASH', applied_at: new Date()})\"\necho \"cc-compose init : terminé ($CLEVER_COMPOSE_INIT_HASH)\"\n",
             "executable": true
           }
         ]
@@ -101,7 +101,7 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_INIT_HASH",
+          "key": "CLEVER_COMPOSE_INIT_HASH",
           "value": [
             {
               "literal": "965bdbffd89e76fcb0544c283a25b57e"
@@ -159,7 +159,7 @@
       },
       "env": [
         {
-          "key": "CC_COMPOSE_DNS_MAP",
+          "key": "CLEVER_COMPOSE_DNS_MAP",
           "value": [
             {
               "literal": "mongo="
@@ -173,7 +173,7 @@
           ]
         },
         {
-          "key": "CC_COMPOSE_EXPAND",
+          "key": "CLEVER_COMPOSE_EXPAND",
           "value": [
             {
               "literal": "MONGO_URL"

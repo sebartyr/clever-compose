@@ -1,7 +1,7 @@
 //! Golden files du plan (CLAUDE.md §11) : chaque cas du corpus doté d'une
 //! fixture d'images (`images.json`) produit `plan.json` et
 //! `plan.diagnostics.txt`, figés dans le dépôt. Régénération :
-//! `CC_REGEN_GOLDEN=1 cargo test`.
+//! `CLEVER_COMPOSE_REGEN_GOLDEN=1 cargo test`.
 //!
 //! `plan-options.json` (optionnel) : `{"allow_ephemeral": true,
 //! "private_registries": ["ghcr.io"]}` (les registres « avec identifiants »
@@ -28,7 +28,7 @@ struct PlanTestOptions {
 
 #[test]
 fn corpus_plans_match_golden_files() {
-    let regen = std::env::var_os("CC_REGEN_GOLDEN").is_some();
+    let regen = std::env::var_os("CLEVER_COMPOSE_REGEN_GOLDEN").is_some();
     let mut entries: Vec<PathBuf> = std::fs::read_dir(corpus_dir()).unwrap().filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.join("images.json").is_file()).collect();
     entries.sort();
     assert!(!entries.is_empty());

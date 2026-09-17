@@ -56,7 +56,7 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
     let _ = writeln!(s, "# À usage unique : ce script crée les ressources, il ne les réconcilie pas.");
     let _ = writeln!(s, "# Les dépôts synthétiques sont attendus dans ./repos/<service> (export).");
     let _ = writeln!(s, "set -euo pipefail");
-    let _ = writeln!(s, "ORG=\"${{CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}}\"");
+    let _ = writeln!(s, "ORG=\"${{CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}}\"");
     let _ = writeln!(s, "cd \"$(dirname \"$0\")\"");
     let _ = writeln!(s);
 

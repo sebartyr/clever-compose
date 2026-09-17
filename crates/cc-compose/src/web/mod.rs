@@ -24,7 +24,7 @@ pub use crate::auth::Consumer as OauthConsumer;
 /// Un client authentifié : les jetons envoyés dans la requête
 /// (`X-CC-Token` + `X-CC-Secret`, ou `X-CC-Api-Token`), validés chez
 /// Clever Cloud, ou les identifiants du serveur (`credentials.json` du
-/// `login`, `CLEVER_TOKEN`/`CLEVER_SECRET`, `CC_API_TOKEN`) pour un
+/// `login`, `CLEVER_TOKEN`/`CLEVER_SECRET`, `CLEVER_COMPOSE_API_TOKEN`) pour un
 /// client qui n'en envoie pas : l'usage local, `clever-compose ui` sur
 /// son poste.
 #[derive(Clone)]

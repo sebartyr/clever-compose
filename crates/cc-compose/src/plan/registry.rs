@@ -7,7 +7,7 @@
 //! Identifiants : `~/.docker/config.json` (`auths`, sans credential
 //! helpers) ; sinon anonyme. Cache disque par référence sous
 //! `$XDG_CACHE_HOME/clever-compose/images/`, invalidé pour un tag mutable
-//! (`latest` ou sans tag) après `CC_IMAGE_CACHE_TTL` secondes (défaut
+//! (`latest` ou sans tag) après `CLEVER_COMPOSE_IMAGE_CACHE_TTL` secondes (défaut
 //! 86400), jamais pour un digest.
 
 use std::collections::HashMap;
@@ -88,7 +88,7 @@ impl Registry {
 impl ImageResolver for Registry {
     fn resolve(&self, image: &str) -> Result<ImageIntrinsics, String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        let ttl: u64 = std::env::var("CC_IMAGE_CACHE_TTL").ok().and_then(|v| v.parse().ok()).unwrap_or(86_400);
+        let ttl: u64 = std::env::var("CLEVER_COMPOSE_IMAGE_CACHE_TTL").ok().and_then(|v| v.parse().ok()).unwrap_or(86_400);
         let pinned = image.contains("@sha256:");
         let cache = self.cache_path(image);
         if let Some(path) = &cache {

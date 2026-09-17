@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -28,7 +28,7 @@ clever ng link "$APP_front" 'nginx-proxy-default' -o "$ORG"
 clever ng link "$APP_app" 'nginx-proxy-default' -o "$ORG"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_front" 'CC_COMPOSE_DNS_MAP' 'app='"${APP_app}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_front" 'CLEVER_COMPOSE_DNS_MAP' 'app='"${APP_app}.m.${NG_default}.cc-ng.cloud"
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
 (

@@ -70,8 +70,8 @@
         "registry_user": "${var.registry_ghcr_io_user}",
         "registry_password": "${var.registry_ghcr_io_password}",
         "environment": {
-          "CC_COMPOSE_DNS_MAP": "search=${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "CC_COMPOSE_EXPAND": "ES_URL",
+          "CLEVER_COMPOSE_DNS_MAP": "search=${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "CLEVER_COMPOSE_EXPAND": "ES_URL",
           "ES_URL": "http://$${ES_ADDON_USER}:$${ES_ADDON_PASSWORD}@${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080"
         },
         "networkgroups": [

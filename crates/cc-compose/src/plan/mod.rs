@@ -609,7 +609,7 @@ fn plan_service(
     // Variables à expanser par le shim au démarrage (références d'addon).
     let expand: Vec<String> = env.iter().filter(|e| e.value.0.iter().any(|seg| matches!(seg, Segment::Ref(Reference::AddonEnv { .. })))).map(|e| e.key.clone()).collect();
     if !expand.is_empty() {
-        env.push(EnvVar { key: "CC_COMPOSE_EXPAND".into(), value: Template::literal(expand.join(",")) });
+        env.push(EnvVar { key: "CLEVER_COMPOSE_EXPAND".into(), value: Template::literal(expand.join(",")) });
     }
     // Avertissement connexions (§6.4) : instances × pool contre la limite du plan.
     for (addon_name, plan) in addon_plans {
@@ -646,7 +646,7 @@ fn plan_service(
             diags.push(Diagnostic::error("secret-invalid", format!("le secret `{}` n'a ni `file` ni `environment`", sm.source)).with_path(&Path::root().child("secrets").child(&sm.source)));
             continue;
         };
-        let env_name = format!("CC_COMPOSE_SECRET_{}", sm.source.to_ascii_uppercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect::<String>());
+        let env_name = format!("CLEVER_COMPOSE_SECRET_{}", sm.source.to_ascii_uppercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect::<String>());
         let target = match &sm.target {
             Some(t) if t.starts_with('/') => t.clone(),
             Some(t) => format!("/run/secrets/{t}"),
@@ -664,7 +664,7 @@ fn plan_service(
     }
     let dns_map = env::dns_map(name, s, memberships, &referenced, addons);
     if !dns_map.0.is_empty() {
-        env.push(EnvVar { key: "CC_COMPOSE_DNS_MAP".into(), value: dns_map.clone() });
+        env.push(EnvVar { key: "CLEVER_COMPOSE_DNS_MAP".into(), value: dns_map.clone() });
     }
     let health_check_path = s.healthcheck.as_ref().and_then(|h| health_path(h, name, p, diags));
     if let Some(path) = &health_check_path {

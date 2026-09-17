@@ -10,7 +10,7 @@ use cc_compose_model::plan::*;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "clever-compose", version = build_version(), about = "Fait tourner un docker compose sur Clever Cloud : chaque service devient une application Docker, chaque réseau un network group, les bases reconnues des addons managés.", long_about = None, disable_help_subcommand = true, after_help = "Identifiants : CC_API_TOKEN (bearer), ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0). Organisation : --org ou CC_ORG.\nExemples :\n  clever-compose plan                 ce qui serait créé, avec les diagnostics\n  clever-compose up --yes             déploie (--yes confirme les addons, facturés)\n  clever-compose logs api --follow    suit les logs d'un service\n  clever-compose down --yes           supprime tout ce que le projet a créé")]
+#[command(name = "clever-compose", version = build_version(), about = "Fait tourner un docker compose sur Clever Cloud : chaque service devient une application Docker, chaque réseau un network group, les bases reconnues des addons managés.", long_about = None, disable_help_subcommand = true, after_help = "Identifiants : CLEVER_COMPOSE_API_TOKEN (bearer), ou CLEVER_TOKEN + CLEVER_SECRET (OAuth 1.0). Organisation : --org ou CLEVER_COMPOSE_ORG.\nExemples :\n  clever-compose plan                 ce qui serait créé, avec les diagnostics\n  clever-compose up --yes             déploie (--yes confirme les addons, facturés)\n  clever-compose logs api --follow    suit les logs d'un service\n  clever-compose down --yes           supprime tout ce que le projet a créé")]
 struct Cli {
     #[command(flatten)]
     project: ProjectArgs,
@@ -55,8 +55,8 @@ struct PlanArgs {
 #[derive(Args, Clone)]
 #[command(next_help_heading = "Plateforme")]
 struct OrgArgs {
-    /// Organisation (orga_xxx ou user_xxx) ; sinon CC_ORG
-    #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
+    /// Organisation (orga_xxx ou user_xxx) ; sinon CLEVER_COMPOSE_ORG
+    #[arg(short = 'o', long, env = "CLEVER_COMPOSE_ORG", value_name = "ORG")]
     org: String,
 }
 
@@ -196,10 +196,10 @@ enum Command {
     #[cfg(feature = "ui")]
     Ui {
         /// Organisation initiale (sinon choisie dans l'interface)
-        #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
+        #[arg(short = 'o', long, env = "CLEVER_COMPOSE_ORG", value_name = "ORG")]
         org: Option<String>,
         /// Adresse et port d'écoute (0.0.0.0:8080 dans une application Clever Cloud)
-        #[arg(long, default_value = "127.0.0.1:8080", env = "CC_LISTEN", value_name = "ADRESSE:PORT")]
+        #[arg(long, default_value = "127.0.0.1:8080", env = "CLEVER_COMPOSE_LISTEN", value_name = "ADRESSE:PORT")]
         listen: std::net::SocketAddr,
         /// N'ouvre pas le navigateur
         #[arg(long)]
@@ -208,17 +208,17 @@ enum Command {
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
         /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
-        #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
+        #[arg(long, env = "CLEVER_COMPOSE_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
     },
     /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL)
     #[cfg(feature = "api")]
     Api {
         /// Organisation initiale (sinon choisie dans l'interface)
-        #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
+        #[arg(short = 'o', long, env = "CLEVER_COMPOSE_ORG", value_name = "ORG")]
         org: Option<String>,
         /// Adresse et port d'écoute (0.0.0.0:8080 dans une application Clever Cloud)
-        #[arg(long, default_value = "127.0.0.1:8080", env = "CC_LISTEN", value_name = "ADRESSE:PORT")]
+        #[arg(long, default_value = "127.0.0.1:8080", env = "CLEVER_COMPOSE_LISTEN", value_name = "ADRESSE:PORT")]
         listen: std::net::SocketAddr,
         /// Origine de l'interface autorisée en CORS (répétable), ex. https://ui.exemple
         #[arg(long, value_name = "ORIGINE")]
@@ -227,7 +227,7 @@ enum Command {
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
         /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
-        #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
+        #[arg(long, env = "CLEVER_COMPOSE_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
     },
     /// Fixture des configurations d'images du projet, lues sur les registres (tests hors ligne)
@@ -252,7 +252,7 @@ enum ExportWhat {
 fn build_version() -> &'static str {
     static V: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     V.get_or_init(|| {
-        let stamp = env!("CC_BUILD_STAMP");
+        let stamp = env!("CLEVER_COMPOSE_BUILD_STAMP");
         let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
         format!("{} ({commit}, {})", env!("CARGO_PKG_VERSION"), cc_compose::exec::inspect::rfc3339(secs.parse().unwrap_or(0)))
     })
@@ -325,7 +325,7 @@ fn fail(msg: &str) -> ExitCode {
                 return ExitCode::from(1);
             }
         } else if !msg.contains("clever-compose login") {
-            eprintln!("  → `clever-compose login`, ou CLEVER_TOKEN et CLEVER_SECRET (CC_API_TOKEN) dans l'environnement");
+            eprintln!("  → `clever-compose login`, ou CLEVER_TOKEN et CLEVER_SECRET (CLEVER_COMPOSE_API_TOKEN) dans l'environnement");
         }
     }
     ExitCode::from(1)

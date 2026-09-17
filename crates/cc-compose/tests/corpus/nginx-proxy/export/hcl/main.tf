@@ -51,7 +51,7 @@ resource "clevercloud_docker" "front" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_DNS_MAP = "app=${clevercloud_docker.app.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CLEVER_COMPOSE_DNS_MAP = "app=${clevercloud_docker.app.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
   }
   networkgroups      = [
     {

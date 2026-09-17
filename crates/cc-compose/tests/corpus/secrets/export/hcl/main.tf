@@ -38,9 +38,9 @@ resource "clevercloud_docker" "app" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_SECRET_API_TOKEN   = var.secret_api_token
-    CC_COMPOSE_SECRET_DB_PASSWORD = file("${path.module}/../../db_password.txt")
-    DB_PASSWORD_FILE              = "/run/secrets/db_password"
+    CLEVER_COMPOSE_SECRET_API_TOKEN   = var.secret_api_token
+    CLEVER_COMPOSE_SECRET_DB_PASSWORD = file("${path.module}/../../db_password.txt")
+    DB_PASSWORD_FILE                  = "/run/secrets/db_password"
   }
   networkgroups      = [
     {

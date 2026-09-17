@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -37,9 +37,9 @@ clever service link-addon "$ADDON_db" --app "$APP_db_init"
 clever service link-addon "$ADDON_db" --app "$APP_api"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_db_init" 'CC_COMPOSE_INIT_HASH' '58d214e86fa675d00c5603cc537d6ae5'
-clever env set --app "$APP_api" 'CC_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
-clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'DATABASE_URL,DB_PASSWORD'
+clever env set --app "$APP_db_init" 'CLEVER_COMPOSE_INIT_HASH' '58d214e86fa675d00c5603cc537d6ae5'
+clever env set --app "$APP_api" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_api" 'CLEVER_COMPOSE_EXPAND' 'DATABASE_URL,DB_PASSWORD'
 clever env set --app "$APP_api" 'DATABASE_URL' 'postgres://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"':8080''/''${POSTGRESQL_ADDON_DB}''?sslmode=disable'
 clever env set --app "$APP_api" 'DB_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
 

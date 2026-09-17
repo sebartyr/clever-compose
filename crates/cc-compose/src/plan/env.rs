@@ -227,7 +227,7 @@ fn lookup(host: &str, consumer: &str, consumer_service: &Service, project: &Proj
 }
 
 #[allow(clippy::too_many_arguments)]
-/// `CC_COMPOSE_DNS_MAP=alias=<fqdn>,...` : les alias des services que ce
+/// `CLEVER_COMPOSE_DNS_MAP=alias=<fqdn>,...` : les alias des services que ce
 /// service référence (`depends_on`, hôtes de son environnement) et qu'il
 /// atteint par un réseau commun, triés. Restreindre aux références rend le
 /// graphe des ressources acyclique, donc l'export Terraform applicable en

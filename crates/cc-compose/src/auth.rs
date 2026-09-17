@@ -7,7 +7,7 @@
 //! dans `$XDG_CONFIG_HOME/clever-cloud/clever-compose.json` (notre
 //! fichier, à côté de celui de clever-tools, jamais dedans).
 //!
-//! Ordre de résolution des identifiants : `CC_API_TOKEN`, puis
+//! Ordre de résolution des identifiants : `CLEVER_COMPOSE_API_TOKEN`, puis
 //! `CLEVER_TOKEN` + `CLEVER_SECRET` (signés avec le consumer courant),
 //! puis le fichier.
 
@@ -112,7 +112,7 @@ pub enum Source {
 
 /// Identifiants du poste : environnement, sinon fichier de `login`.
 pub fn credentials() -> Result<(Credentials, Source), String> {
-    if let Ok(token) = std::env::var("CC_API_TOKEN") {
+    if let Ok(token) = std::env::var("CLEVER_COMPOSE_API_TOKEN") {
         if !token.is_empty() {
             return Ok((Credentials::Bearer { token }, Source::Env));
         }
@@ -128,7 +128,7 @@ pub fn credentials() -> Result<(Credentials, Source), String> {
         }
         return Ok((Credentials::OAuth1 { token: s.token, secret: s.secret, consumer_key: consumer.key, consumer_secret: consumer.secret }, Source::File(config_path())));
     }
-    Err("identifiants absents : `clever-compose login`, ou CC_API_TOKEN, ou CLEVER_TOKEN et CLEVER_SECRET dans l'environnement".into())
+    Err("identifiants absents : `clever-compose login`, ou CLEVER_COMPOSE_API_TOKEN, ou CLEVER_TOKEN et CLEVER_SECRET dans l'environnement".into())
 }
 
 // ------------------------------------------------------------ danse OAuth 1.0

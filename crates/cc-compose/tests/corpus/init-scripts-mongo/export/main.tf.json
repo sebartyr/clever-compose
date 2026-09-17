@@ -69,7 +69,7 @@
         "min_instance_count": 1,
         "max_instance_count": 1,
         "environment": {
-          "CC_COMPOSE_INIT_HASH": "965bdbffd89e76fcb0544c283a25b57e"
+          "CLEVER_COMPOSE_INIT_HASH": "965bdbffd89e76fcb0544c283a25b57e"
         },
         "deployment": {
           "repository": "${var.repository}",
@@ -87,8 +87,8 @@
         "min_instance_count": 1,
         "max_instance_count": 1,
         "environment": {
-          "CC_COMPOSE_DNS_MAP": "mongo=${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
-          "CC_COMPOSE_EXPAND": "MONGO_URL",
+          "CLEVER_COMPOSE_DNS_MAP": "mongo=${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "CLEVER_COMPOSE_EXPAND": "MONGO_URL",
           "MONGO_URL": "mongodb://$${MONGODB_ADDON_USER}:$${MONGODB_ADDON_PASSWORD}@${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080/$${MONGODB_ADDON_DB}"
         },
         "networkgroups": [

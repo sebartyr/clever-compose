@@ -3,7 +3,7 @@
 # À usage unique : ce script crée les ressources, il ne les réconcilie pas.
 # Les dépôts synthétiques sont attendus dans ./repos/<service> (export).
 set -euo pipefail
-ORG="${CC_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
+ORG="${CLEVER_COMPOSE_ORG:?organisation Clever Cloud requise (orga_xxx ou user_xxx)}"
 cd "$(dirname "$0")"
 
 # Network groups (un par réseau Compose)
@@ -37,9 +37,9 @@ clever service link-addon "$ADDON_mongo" --app "$APP_mongo_init"
 clever service link-addon "$ADDON_mongo" --app "$APP_api"
 
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
-clever env set --app "$APP_mongo_init" 'CC_COMPOSE_INIT_HASH' '965bdbffd89e76fcb0544c283a25b57e'
-clever env set --app "$APP_api" 'CC_COMPOSE_DNS_MAP' 'mongo='"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
-clever env set --app "$APP_api" 'CC_COMPOSE_EXPAND' 'MONGO_URL,MONGO_PASSWORD'
+clever env set --app "$APP_mongo_init" 'CLEVER_COMPOSE_INIT_HASH' '965bdbffd89e76fcb0544c283a25b57e'
+clever env set --app "$APP_api" 'CLEVER_COMPOSE_DNS_MAP' 'mongo='"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_api" 'CLEVER_COMPOSE_EXPAND' 'MONGO_URL,MONGO_PASSWORD'
 clever env set --app "$APP_api" 'MONGO_HOST' "${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'MONGO_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
 clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"':4040''/''${POSTGRESQL_ADDON_DB}''?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true'

@@ -1,11 +1,11 @@
 //! Expansion des variables au démarrage (CLAUDE.md §6.2) : la plateforme
 //! n'expanse pas `${X}` entre variables (phase 0, question 7). Les variables
-//! listées dans `CC_COMPOSE_EXPAND` voient leurs `${NOM}` remplacés par la
+//! listées dans `CLEVER_COMPOSE_EXPAND` voient leurs `${NOM}` remplacés par la
 //! valeur de `NOM` dans l'environnement (typiquement les variables injectées
 //! par la liaison d'un addon). Une variable absente donne une chaîne vide et
 //! un message.
 
-pub const LIST_VAR: &str = "CC_COMPOSE_EXPAND";
+pub const LIST_VAR: &str = "CLEVER_COMPOSE_EXPAND";
 
 pub fn expand_all() -> Vec<(String, String)> {
     let Some(list) = std::env::var_os(LIST_VAR) else { return Vec::new() };

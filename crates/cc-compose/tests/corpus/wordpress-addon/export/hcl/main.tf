@@ -45,12 +45,12 @@ resource "clevercloud_docker" "wordpress" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_DNS_MAP    = "db=${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    CC_COMPOSE_EXPAND     = "WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME"
-    WORDPRESS_DB_HOST     = "${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    WORDPRESS_DB_NAME     = "$${MYSQL_ADDON_DB}"
-    WORDPRESS_DB_PASSWORD = "$${MYSQL_ADDON_PASSWORD}"
-    WORDPRESS_DB_USER     = "$${MYSQL_ADDON_USER}"
+    CLEVER_COMPOSE_DNS_MAP = "db=${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CLEVER_COMPOSE_EXPAND  = "WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME"
+    WORDPRESS_DB_HOST      = "${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    WORDPRESS_DB_NAME      = "$${MYSQL_ADDON_DB}"
+    WORDPRESS_DB_PASSWORD  = "$${MYSQL_ADDON_PASSWORD}"
+    WORDPRESS_DB_USER      = "$${MYSQL_ADDON_USER}"
   }
   networkgroups      = [
     {

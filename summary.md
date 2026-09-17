@@ -394,6 +394,17 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Préfixe `CLEVER_COMPOSE_` (17/09/2026)** : « prefix tout avec
+  CLEVER_COMPOSE plutôt que CC_ ». Toutes nos variables changent de nom :
+  `CLEVER_COMPOSE_{API_TOKEN, ORG, API_KEY, LISTEN, ASSETS_BUCKET,
+  SHIM_PATH, SHIM_BIN, SHIM_EMBEDDED, BUILD_STAMP, IMAGE_CACHE_TTL,
+  REGEN_ORACLE, REGEN_GOLDEN}` et, dans les conteneurs, `CLEVER_COMPOSE_{
+  DNS_MAP, EXPAND, INIT_DIR, INIT_HASH, SECRET_*}` (ex-`CC_COMPOSE_*`,
+  `CC_INIT_DIR`). Celles de la plateforme (`CC_HEALTH_CHECK_PATH`,
+  `CC_DOCKERFILE`, `CC_DOCKER_LOGIN_*`, `CC_DOCKER_EXPOSED_*`,
+  `CC_MOUNT_DOCKER_SOCKET`) gardent évidemment leur nom. `CLEVER_TOKEN`/
+  `CLEVER_SECRET`/`CLEVER_CONSUMER_*` restent (convention clever-tools).
+  Goldens régénérés (noms et alignement HCL seulement).
 - **Port 8080 par défaut (17/09/2026)** : `ui`/`api` écoutent sur
   `127.0.0.1:8080` (`--listen` ou `CC_LISTEN`), `login --callback-port`
   8080 : le port attendu par une application Clever Cloud, et la base

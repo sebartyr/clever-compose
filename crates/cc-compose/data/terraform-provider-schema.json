@@ -31,7 +31,7 @@
               "type": "string"
             },
             "organisation": {
-              "description": "Clever Cloud organisation, can be either orga_xxx, or user_xxx for personal spaces. This parameter can also be provided via CC_ORGANISATION environment variable.",
+              "description": "Clever Cloud organisation, can be either orga_xxx, or user_xxx for personal spaces. This parameter can also be provided via CLEVER_COMPOSE_ORGANISATION environment variable.",
               "description_kind": "markdown",
               "optional": true,
               "sensitive": true,

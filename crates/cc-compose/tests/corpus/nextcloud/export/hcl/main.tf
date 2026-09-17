@@ -45,12 +45,12 @@ resource "clevercloud_docker" "nc" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_DNS_MAP = "db=${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    CC_COMPOSE_EXPAND  = "POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
-    POSTGRES_DB        = "$${POSTGRESQL_ADDON_DB}"
-    POSTGRES_HOST      = "${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    POSTGRES_PASSWORD  = "$${POSTGRESQL_ADDON_PASSWORD}"
-    POSTGRES_USER      = "$${POSTGRESQL_ADDON_USER}"
+    CLEVER_COMPOSE_DNS_MAP = "db=${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CLEVER_COMPOSE_EXPAND  = "POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER"
+    POSTGRES_DB            = "$${POSTGRESQL_ADDON_DB}"
+    POSTGRES_HOST          = "${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    POSTGRES_PASSWORD      = "$${POSTGRESQL_ADDON_PASSWORD}"
+    POSTGRES_USER          = "$${POSTGRESQL_ADDON_USER}"
   }
   networkgroups      = [
     {

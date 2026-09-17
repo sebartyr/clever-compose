@@ -37,7 +37,7 @@ resource "clevercloud_docker" "mongo_init" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_INIT_HASH = "965bdbffd89e76fcb0544c283a25b57e"
+    CLEVER_COMPOSE_INIT_HASH = "965bdbffd89e76fcb0544c283a25b57e"
   }
   deployment {
     repository = var.repository
@@ -54,11 +54,11 @@ resource "clevercloud_docker" "api" {
   min_instance_count = 1
   max_instance_count = 1
   environment        = {
-    CC_COMPOSE_DNS_MAP = "mongo=${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    CC_COMPOSE_EXPAND  = "MONGO_URL,MONGO_PASSWORD"
-    MONGO_HOST         = "${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
-    MONGO_PASSWORD     = "$${POSTGRESQL_ADDON_PASSWORD}"
-    MONGO_URL          = "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:4040/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
+    CLEVER_COMPOSE_DNS_MAP = "mongo=${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    CLEVER_COMPOSE_EXPAND  = "MONGO_URL,MONGO_PASSWORD"
+    MONGO_HOST             = "${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    MONGO_PASSWORD         = "$${POSTGRESQL_ADDON_PASSWORD}"
+    MONGO_URL              = "mongodb://$${POSTGRESQL_ADDON_USER}:$${POSTGRESQL_ADDON_PASSWORD}@${var.addon_mongo_real_id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:4040/$${POSTGRESQL_ADDON_DB}?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true"
   }
   networkgroups      = [
     {

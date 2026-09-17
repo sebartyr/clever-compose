@@ -67,7 +67,7 @@
         "min_instance_count": 1,
         "max_instance_count": 1,
         "environment": {
-          "CC_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "CLEVER_COMPOSE_DNS_MAP": "db=${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "WORDPRESS_DB_HOST": "${clevercloud_docker.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "WORDPRESS_DB_NAME": "wordpress",
           "WORDPRESS_DB_PASSWORD": "wordpress",

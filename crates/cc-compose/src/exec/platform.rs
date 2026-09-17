@@ -279,16 +279,16 @@ fn urlencode(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
 
-/// Identifiants de l'outil, indépendants de la CLI clever : `CC_API_TOKEN`
+/// Identifiants de l'outil, indépendants de la CLI clever : `CLEVER_COMPOSE_API_TOKEN`
 /// (bearer, api-bridge) ou `CLEVER_TOKEN` + `CLEVER_SECRET` (OAuth 1.0).
 pub fn credentials_from_env() -> PResult<Credentials> {
-    if let Ok(token) = std::env::var("CC_API_TOKEN") {
+    if let Ok(token) = std::env::var("CLEVER_COMPOSE_API_TOKEN") {
         return Ok(Credentials::Bearer { token });
     }
     match (std::env::var("CLEVER_TOKEN"), std::env::var("CLEVER_SECRET"), std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
         (Ok(token), Ok(secret), Ok(consumer_key), Ok(consumer_secret)) if !consumer_key.is_empty() && !consumer_secret.is_empty() => Ok(Credentials::OAuth1 { token, secret, consumer_key, consumer_secret }),
         (Ok(_), Ok(_), _, _) => Err("CLEVER_TOKEN et CLEVER_SECRET sans CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET : le consumer qui les a émis est requis".into()),
-        _ => Err("identifiants absents : CC_API_TOKEN, ou CLEVER_TOKEN et CLEVER_SECRET (jeton OAuth 1.0)".into()),
+        _ => Err("identifiants absents : CLEVER_COMPOSE_API_TOKEN, ou CLEVER_TOKEN et CLEVER_SECRET (jeton OAuth 1.0)".into()),
     }
 }
 

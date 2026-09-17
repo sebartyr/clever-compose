@@ -5,7 +5,7 @@
 //! région sauf `x-clever.plan`, coût annoncé. Câblage des identifiants des
 //! consommateurs : URL reconstruite, variables discrètes corrélées par
 //! égalité de valeur, formats non standards ; tout passe par des références
-//! `AddonEnv` expansées par le shim au démarrage (`CC_COMPOSE_EXPAND`),
+//! `AddonEnv` expansées par le shim au démarrage (`CLEVER_COMPOSE_EXPAND`),
 //! jamais figées. Falaises sémantiques diagnostiquées (§6.4).
 
 use std::sync::OnceLock;
