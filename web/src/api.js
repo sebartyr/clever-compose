@@ -71,8 +71,6 @@ export const api = {
   // origine), absolu quand elle est ailleurs (VITE_API_URL, origine à
   // passer en --cors au serveur).
   login: () => json('POST', '/api/session/login', { return: API_BASE ? location.origin + location.pathname : location.pathname }),
-  /** Début de la danse OAuth, avec retour sur cette interface. */
-  oauthStart: () => u('/api/session/oauth/start?return=' + encodeURIComponent(location.origin + location.pathname)),
 
   async uploadDump(id, file) {
     const form = new FormData();

@@ -561,6 +561,22 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **En-têtes de sécurité, clé comparée en temps constant (17/09/2026)** :
+  audit #12, S10. Fichiers de l'interface servis avec
+  `Content-Security-Policy` (page et, hors `ui-bundled`, esm.sh et
+  jsdelivr ; `unsafe-eval` pour le compilateur de templates de Vue,
+  `unsafe-inline` pour les styles des composants ; l'import map en ligne
+  admise par son empreinte `sha256-…` calculée sur l'index embarqué ;
+  `frame-ancestors 'none'`, `base-uri`, `form-action`),
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`. Vérifié en Chromium headless : la page
+  s'exécute jusqu'au début de la connexion sans violation. `--api-key`
+  comparée sur les empreintes SHA-256 sans court-circuit
+  (`same_secret`). Le journal tait la query du callback OAuth (request
+  token, verifier). `api.oauthStart` (route inexistante) retiré. Restent
+  : jetons dans le fragment (décision de conception de la danse) et
+  absence de SRI sur esm.sh (modules réécrits, non hashables) : préférer
+  `ui-bundled` pour un serveur publié.
 - **Travail bloquant hors du runtime, résolveur d'images partagé,
   répertoires de travail uniques (17/09/2026)** : audit #12, P3, P4 et
   une part de S12. `reconcile::up` faisait `repo_files` (lecture du

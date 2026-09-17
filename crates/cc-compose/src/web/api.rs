@@ -63,12 +63,23 @@ pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Reques
         let exempt = !path.starts_with("/api/") || path == "/api/info" || path == "/api/session/oauth/callback" || req.method() == axum::http::Method::OPTIONS;
         if !exempt {
             let given = req.headers().get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(str::trim);
-            if given != Some(key.as_str()) {
+            if !given.is_some_and(|g| same_secret(g, key)) {
                 return ApiError(StatusCode::UNAUTHORIZED, "clé d'API absente ou invalide (--api-key du serveur)".into()).into_response();
             }
         }
     }
     next.run(req).await
+}
+
+/// Comparaison de secrets en temps indépendant du premier octet qui
+/// diffère : sur les empreintes SHA-256 des deux chaînes (même longueur,
+/// pas de fuite de la longueur du secret), puis octet à octet sans
+/// court-circuit.
+fn same_secret(a: &str, b: &str) -> bool {
+    use sha2::Digest;
+    let ha = sha2::Sha256::digest(a.as_bytes());
+    let hb = sha2::Sha256::digest(b.as_bytes());
+    ha.iter().zip(hb.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 /// Contre le CSRF et le DNS rebinding sur `/api/*` :
@@ -122,7 +133,8 @@ pub async fn same_site(AxState(s): AxState<Shared>, req: axum::extract::Request,
 pub async fn log_request(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
-    let query = req.uri().query().map(|q| format!("?{q}")).unwrap_or_default();
+    // Le callback OAuth porte le request token et le verifier : tus.
+    let query = req.uri().query().map(|q| if req.uri().path() == "/api/session/oauth/callback" { "?…".to_string() } else { format!("?{q}") }).unwrap_or_default();
     let org = req.headers().get("x-cc-org").and_then(|v| v.to_str().ok()).map(str::to_string);
     let own = req.headers().contains_key("x-cc-token") || req.headers().contains_key("x-cc-api-token");
     let started = std::time::Instant::now();
