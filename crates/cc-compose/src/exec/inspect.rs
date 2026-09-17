@@ -5,8 +5,55 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use super::platform::{AddonInfo, AppInfo, LogEvent, LogQuery, LogTarget, NgInfo, Platform};
+use futures_util::stream::{self, StreamExt, TryStreamExt};
+
+use super::platform::{AddonInfo, AppInfo, DeploymentState, InstanceState, LogEvent, LogQuery, LogTarget, NgInfo, Platform};
 use super::reconcile::Log;
+
+/// Appels API simultanés au plus, pour les lectures par application
+/// (tags, instances, déploiements, domaines) : une organisation de
+/// quelques centaines d'applications se lit en quelques allers-retours.
+pub const CONCURRENCY: usize = 8;
+
+/// `f` appliquée à chaque élément, `CONCURRENCY` à la fois, résultats
+/// dans l'ordre d'entrée ; première erreur rendue.
+pub async fn each<T, U, F, Fut>(items: Vec<T>, f: F) -> Result<Vec<U>, String>
+where
+    F: Fn(T) -> Fut,
+    Fut: std::future::Future<Output = Result<U, String>>,
+{
+    stream::iter(items.into_iter().map(f)).buffered(CONCURRENCY).try_collect().await
+}
+
+/// Les tags de chaque application, lus en parallèle.
+async fn with_tags<P: Platform>(platform: &P, apps: Vec<AppInfo>) -> Result<Vec<(AppInfo, Vec<String>)>, String> {
+    each(apps, |x| async move {
+        let tags = platform.get_tags(&x.id).await?;
+        Ok((x, tags))
+    })
+    .await
+}
+
+/// Ce que `ps` et l'inventaire montrent d'une application : instances,
+/// dernier déploiement, domaines (aucun pour une tâche), lus ensemble.
+pub struct AppStatus {
+    pub instances: Vec<InstanceState>,
+    pub last: Option<DeploymentState>,
+    pub domains: Vec<String>,
+}
+
+pub async fn app_status<P: Platform>(platform: &P, app_id: String, task: bool) -> Result<AppStatus, String> {
+    let (instances, last, domains) = futures_util::future::join3(platform.instances(&app_id), platform.last_deployment(&app_id), async {
+        if task { Ok(Vec::new()) } else { platform.list_domains(&app_id).await }
+    })
+    .await;
+    Ok(AppStatus { instances: instances?, last: last?, domains: domains? })
+}
+
+/// (id, tâche ?) de chaque application, pour [`app_status`].
+pub fn status_keys(apps: &[ProjectApp]) -> Vec<(String, bool)> {
+    apps.iter().map(|a| (a.info.id.clone(), a.info.instance.lifetime == "TASK")).collect()
+}
 
 /// Fournisseurs d'addons que l'outil crée : les seuls candidats à la
 /// découverte par nom (les addons n'ont pas de tags).
@@ -44,11 +91,8 @@ pub async fn discover<P: Platform>(project: &str, platform: &P) -> Result<Invent
     let project_tag = format!("compose-project={project}");
     let prefix = format!("{project}-");
     let mut inv = Inventory::default();
-    for x in platform.list_apps().await? {
-        if !x.name.starts_with(&prefix) {
-            continue;
-        }
-        let tags = platform.get_tags(&x.id).await?;
+    let candidates: Vec<AppInfo> = platform.list_apps().await?.into_iter().filter(|x| x.name.starts_with(&prefix)).collect();
+    for (x, tags) in with_tags(platform, candidates).await? {
         let tagged = tags.iter().any(|t| t == &project_tag);
         let service = tags.iter().find_map(|t| t.strip_prefix("compose-service=")).map(str::to_string).unwrap_or_else(|| x.name[prefix.len()..].to_string());
         inv.apps.push(ProjectApp { service, info: x, tags, tagged });
@@ -72,8 +116,8 @@ pub async fn discover<P: Platform>(project: &str, platform: &P) -> Result<Invent
 /// `compose-project=` sur les applications et les network groups.
 pub async fn projects<P: Platform>(platform: &P) -> Result<Vec<String>, String> {
     let mut out: Vec<String> = Vec::new();
-    for x in platform.list_apps().await? {
-        for t in platform.get_tags(&x.id).await? {
+    for (_, tags) in with_tags(platform, platform.list_apps().await?).await? {
+        for t in tags {
             if let Some(p) = t.strip_prefix("compose-project=") {
                 out.push(p.to_string());
             }
@@ -100,10 +144,10 @@ pub async fn ps<P: Platform>(project: &str, platform: &P, log: &mut Log) -> Resu
         return Ok(());
     }
     let mut rows: Vec<[String; 5]> = Vec::new();
-    for a in &inv.apps {
+    let statuses = each(status_keys(&inv.apps), |(id, task)| app_status(platform, id, task)).await?;
+    for (a, status) in inv.apps.iter().zip(statuses) {
         let kind = if a.info.instance.lifetime == "TASK" { "tâche" } else { "app" };
-        let instances = platform.instances(&a.info.id).await?;
-        let last = platform.last_deployment(&a.info.id).await?;
+        let AppStatus { instances, last, domains } = status;
         let state = if !instances.is_empty() {
             let mut counts: Vec<(String, usize)> = Vec::new();
             for i in &instances {
@@ -120,7 +164,7 @@ pub async fn ps<P: Platform>(project: &str, platform: &P, log: &mut Log) -> Resu
             }
         };
         // L'accès public : le premier domaine (les tâches n'en ont pas d'utile).
-        let access = if kind == "tâche" { String::new() } else { platform.list_domains(&a.info.id).await?.into_iter().next().map(|d| format!("https://{d}")).unwrap_or_default() };
+        let access = domains.into_iter().next().map(|d| format!("https://{d}")).unwrap_or_default();
         let state = if a.tagged { state } else { format!("{state} (sans tag clever-compose : Terraform ?)") };
         rows.push([a.service.clone(), kind.into(), a.info.id.clone(), state, access]);
     }

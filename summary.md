@@ -561,6 +561,17 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Lectures API en parallèle borné (17/09/2026)** : audit #12, P2.
+  `inspect::projects` et `discover` appelaient `get_tags` en série pour
+  chaque application (toutes celles de l'organisation pour `projects`,
+  rafraîchi par l'interface) ; `ps` et l'inventaire ajoutaient
+  `instances`, `last_deployment`, `list_domains` en série par
+  application. `inspect::each` (`futures_util::stream::buffered`,
+  `CONCURRENCY` = 8, ordre conservé), `with_tags`, `app_status`
+  (`join3` des trois lectures) et `status_keys` ; `discover` filtre par
+  préfixe avant de lire les tags. Dépendance `futures-util` (déjà dans
+  l'arbre, `alloc` seul). Le `get_tags` des homonymes dans
+  `reconcile::up` reste en série (rare).
 - **Base publique sur `Host` seul, connexions bornées, limiteur
   (17/09/2026)** : audit #12, S6 et S7. `public_base_for` prenait
   `X-Forwarded-Host`, qu'un client peut poser lui-même : callback OAuth

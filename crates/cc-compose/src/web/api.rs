@@ -21,7 +21,6 @@ use tokio_stream::{Stream, StreamExt};
 
 use super::State;
 use crate::diagnostic::{Diagnostics, Severity};
-use crate::exec::platform::Platform;
 use crate::exec::reconcile::Log;
 
 type Shared = Arc<State>;
@@ -370,10 +369,15 @@ async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String
     let api = api_of(&s, &org).await?;
     let inv = crate::exec::inspect::discover(&project, &api).await.map_err(internal)?;
     let mut apps = Vec::new();
-    for a in &inv.apps {
-        let instances = api.instances(&a.info.id).await.unwrap_or_default();
-        let last = api.last_deployment(&a.info.id).await.ok().flatten();
-        let domains = if a.info.instance.lifetime == "TASK" { Vec::new() } else { api.list_domains(&a.info.id).await.unwrap_or_default() };
+    // Instances, dernier déploiement, domaines : lus en parallèle borné ;
+    // une lecture en échec laisse la ligne vide plutôt que tout refuser.
+    let api = &api;
+    let statuses = crate::exec::inspect::each(crate::exec::inspect::status_keys(&inv.apps), |(id, task)| async move { Ok(crate::exec::inspect::app_status(api, id, task).await.ok()) }).await.map_err(internal)?;
+    for (a, status) in inv.apps.iter().zip(statuses) {
+        let (instances, last, domains) = match status {
+            Some(st) => (st.instances, st.last, st.domains),
+            None => (Vec::new(), None, Vec::new()),
+        };
         apps.push(json!({
             "service": a.service,
             "id": a.info.id,
