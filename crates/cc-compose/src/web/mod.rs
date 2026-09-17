@@ -70,6 +70,11 @@ pub struct State {
     /// [`LocalExec`] et [`api::local_execution_allowed`].
     pub local_exec: bool,
     validated: std::sync::Mutex<std::collections::HashMap<String, Validated>>,
+    /// Résolveurs d'images partagés (chacun porte son runtime et son
+    /// client OCI, coûteux à recréer par requête) : avec les identifiants
+    /// Docker du poste, et anonyme pour les projets déposés. Créés à la
+    /// première demande.
+    registries: std::sync::Mutex<[Option<Arc<crate::plan::registry::Registry>>; 2]>,
 }
 
 /// L'exécution locale des tâches est-elle possible sur ce serveur ?
@@ -201,6 +206,20 @@ impl State {
         let scheme = h("x-forwarded-proto").filter(|s| s == "http" || s == "https").unwrap_or_else(|| "http".into());
         let host = h("host").unwrap_or_else(|| self.listen.to_string());
         format!("{scheme}://{host}")
+    }
+
+    /// Le résolveur d'images d'un projet : avec les identifiants Docker
+    /// du poste pour un répertoire du poste, anonyme pour un projet
+    /// déposé. Partagé entre les requêtes.
+    pub fn registry(&self, confine: bool) -> Result<Arc<crate::plan::registry::Registry>, String> {
+        let mut slots = self.registries.lock().unwrap_or_else(|e| e.into_inner());
+        let slot = &mut slots[usize::from(confine)];
+        if let Some(r) = slot {
+            return Ok(r.clone());
+        }
+        let r = Arc::new(if confine { crate::plan::registry::Registry::anonymous()? } else { crate::plan::registry::Registry::new()? });
+        *slot = Some(r.clone());
+        Ok(r)
     }
 
     /// `host` (minuscule, `hôte[:port]`) est un nom sous lequel ce serveur
@@ -339,7 +358,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if !listen.ip().is_loopback() && public_base.is_none() {
         slog("sans --public-url : le callback OAuth est bâti sur l'en-tête Host de chaque requête (X-Forwarded-Proto pour le schéma) ; posez --public-url derrière un proxy pour figer la base");
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default(), registries: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };

@@ -516,7 +516,10 @@ where
 
 async fn local_list(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {
     let o = owner(&s, &c).await?;
-    let list: Vec<J> = s.locals.list(o.as_deref()).into_iter().map(|(id, dir, temporary)| json!({ "id": id, "dir": dir, "temporary": temporary, "name": project_name(&dir, temporary || o.is_some()) })).collect();
+    let entries = s.locals.list(o.as_deref());
+    let deposited = o.is_some();
+    // Le nom d'un projet demande de charger son compose : hors du runtime.
+    let list: Vec<J> = tokio::task::spawn_blocking(move || entries.into_iter().map(|(id, dir, temporary)| json!({ "id": id, "dir": dir, "temporary": temporary, "name": project_name(&dir, temporary || deposited) })).collect()).await.map_err(|e| internal(e.to_string()))?;
     Ok(Json(json!({ "projects": list })))
 }
 
@@ -624,7 +627,9 @@ fn text_files(dir: &Path) -> Vec<String> {
 
 async fn local_files(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
     let (dir, confine) = project_dir(&s, &id, &c).await?;
-    Ok(Json(json!({ "id": id, "dir": dir, "name": project_name(&dir, confine), "files": text_files(&dir) })))
+    let d2 = dir.clone();
+    let (name, files) = tokio::task::spawn_blocking(move || (project_name(&d2, confine), text_files(&d2))).await.map_err(|e| internal(e.to_string()))?;
+    Ok(Json(json!({ "id": id, "dir": dir, "name": name, "files": files })))
 }
 
 #[derive(Deserialize)]
@@ -643,7 +648,7 @@ fn safe_file(dir: &Path, rel: &str) -> Result<PathBuf, ApiError> {
 async fn local_file_get(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Query(q): Query<FileQuery>) -> Result<Json<J>, ApiError> {
     let (dir, _) = project_dir(&s, &id, &c).await?;
     let path = safe_file(&dir, &q.path)?;
-    let content = std::fs::read_to_string(&path).map_err(|e| bad(format!("{} : {e}", q.path)))?;
+    let content = tokio::fs::read_to_string(&path).await.map_err(|e| bad(format!("{} : {e}", q.path)))?;
     Ok(Json(json!({ "path": q.path, "content": content })))
 }
 
@@ -657,9 +662,9 @@ async fn local_file_put(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String
     let (dir, _) = project_dir(&s, &id, &c).await?;
     let path = safe_file(&dir, &b.path)?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| internal(e.to_string()))?;
+        tokio::fs::create_dir_all(parent).await.map_err(|e| internal(e.to_string()))?;
     }
-    std::fs::write(&path, b.content).map_err(|e| internal(format!("{} : {e}", b.path)))?;
+    tokio::fs::write(&path, b.content).await.map_err(|e| internal(format!("{} : {e}", b.path)))?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -670,19 +675,13 @@ struct PlanQuery {
 }
 
 /// Plan et diagnostics d'un projet local, en JSON structuré.
-/// Le résolveur d'images d'un projet : avec les identifiants Docker du
-/// poste pour un répertoire du poste, sans pour un projet déposé.
-fn registry(confine: bool) -> Result<crate::plan::registry::Registry, String> {
-    if confine { crate::plan::registry::Registry::anonymous() } else { crate::plan::registry::Registry::new() }
-}
-
-fn compute(dir: &Path, confine: bool, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBuf), String> {
-    let resolver = registry(confine)?;
+fn compute(s: &State, dir: &Path, confine: bool, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBuf), String> {
+    let resolver = s.registry(confine)?;
     let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine };
     let project_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let popts = crate::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
     let mut diags = Diagnostics::default();
-    let plan = crate::plan::cli::run(&popts, &resolver, &mut diags);
+    let plan = crate::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
     let items: Vec<J> = diags
         .items
         .iter()
@@ -704,7 +703,8 @@ fn compute(dir: &Path, confine: bool, allow_ephemeral: bool) -> Result<(Option<P
 
 async fn local_plan(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Query(q): Query<PlanQuery>) -> Result<Json<J>, ApiError> {
     let (dir, confine) = project_dir(&s, &id, &c).await?;
-    let (plan, diags, _) = tokio::task::spawn_blocking(move || compute(&dir, confine, q.allow_ephemeral)).await.map_err(|e| internal(e.to_string()))?.map_err(internal)?;
+    let st = s.clone();
+    let (plan, diags, _) = tokio::task::spawn_blocking(move || compute(&st, &dir, confine, q.allow_ephemeral)).await.map_err(|e| internal(e.to_string()))?.map_err(internal)?;
     Ok(Json(json!({ "plan": plan, "diagnostics": diags })))
 }
 
@@ -727,7 +727,8 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org
     let (dir, confine) = project_dir(&s, &id, &org).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
-        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, confine, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
+        let st = state.clone();
+        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&st, &dir, confine, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
         for d in diags.as_array().into_iter().flatten() {
             log(&format!("{}{}", if d["severity"] == "error" { "erreur : " } else { "" }, d["rendered"].as_str().unwrap_or("")));
         }
@@ -767,11 +768,12 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
         // images avec son propre runtime (`block_on`), interdit depuis une
         // tâche Tokio.
         let (service, local) = (b.service.clone(), b.local);
+        let st = state.clone();
         let (plan, project_dir) = tokio::task::spawn_blocking(move || -> Result<(Plan, PathBuf), String> {
-            let (plan, _diags, project_dir) = compute(&dir, confine, false)?;
+            let (plan, _diags, project_dir) = compute(&st, &dir, confine, false)?;
             let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
-            let resolver = registry(confine)?;
-            let plan = crate::plan::initdb::seed_plan(&plan, &service, &dump, &project_dir, &resolver, local)?;
+            let resolver = st.registry(confine)?;
+            let plan = crate::plan::initdb::seed_plan(&plan, &service, &dump, &project_dir, resolver.as_ref(), local)?;
             Ok((plan, project_dir))
         })
         .await
@@ -861,7 +863,8 @@ async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<Str
     let (dir, confine) = project_dir(&s, &id, &c).await?;
     Ok(stream_task(s, format!("assets {id}"), move |state, mut log| async move {
         let api = api_of(&state, &c).await.map_err(|e| e.1)?;
-        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, confine, false)).await.map_err(|e| e.to_string())??;
+        let st = state.clone();
+        let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&st, &dir, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
         crate::exec::assets::sync(api.owner(), &plan, &project_dir, &opts, &mut log).await
@@ -880,11 +883,11 @@ struct ExportBody {
 async fn local_export(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, body: Option<Json<ExportBody>>) -> Result<Json<J>, ApiError> {
     let (dir, confine) = project_dir(&s, &id, &c).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
+    let st = s.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<J, String> {
-        let (plan, diags, project_dir) = compute(&dir, confine, b.allow_ephemeral)?;
+        let (plan, diags, project_dir) = compute(&st, &dir, confine, b.allow_ephemeral)?;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
-        let out = std::env::temp_dir().join(format!("clever-compose-export-{}-{}", std::process::id(), plan.spec_hash));
-        let _ = std::fs::remove_dir_all(&out);
+        let out = crate::exec::reconcile::unique_work_dir(&format!("export-{}", plan.spec_hash))?;
         let what = crate::emit::export::What { terraform: true, script: true, repos: false, branches: b.branches };
         let mut ediags = Diagnostics::default();
         crate::emit::export::write(&plan, &project_dir, &out, &what, &mut ediags).map_err(|d| d.message)?;
@@ -934,6 +937,7 @@ mod tests {
             api_key: None,
             local_exec,
             validated: Default::default(),
+            registries: Default::default(),
         };
         let id = s.locals.add_dir(dir.path.clone(), false, None).unwrap();
         (Arc::new(s), id, dir)

@@ -561,6 +561,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Travail bloquant hors du runtime, résolveur d'images partagé,
+  répertoires de travail uniques (17/09/2026)** : audit #12, P3, P4 et
+  une part de S12. `reconcile::up` faisait `repo_files` (lecture du
+  contexte), `git::build`/`remote_head`/`push` (libgit2 synchrone) sur le
+  worker Tokio, dans `temp_dir()/clever-compose-<projet>-<service>`
+  (deux `up` du même projet s'écrasaient) ; `local_list`/`local_files`
+  chargeaient les compose dans le handler ; `Registry::new()` (un
+  runtime multi-thread + client OCI) renaissait à chaque `compute`.
+  Désormais : bloc git dans `spawn_blocking`, `unique_work_dir`
+  (`clever-compose-<pid>-<n>-<quoi>`, 0700, refus si existant) pour les
+  dépôts, l'exécution locale et l'export ; `project_name`/`text_files`
+  dans `spawn_blocking`, `local_file_get/put` en `tokio::fs` ;
+  `State::registry(confine)` : deux résolveurs partagés (poste,
+  anonyme), créés à la première demande ; `docker_auths()` lu une fois
+  par `up`.
 - **Lectures API en parallèle borné (17/09/2026)** : audit #12, P2.
   `inspect::projects` et `discover` appelaient `get_tags` en série pour
   chaque application (toutes celles de l'organisation pour `projects`,

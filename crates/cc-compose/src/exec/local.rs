@@ -26,8 +26,7 @@ pub async fn run_task<P: Platform>(app: &App, state: &State, platform: &P, proje
     // Les fichiers de la tâche, tels que le Dockerfile les copierait :
     // scripts sous /cc-init, runner /cc-init.sh.
     let Source::Synthetic { image, files, generated, .. } = &app.source else { return Err(format!("tâche {} : source inattendue", app.name)) };
-    let work = std::env::temp_dir().join(format!("clever-compose-local-{}", app.name));
-    let _ = std::fs::remove_dir_all(&work);
+    let work = super::reconcile::unique_work_dir(&format!("local-{}", app.name))?;
     std::fs::create_dir_all(work.join("cc-init")).map_err(|e| e.to_string())?;
     for f in files {
         let Some(name) = f.target.strip_prefix("/cc-init/") else { continue };

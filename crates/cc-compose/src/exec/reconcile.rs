@@ -245,6 +245,8 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     // 4. Variables d'environnement : templates résolus, comparés à
     // l'existant ; seul un changement réel redémarre (§7).
     let mut needs_restart: BTreeMap<String, bool> = BTreeMap::new();
+    // La configuration Docker du poste, lue une fois par `up`.
+    let docker_auths = std::cell::OnceCell::new();
     for app in &apps {
         let app_id = &state.app_ids[&app.service];
         let mut wanted: Vec<PEnv> = Vec::new();
@@ -258,7 +260,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         // poste (jamais dans le plan), posés en `CC_DOCKER_LOGIN_*`.
         if let Source::Synthetic { image, private_registry: true, .. } = &app.source {
             let host = crate::plan::registry::registry_host(image);
-            match crate::plan::registry::credentials_for(&crate::plan::registry::docker_auths(), &host) {
+            match crate::plan::registry::credentials_for(docker_auths.get_or_init(crate::plan::registry::docker_auths), &host) {
                 Some((user, password)) => {
                     wanted.push(PEnv { name: "CC_DOCKER_LOGIN_SERVER".into(), value: host });
                     wanted.push(PEnv { name: "CC_DOCKER_LOGIN_USERNAME".into(), value: user });
@@ -327,21 +329,35 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         }
         let app_id = &state.app_ids[&app.service];
         let info = platform.get_app(app_id).await?;
-        let files = repo_files(app, opts.project_dir)?;
-        let work = std::env::temp_dir().join(format!("clever-compose-{}-{}", plan.project, app.service));
-        let _ = std::fs::remove_dir_all(&work);
-        std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
-        let local = git::build(&work, &files)?;
-        let remote = git::remote_head(&work, &info.deployment.http_url, &creds)?;
-        let pushed = if remote == Some(local) {
-            log(&format!("application {} : dépôt inchangé ({}), push sauté", app.name, &local.to_string()[..12]));
-            false
-        } else {
-            git::push(&work, &info.deployment.http_url, &creds)?;
+        // Lecture du contexte, dépôt synthétique et push (libgit2, réseau
+        // synchrone) hors du runtime : un serveur reste réactif pendant
+        // un `up`. Répertoire de travail propre à cet appel : deux `up` du
+        // même projet (deux clients, deux organisations) ne se marchent
+        // pas dessus.
+        let (project_dir, label, url, creds2) = (opts.project_dir.to_path_buf(), format!("{}-{}", plan.project, app.service), info.deployment.http_url.clone(), creds.clone());
+        let app2 = (*app).clone();
+        let (local, pushed) = tokio::task::spawn_blocking(move || -> Result<(git2::Oid, bool), String> {
+            let files = repo_files(&app2, &project_dir)?;
+            let work = unique_work_dir(&label)?;
+            let result = (|| {
+                let local = git::build(&work, &files)?;
+                let remote = git::remote_head(&work, &url, &creds2)?;
+                if remote == Some(local) {
+                    return Ok((local, false));
+                }
+                git::push(&work, &url, &creds2)?;
+                Ok((local, true))
+            })();
+            let _ = std::fs::remove_dir_all(&work);
+            result
+        })
+        .await
+        .map_err(|e| format!("application {} : {e}", app.name))??;
+        if pushed {
             log(&format!("application {} : dépôt poussé ({})", app.name, &local.to_string()[..12]));
-            true
-        };
-        let _ = std::fs::remove_dir_all(&work);
+        } else {
+            log(&format!("application {} : dépôt inchangé ({}), push sauté", app.name, &local.to_string()[..12]));
+        }
         let restart = needs_restart.get(&app.service).copied().unwrap_or(false) || needs_restart_for_link.contains(&app.service);
         let last = platform.last_deployment(app_id).await?;
         let never_deployed = info.state == "SHOULD_BE_DOWN" && last.is_none();
@@ -365,6 +381,25 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         super::assets::sync(&platform.owner_id(), plan, opts.project_dir, opts, log).await?;
     }
     Ok(state)
+}
+
+/// Un répertoire de travail neuf sous `temp_dir()`, jamais partagé :
+/// `clever-compose-<pid>-<n>-<quoi>`, refusé s'il existe déjà.
+pub fn unique_work_dir(what: &str) -> Result<std::path::PathBuf, String> {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let safe: String = what.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect();
+    let work = std::env::temp_dir().join(format!("clever-compose-{}-{n}-{safe}", std::process::id()));
+    if work.exists() {
+        return Err(format!("{} existe déjà", work.display()));
+    }
+    std::fs::create_dir_all(&work).map_err(|e| format!("{} : {e}", work.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700));
+    }
+    Ok(work)
 }
 
 pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
