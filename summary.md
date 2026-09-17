@@ -561,6 +561,20 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Assets authentifiés et par organisation (17/09/2026)** : audit #12,
+  S4. `GET /api/platform/projects/{p}/assets` n'avait ni extracteur
+  `Client` ni validation : quiconque atteignait le serveur lisait tout
+  préfixe du bucket avec les identifiants Cellar du serveur ; le préfixe
+  `<projet>/` mélangeait les organisations. Préfixe
+  `<propriétaire>/<projet>/` (`owner_id()` de la plateforme, `X-CC-Org`
+  côté web), `assets_get`/`assets_open`/`assets/sync` passent par
+  `api_of` ; `project_files` écarte les fichiers déclarés `secrets.*.file`
+  (le shim les matérialise depuis l'environnement). Les `.env` et les
+  valeurs d'`environment` restent dans les assets et `plan.json` : le
+  projet doit se recharger tel quel, et la lecture est désormais
+  réservée à l'organisation. Les assets poussés avant ce changement
+  (préfixe sans propriétaire) ne sont plus vus : à repousser. Test de
+  route : 401 sans identifiants.
 - **Projet déposé : rien du serveur dans le plan (17/09/2026)** : audit
   #12, S3. `secrets.environment` faisait lire `std::env::var` du serveur
   au `up` (`reconcile::resolve`) et une image d'un registre connu de

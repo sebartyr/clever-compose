@@ -85,7 +85,7 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   fichiers du projet (compose, fichiers montés, scripts) et le plan dans un
   bucket Cellar que vous créez vous-même, configuré par `CLEVER_COMPOSE_ASSETS_BUCKET`
   et les variables de l'addon (`CELLAR_ADDON_HOST`, `CELLAR_ADDON_KEY_ID`,
-  `CELLAR_ADDON_KEY_SECRET`) ; un seul bucket, un préfixe `<projet>/` par
+  `CELLAR_ADDON_KEY_SECRET`) ; un seul bucket, un préfixe `<organisation>/<projet>/` par
   projet. L'interface lit alors un projet déployé sans son dossier et peut
   le rapatrier en projet local ; `down` retire les objets du projet, jamais
   le bucket. L'outil ne crée ni addon ni bucket.

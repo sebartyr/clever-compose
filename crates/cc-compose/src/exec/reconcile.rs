@@ -362,7 +362,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
     // Assets : les fichiers du projet et le plan dans le bucket Cellar du
     // projet, pour une relecture depuis la plateforme.
     if plan.assets || opts.assets {
-        super::assets::sync(plan, opts.project_dir, opts, log).await?;
+        super::assets::sync(&platform.owner_id(), plan, opts.project_dir, opts, log).await?;
     }
     Ok(state)
 }
@@ -589,7 +589,7 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
         }
     }
     // Les assets du projet dans le bucket configuré, s'il y en a.
-    super::assets::remove(project, dry_run, log).await?;
+    super::assets::remove(&platform.owner_id(), project, dry_run, log).await?;
     if !inv.apps.iter().any(|a| a.tagged) {
         log(&format!("aucune application taguée `compose-project={project}` : rien à faire ?"));
     }

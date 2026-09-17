@@ -9,9 +9,14 @@
 //! l'outil, et configurés par variables d'environnement :
 //! `CELLAR_ADDON_HOST`, `CELLAR_ADDON_KEY_ID`, `CELLAR_ADDON_KEY_SECRET`
 //! (les noms que l'addon injecte) et `CLEVER_COMPOSE_ASSETS_BUCKET` (un seul bucket,
-//! un préfixe `<projet>/` par projet). `down` retire les objets du projet,
-//! jamais le bucket. Requêtes S3 signées par `rusty-s3` (URL présignées),
-//! envoyées avec `reqwest`.
+//! un préfixe `<propriétaire>/<projet>/` par projet : le bucket peut servir
+//! plusieurs organisations, un client ne lit que sous la sienne). `down`
+//! retire les objets du projet, jamais le bucket. Requêtes S3 signées par
+//! `rusty-s3` (URL présignées), envoyées avec `reqwest`.
+//!
+//! Les fichiers déclarés comme secrets (`secrets.*.file`) ne sont jamais
+//! poussés : ils vivent sur le poste, le shim les matérialise depuis
+//! l'environnement de l'application.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -66,9 +71,11 @@ pub fn from_env() -> Result<Option<Cellar>, String> {
     }
 }
 
-/// Préfixe des objets d'un projet dans le bucket.
-fn prefix(project: &str) -> String {
-    format!("{project}/")
+/// Préfixe des objets d'un projet dans le bucket : sous son propriétaire
+/// (`orga_…` ou `user_…`), pour qu'un bucket partagé entre organisations
+/// ne mélange pas leurs projets.
+fn prefix(owner: &str, project: &str) -> String {
+    format!("{owner}/{project}/")
 }
 
 impl Cellar {
@@ -155,8 +162,8 @@ impl Cellar {
     }
 
     /// Retire les objets d'un projet ; le bucket reste.
-    pub async fn clear(&self, project: &str) -> Result<usize, String> {
-        let keys = self.list(&prefix(project)).await?;
+    pub async fn clear(&self, owner: &str, project: &str) -> Result<usize, String> {
+        let keys = self.list(&prefix(owner, project)).await?;
         for (key, _) in &keys {
             self.delete(key).await?;
         }
@@ -167,7 +174,8 @@ impl Cellar {
 /// Les fichiers du projet à conserver : fichiers texte (compose, env,
 /// scripts, configs) jusqu'à 512 Kio, et tout fichier référencé par le plan
 /// (bind mounts, scripts d'init) jusqu'à 32 Mio ; jamais `.git`,
-/// `node_modules`, `target`, `.terraform`, ni `.clever-compose/`.
+/// `node_modules`, `target`, `.terraform`, `.clever-compose/`, ni un
+/// fichier déclaré comme secret (`secrets.*.file`).
 pub fn project_files(plan: &Plan, project_dir: &Path) -> Vec<(String, PathBuf)> {
     fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<(String, PathBuf)>) {
         if depth > 6 {
@@ -193,6 +201,18 @@ pub fn project_files(plan: &Plan, project_dir: &Path) -> Vec<(String, PathBuf)> 
     }
     let mut out = Vec::new();
     walk(project_dir, project_dir, 0, &mut out);
+    let secret_files: Vec<PathBuf> = plan
+        .resources
+        .iter()
+        .filter_map(|r| if let Resource::App(a) = r { Some(a) } else { None })
+        .flat_map(|a| a.secrets.iter())
+        .filter_map(|s| match &s.source {
+            SecretSource::File { path } => Some(project_dir.join(path.trim_start_matches("./"))),
+            SecretSource::Environment { .. } => None,
+        })
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
+        .collect();
+    out.retain(|(_, abs)| !secret_files.contains(&std::fs::canonicalize(abs).unwrap_or_else(|_| abs.clone())));
     for r in &plan.resources {
         let Resource::App(a) = r else { continue };
         let files = match &a.source {
@@ -212,12 +232,12 @@ pub fn project_files(plan: &Plan, project_dir: &Path) -> Vec<(String, PathBuf)> 
 }
 
 /// Pousse les assets du projet sous son préfixe ; retire ce qui n'y est plus.
-pub async fn sync(plan: &Plan, project_dir: &Path, opts: &super::reconcile::Options<'_>, log: &mut Log) -> Result<(), String> {
+pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::reconcile::Options<'_>, log: &mut Log) -> Result<(), String> {
     let Some(cellar) = from_env()? else {
         return Err(format!("assets demandés mais non configurés : posez {ENV_BUCKET} et les variables de l'addon Cellar ({ENV_HOST}, {ENV_KEY}, {ENV_SECRET})"));
     };
     let files = project_files(plan, project_dir);
-    let pre = prefix(&plan.project);
+    let pre = prefix(owner, &plan.project);
     if opts.dry_run {
         log(&format!("assets : {} fichier(s) + plan.json à pousser dans {}/{pre}", files.len(), cellar.bucket_name()));
         return Ok(());
@@ -265,16 +285,16 @@ pub async fn sync(plan: &Plan, project_dir: &Path, opts: &super::reconcile::Opti
 
 /// Les assets d'un projet, si les assets sont configurés et que le projet
 /// en a (un manifeste sous son préfixe).
-pub async fn open(project: &str) -> Result<Option<(Cellar, Manifest)>, String> {
+pub async fn open(owner: &str, project: &str) -> Result<Option<(Cellar, Manifest)>, String> {
     let Some(cellar) = from_env()? else { return Ok(None) };
-    let Some(bytes) = cellar.get(&format!("{}manifest.json", prefix(project))).await? else { return Ok(None) };
+    let Some(bytes) = cellar.get(&format!("{}manifest.json", prefix(owner, project))).await? else { return Ok(None) };
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(|e| format!("manifest.json : {e}"))?;
     Ok(Some((cellar, manifest)))
 }
 
 /// Plan et fichiers d'un projet depuis le bucket.
-pub async fn fetch(cellar: &Cellar, manifest: &Manifest) -> Result<(Option<Plan>, Vec<(String, Vec<u8>)>), String> {
-    let pre = prefix(&manifest.project);
+pub async fn fetch(cellar: &Cellar, owner: &str, manifest: &Manifest) -> Result<(Option<Plan>, Vec<(String, Vec<u8>)>), String> {
+    let pre = prefix(owner, &manifest.project);
     let plan = cellar.get(&format!("{pre}plan.json")).await?.and_then(|b| serde_json::from_slice(&b).ok());
     let mut files = Vec::new();
     for f in &manifest.files {
@@ -286,9 +306,9 @@ pub async fn fetch(cellar: &Cellar, manifest: &Manifest) -> Result<(Option<Plan>
 }
 
 /// Retire les objets d'un projet, si les assets sont configurés.
-pub async fn remove(project: &str, dry_run: bool, log: &mut Log) -> Result<(), String> {
+pub async fn remove(owner: &str, project: &str, dry_run: bool, log: &mut Log) -> Result<(), String> {
     let Some(cellar) = from_env()? else { return Ok(()) };
-    let pre = prefix(project);
+    let pre = prefix(owner, project);
     let keys = cellar.list(&pre).await?;
     if keys.is_empty() {
         return Ok(());
@@ -297,7 +317,7 @@ pub async fn remove(project: &str, dry_run: bool, log: &mut Log) -> Result<(), S
         log(&format!("assets : {} objet(s) à retirer de {}/{pre}", keys.len(), cellar.bucket_name()));
         return Ok(());
     }
-    let n = cellar.clear(project).await?;
+    let n = cellar.clear(owner, project).await?;
     log(&format!("assets : {n} objet(s) retiré(s) de {}/{pre}", cellar.bucket_name()));
     Ok(())
 }

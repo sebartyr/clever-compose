@@ -398,11 +398,14 @@ async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, o
     stream_task(s, format!("start {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await })
 }
 
-/// Manifeste, plan et fichiers texte du bucket d'assets du projet.
-async fn assets_get(AxState(_s): AxState<Shared>, UrlPath(project): UrlPath<String>) -> Result<Json<J>, ApiError> {
+/// Manifeste, plan et fichiers texte du bucket d'assets du projet, sous
+/// l'organisation du client (jetons validés, `X-CC-Org`) : le bucket est
+/// celui du serveur, chacun n'y lit que le préfixe de son organisation.
+async fn assets_get(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s, &c).await?;
     let configured = std::env::var(crate::exec::assets::ENV_BUCKET).is_ok();
-    let Some((cellar, manifest)) = crate::exec::assets::open(&project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false, "configured": configured }))) };
-    let (plan, files) = crate::exec::assets::fetch(&cellar, &manifest).await.map_err(internal)?;
+    let Some((cellar, manifest)) = crate::exec::assets::open(api.owner(), &project).await.map_err(internal)? else { return Ok(Json(json!({ "present": false, "configured": configured }))) };
+    let (plan, files) = crate::exec::assets::fetch(&cellar, api.owner(), &manifest).await.map_err(internal)?;
     let files: Vec<J> = files.into_iter().map(|(path, bytes)| json!({ "path": path, "size": bytes.len(), "content": std::str::from_utf8(&bytes).ok() })).collect();
     Ok(Json(json!({ "present": true, "configured": true, "bucket": cellar.bucket_name(), "manifest": manifest, "plan": plan, "files": files })))
 }
@@ -411,8 +414,9 @@ async fn assets_get(AxState(_s): AxState<Shared>, UrlPath(project): UrlPath<Stri
 /// l'enregistre comme projet local.
 async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
     let o = owner(&s, &c).await?;
-    let Some((cellar, manifest)) = crate::exec::assets::open(&project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
-    let (_plan, files) = crate::exec::assets::fetch(&cellar, &manifest).await.map_err(internal)?;
+    let api = api_of(&s, &c).await?;
+    let Some((cellar, manifest)) = crate::exec::assets::open(api.owner(), &project).await.map_err(internal)? else { return Err(ApiError(StatusCode::NOT_FOUND, "pas d'assets pour ce projet".into())) };
+    let (_plan, files) = crate::exec::assets::fetch(&cellar, api.owner(), &manifest).await.map_err(internal)?;
     let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-assets-{project}", std::process::id()));
     let dir = root.join(&project);
     let _ = std::fs::remove_dir_all(&root);
@@ -789,11 +793,12 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
 /// Pousse les assets du projet dans le bucket configuré, sans `up`.
 async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let (dir, confine) = project_dir(&s, &id, &c).await?;
-    Ok(stream_task(s, format!("assets {id}"), move |_state, mut log| async move {
+    Ok(stream_task(s, format!("assets {id}"), move |state, mut log| async move {
+        let api = api_of(&state, &c).await.map_err(|e| e.1)?;
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
-        crate::exec::assets::sync(&plan, &project_dir, &opts, &mut log).await
+        crate::exec::assets::sync(api.owner(), &plan, &project_dir, &opts, &mut log).await
     }))
 }
 
@@ -931,6 +936,21 @@ mod tests {
         assert_eq!(list(LOOPBACK, &[]).await, StatusCode::OK);
         assert_eq!(list(REMOTE, &[]).await, StatusCode::UNAUTHORIZED);
         assert_eq!(list(LOOPBACK, &[("x-forwarded-for", "198.51.100.4")]).await, StatusCode::UNAUTHORIZED);
+    }
+
+    /// Les assets d'un projet ne se lisent qu'authentifié (organisation
+    /// du client) : sans identifiants, 401 avant tout accès au bucket.
+    #[tokio::test]
+    async fn assets_require_a_client() {
+        let (s, _, _d) = state(true);
+        let get = |peer: &'static str| {
+            let s = s.clone();
+            async move { app(&s).oneshot(request("GET", "/api/platform/projects/demo/assets", peer, &[], false, None)).await.unwrap().status() }
+        };
+        assert_eq!(get(REMOTE).await, StatusCode::UNAUTHORIZED);
+        // Depuis le poste : identifiants du serveur, organisation du serveur ;
+        // assets non configurés dans ce test → `present: false`.
+        assert_eq!(get(LOOPBACK).await, StatusCode::OK);
     }
 
     /// Anti-CSRF et anti-rebinding : `Host` inconnu, `Origin` étrangère,

@@ -132,7 +132,9 @@ mêmes commits déployés (vérifié en réel).
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
-  (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe par projet ; l'outil
+  (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe
+  `<propriétaire>/<projet>/` (lecture authentifiée, sous l'organisation du
+  client ; fichiers `secrets.*.file` jamais poussés) ; l'outil
   ne crée ni addon ni bucket (décision du 16/09/2026).
 
 Architecture figée à amd64.
