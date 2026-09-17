@@ -409,7 +409,10 @@ export const App = defineComponent({
     const doStop = () => run('stop ' + current.value.name, (onLog) => api.stop(current.value.name, onLog));
     const doStart = () => run('start ' + current.value.name, (onLog) => api.start(current.value.name, onLog));
     const doDown = () => { dialog.down = false; run('down ' + current.value.name, (onLog) => api.down(current.value.name, { yes: opts.yes, dry_run: opts.dry_run }, onLog)); };
-    const doSeed = () => { dialog.seed = false; run('seed ' + seed.service, (onLog) => api.seed(current.value.id, { service: seed.service, dump: seed.dump, local: seed.local, yes: opts.yes, no_wait: opts.no_wait }, onLog)); };
+    // Exécution depuis le poste (`seed --local`) : serveur en écoute locale et
+    // client servi par ses identifiants ; ailleurs le serveur la refuse.
+    const localExecution = computed(() => info.value.local_listen !== false && !session.value?.own_tokens);
+    const doSeed = () => { dialog.seed = false; run('seed ' + seed.service, (onLog) => api.seed(current.value.id, { service: seed.service, dump: seed.dump, local: seed.local && localExecution.value, yes: opts.yes, no_wait: opts.no_wait }, onLog)); };
     const doLogs = (service) => {
       const services = service ? [service] : logQuery.services.split(',').map((s) => s.trim()).filter(Boolean);
       run('logs ' + current.value.name + (services.length ? ' ' + services.join(' ') : ''), (onLog) => api.logs(current.value.name, { services, since: logQuery.since, follow: logQuery.follow }, onLog), true);
@@ -467,7 +470,7 @@ export const App = defineComponent({
     const sideOpen = ref(false);
     watch(current, () => { sideOpen.value = false; });
 
-    return { key, submitKey, login, startLogin, logout, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { key, submitKey, login, startLogin, logout, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, localExecution, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div v-if="key.needed" class="login">
@@ -609,7 +612,8 @@ export const App = defineComponent({
         <label class="upload" :title="'Un fichier de votre poste, copié dans le projet (.clever-compose/seed/)'"><input type="file" @change="uploadDump"><span>{{ seed.uploading ? 'Envoi…' : 'Envoyer un fichier de dump' }}</span></label>
         <cc-select label="ou un fichier déjà dans le projet" :options="files.map(f => ({ label: f, value: f }))" :value="seed.dump" placeholder="Choisir" @cc-select="e => seed.dump = val(e)"></cc-select>
         <p v-if="seed.dump"><strong>Dump :</strong> <code>{{ seed.dump }}</code></p>
-        <label class="switch" title="Sinon, une Clever Task exécute le chargement sur la plateforme"><input type="checkbox" v-model="seed.local"> exécuter depuis ce poste (Docker s'il répond, sinon le client psql/mysql/mongosh/redis-cli/curl installé)</label>
+        <label v-if="localExecution" class="switch" title="Sinon, une Clever Task exécute le chargement sur la plateforme"><input type="checkbox" v-model="seed.local"> exécuter depuis ce poste (Docker s'il répond, sinon le client psql/mysql/mongosh/redis-cli/curl installé)</label>
+        <p v-else class="dim">Une Clever Task exécute le chargement sur la plateforme (l'exécution depuis le poste est réservée à un serveur local).</p>
         <div class="row-end"><cc-button :outlined="true" @cc-click="dialog.seed = false">Annuler</cc-button><cc-button :primary="true" :disabled="!seed.service || !seed.dump" @cc-click="doSeed">Seed</cc-button></div>
       </cc-dialog>
       <cc-dialog heading="Ouvrir un répertoire du poste" :open="dialog.addDir" @cc-close="dialog.addDir = false" closedBy="any">

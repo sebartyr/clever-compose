@@ -561,6 +561,19 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Exécution locale refusée sur un serveur partagé (17/09/2026)** : audit
+  de sécurité (issue #12, S1). En rendant le serveur exposable, la garde
+  « réservé à l'usage local » avait été posée sur l'ouverture d'un
+  répertoire du poste, pas sur l'exécution des tâches `run: local`
+  (`x-clever.init: local`, `seed --local`) : un client à jetons faisait
+  tourner son script sur la machine du serveur (`exec::local::run_task`,
+  `sh` ou `docker run`). `web/api.rs` : `local_execution_allowed` (écoute
+  locale **et** client servi par les identifiants du serveur) ; `local_up`
+  refuse un plan qui porte une app `RunWhere::Local`, `local_seed` refuse
+  `local: true` (403), message qui renvoie vers la tâche plateforme.
+  `/api/info` expose `local_listen` ; le front masque « exécuter depuis
+  ce poste » quand le serveur n'est pas local ou que le client a ses
+  jetons. La CLI et `ui` sur le poste sont inchangés.
 - **Shim compilé par `build.rs` (16/09/2026)** : le propriétaire découvrait
   un `target/release/cc-shim` (version hôte, glibc, inutile) à côté du shim
   musl de `target/x86_64-unknown-linux-musl/shim/` compilé à la main le

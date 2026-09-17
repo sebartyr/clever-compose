@@ -112,8 +112,10 @@ mêmes commits déployés (vérifié en réel).
   danse du serveur, ou `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
   pour un client sans jetons seulement en écoute locale ; projets locaux
-  par propriétaire (`Locals`, id Clever Cloud), répertoire du poste
-  réservé à l'usage local ; connexion par
+  par propriétaire (`Locals`, id Clever Cloud), répertoire du poste et
+  **exécution locale des tâches** (`run: local`, `seed --local`)
+  réservés à l'usage local (écoute locale, client sans jetons :
+  `local_execution_allowed`, issue #12) ; connexion par
   `POST /api/session/login` (request token, callback du serveur) :
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons

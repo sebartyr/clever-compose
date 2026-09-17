@@ -152,6 +152,9 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
         "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
         // Le serveur a-t-il ses propres identifiants (clients sans jetons servis) ?
         "server_credentials": s.fallback.is_some(),
+        // Écoute locale : l'exécution depuis le poste (`seed --local`,
+        // `init: local`) est possible pour un client sans jetons.
+        "local_listen": s.listen.ip().is_loopback(),
     }))
 }
 
@@ -441,6 +444,17 @@ async fn owner(s: &State, c: &Client) -> Result<Option<String>, ApiError> {
     s.owner_of(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))
 }
 
+/// L'exécution « locale » d'une tâche (`x-clever.init: local`, `run: local`,
+/// `seed --local`) tourne sur la machine du serveur : réservée au serveur
+/// du poste (écoute locale, client servi par les identifiants du serveur).
+/// Sur un serveur partagé, un client à jetons ferait exécuter son script
+/// ici. `Err` avec le message à rendre au client sinon.
+async fn local_execution_allowed(s: &State, c: &Client) -> Result<bool, ApiError> {
+    Ok(s.listen.ip().is_loopback() && owner(s, c).await?.is_none())
+}
+
+const LOCAL_EXECUTION_REFUSED: &str = "exécution locale réservée au poste : sur ce serveur, laissez la plateforme exécuter la tâche (retirez `x-clever.init: local`, ou décochez « exécuter depuis ce poste »)";
+
 async fn project_dir(s: &State, id: &str, c: &Client) -> Result<PathBuf, ApiError> {
     let o = owner(s, c).await?;
     s.locals.get(id, o.as_deref()).ok_or_else(|| ApiError(StatusCode::NOT_FOUND, format!("projet local `{id}` inconnu")))
@@ -583,6 +597,7 @@ struct UpBody {
 
 async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id, &org).await?;
+    let local_ok = local_execution_allowed(&s, &org).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
@@ -590,6 +605,12 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org
             log(&format!("{}{}", if d["severity"] == "error" { "erreur : " } else { "" }, d["rendered"].as_str().unwrap_or("")));
         }
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
+        if !local_ok {
+            let local: Vec<&str> = plan.resources.iter().filter_map(|r| match r { cc_compose_model::plan::Resource::App(a) if a.run == cc_compose_model::plan::RunWhere::Local => Some(a.service.as_str()), _ => None }).collect();
+            if !local.is_empty() {
+                return Err(format!("{} : {LOCAL_EXECUTION_REFUSED}", local.join(", ")));
+            }
+        }
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes, assets: b.assets };
         crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
@@ -611,6 +632,9 @@ struct SeedBody {
 async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id, &org).await?;
     let dump = safe_file(&dir, &b.dump)?;
+    if b.local && !local_execution_allowed(&s, &org).await? {
+        return Err(ApiError(StatusCode::FORBIDDEN, LOCAL_EXECUTION_REFUSED.into()));
+    }
     Ok(stream_task(s, format!("seed {id} --service {}", b.service), move |state, mut log| async move {
         let d2 = dir.clone();
         let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, false)).await.map_err(|e| e.to_string())??;
