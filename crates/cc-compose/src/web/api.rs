@@ -200,15 +200,17 @@ struct OauthStart {
 /// Début de la connexion d'un navigateur : request token avec callback
 /// sur ce serveur, URL d'autorisation à ouvrir. Le callback renvoie les
 /// jetons dans le fragment de l'URL de retour.
-async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
+async fn login_start(AxState(s): AxState<Shared>, headers: axum::http::HeaderMap, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
     let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
+    let public_base = s.public_base_for(&headers);
     let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
         None => "/".to_string(),
         Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
-        Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
-        Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
+        Some(r) if s.origins.iter().chain(std::iter::once(&public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
+        Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur, ni {public_base} (--public-url), ni une origine passée en --cors"))),
     };
-    let callback = format!("{}/api/session/oauth/callback", s.public_base);
+    let callback = format!("{public_base}/api/session/oauth/callback");
+    super::slog(&format!("connexion : callback {callback}"));
     let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
     super::slog(&format!("connexion : request token obtenu, retour prévu vers {return_to}"));
     s.pending.lock().unwrap().insert(token.clone(), (secret, return_to));

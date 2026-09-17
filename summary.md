@@ -394,6 +394,18 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Interface hébergée sur Clever Cloud (17/09/2026)** : capture du
+  propriétaire, `ui` lancé dans une application cleverapps.io refusait
+  `return=https://app-….cleverapps.io/` (« ni un chemin de ce serveur ni
+  une origine --cors ») : la base publique était `http://0.0.0.0:8080`.
+  Désormais `State::public_base_for(headers)` : `--public-url` si donnée,
+  sinon `X-Forwarded-Proto` + `X-Forwarded-Host`/`Host` de la requête ;
+  le callback OAuth en découle. Le front envoie un retour relatif quand
+  l'API sert la page (absolu seulement avec `VITE_API_URL`). Le
+  propriétaire a passé la base URL du consumer embarqué à l'application
+  cleverapps.io : vérifié, request token accepté avec l'hôte de l'app
+  transmis, refusé pour `127.0.0.1` (la base URL décide d'où la danse se
+  fait ; un autre consumer par `CLEVER_CONSUMER_*` pour le poste).
 - **Serveur verbeux (17/09/2026)** : « rends l'utilisation de l'ui/api
   verbeuse ». `web::slog` (stderr, horodaté) : au démarrage, mode
   d'identifiants, consumer (environnement ou embarqué), CORS, clé, bucket ;

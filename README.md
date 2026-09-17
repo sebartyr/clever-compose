@@ -109,15 +109,21 @@ Identifiants : **chaque client envoie les siens**, à chaque requête
 (`X-CC-Token`/`X-CC-Secret`, ou `X-CC-Api-Token`), et le
 serveur les vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes)
 avant d'agir en son nom ; le serveur ne garde aucune session. Le consumer
-OAuth est celui de clever-compose, embarqué (base URL
-`http://127.0.0.1:7777/`, ce qui convient au poste) ; `CLEVER_CONSUMER_KEY`
-/ `CLEVER_CONSUMER_SECRET` dans l'environnement le remplacent toujours
-(un consumer que vous créez dans la console, base URL = `--public-url`,
-callback `/api/session/oauth/callback`, indispensable pour un serveur
-ailleurs que sur `127.0.0.1:7777`). Un navigateur sans jetons voit un
-écran de connexion qui démarre tout seul : la page part vers
-l'autorisation Clever Cloud et le callback ramène les jetons dans le
-fragment de l'URL.
+OAuth est celui de clever-compose, embarqué ; `CLEVER_CONSUMER_KEY` /
+`CLEVER_CONSUMER_SECRET` dans l'environnement le remplacent toujours.
+Clever Cloud n'accepte le callback (`<base>/api/session/oauth/callback`)
+que sous la **base URL déclarée pour le consumer** dans la console : elle
+doit être l'adresse publique du serveur (`http://127.0.0.1:7777/` sur le
+poste, `https://app-….cleverapps.io/` pour une application Clever Cloud).
+Cette adresse est déduite de chaque requête (`Host`, `X-Forwarded-Proto`
+du proxy) ; `--public-url` la fixe si la déduction ne convient pas. Un
+navigateur sans jetons voit un écran de connexion qui démarre tout seul :
+la page part vers l'autorisation Clever Cloud et le callback ramène les
+jetons dans le fragment de l'URL.
+
+Sur une application Clever Cloud : `clever-compose ui --listen 0.0.0.0:8080
+--api-key …` (variables `CC_API_KEY`, et `CLEVER_CONSUMER_*` si le consumer
+embarqué n'a pas cette base URL) ; rien d'autre à configurer.
 
 Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
 les oublie. Des jetons refusés (expirés, révoqués) ramènent à l'écran de

@@ -25,10 +25,13 @@ pub struct Consumer {
     pub secret: String,
 }
 
-/// Consumer OAuth « clever-compose » (console Clever Cloud, base URL
-/// `http://127.0.0.1:7777/`). Comme clever-tools embarque le sien : un
-/// consumer public identifie l'application, il ne donne accès à rien
-/// sans l'autorisation de l'utilisateur.
+/// Consumer OAuth « clever-compose » (console Clever Cloud). Comme
+/// clever-tools embarque le sien : un consumer public identifie
+/// l'application, il ne donne accès à rien sans l'autorisation de
+/// l'utilisateur. Clever Cloud n'accepte un `oauth_callback` que sous la
+/// base URL déclarée pour le consumer : celle-ci décide donc d'où la
+/// danse peut se faire (le poste, ou une application qui héberge
+/// `ui`/`api`) ; `CLEVER_CONSUMER_KEY`/`SECRET` pour en utiliser un autre.
 pub const DEFAULT_CONSUMER_KEY: &str = "4cUX75GQHaKwJIBnjj63eXrKNiWlqe";
 /// Vérifié le 17/09/2026 : request token accepté avec ces constantes.
 pub const DEFAULT_CONSUMER_SECRET: &str = "x1pMMlJBXy9u5QL1YjvTEXGe0IK4xh";

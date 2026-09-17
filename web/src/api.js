@@ -67,7 +67,10 @@ export const api = {
   setScaling: (id, body) => json('PUT', `/api/local/${encodeURIComponent(id)}/scaling`, body),
   syncAssets: (id, onLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/assets/sync`, null, onLog),
   /** Connexion : rend { mode: 'redirect'|'console', url }. */
-  login: () => json('POST', '/api/session/login', { return: location.origin + location.pathname }),
+  // Retour après la danse : relatif quand l'API sert la page (même
+  // origine), absolu quand elle est ailleurs (VITE_API_URL, origine à
+  // passer en --cors au serveur).
+  login: () => json('POST', '/api/session/login', { return: API_BASE ? location.origin + location.pathname : location.pathname }),
   /** Début de la danse OAuth, avec retour sur cette interface. */
   oauthStart: () => u('/api/session/oauth/start?return=' + encodeURIComponent(location.origin + location.pathname)),
 

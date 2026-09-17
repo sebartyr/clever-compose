@@ -46,9 +46,11 @@ pub struct State {
     pub fallback: Option<Session>,
     pub locals: local::Locals,
     pub oauth: OauthConsumer,
-    /// Base publique du serveur (`http://<adresse d'écoute>` ou
-    /// `--public-url`), base du `oauth_callback`.
-    pub public_base: String,
+    /// Base publique du serveur : `--public-url` si donnée ; sinon
+    /// déduite de chaque requête (`Host`, `X-Forwarded-Proto`), voir
+    /// [`State::public_base_for`].
+    pub public_base: Option<String>,
+    pub listen: SocketAddr,
     /// Origines autorisées en CORS (interface servie ailleurs) ; aussi les
     /// seules destinations acceptées pour le retour après la danse OAuth.
     pub origins: Vec<String>,
@@ -113,6 +115,19 @@ pub fn slog(line: &str) {
 }
 
 impl State {
+    /// Base publique pour cette requête : `--public-url`, sinon le
+    /// schéma de `X-Forwarded-Proto` (un proxy devant, comme sur Clever
+    /// Cloud) ou `http`, et l'hôte de `X-Forwarded-Host` ou `Host`.
+    pub fn public_base_for(&self, headers: &axum::http::HeaderMap) -> String {
+        if let Some(b) = &self.public_base {
+            return b.clone();
+        }
+        let h = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(|v| v.split(',').next().unwrap_or(v).trim().to_string()).filter(|v| !v.is_empty());
+        let scheme = h("x-forwarded-proto").unwrap_or_else(|| "http".into());
+        let host = h("x-forwarded-host").or_else(|| h("host")).unwrap_or_else(|| self.listen.to_string());
+        format!("{scheme}://{host}")
+    }
+
     /// L'API pour un client : ses jetons (validés chez Clever Cloud, cache
     /// de cinq minutes), sinon les identifiants du serveur. `Err` : rien
     /// d'utilisable, ou jetons refusés.
@@ -160,7 +175,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if let Some(bad) = origins.iter().find(|s| !(s.starts_with("http://") || s.starts_with("https://")) || s[s.find("://").unwrap() + 3..].contains('/')) {
         return Err(format!("--cors `{bad}` : une origine est `http(s)://hôte[:port]`, sans chemin"));
     }
-    let public_base = o.public_url.map(|u| u.trim_end_matches('/').to_string()).unwrap_or_else(|| format!("http://{listen}"));
+    let public_base = o.public_url.map(|u| u.trim_end_matches('/').to_string());
     let locals = local::Locals::default();
     if let Some(dir) = o.initial_dir {
         if dir.join("compose.yaml").is_file() || dir.join("compose.yml").is_file() || dir.join("docker-compose.yaml").is_file() || dir.join("docker-compose.yml").is_file() {
@@ -168,7 +183,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
         }
     }
     match &fallback {
-        None => slog(&format!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer {}, base URL {public_base})", oauth.key)),
+        None => slog(&format!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer {}, base URL {})", oauth.key, public_base.clone().unwrap_or_else(|| format!("déduite des requêtes, http://{listen} par défaut")))),
         Some(s) => slog(&format!("identifiants du serveur prêtés aux clients qui n'en envoient pas{}", if s.org.is_empty() { String::new() } else { format!(" (organisation {})", s.org) })),
     }
     slog(&format!("consumer OAuth : {}{}", oauth.key, if std::env::var_os("CLEVER_CONSUMER_KEY").is_some() { " (environnement)" } else { " (embarqué)" }));
@@ -179,7 +194,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if let Some(b) = std::env::var_os(crate::exec::assets::ENV_BUCKET) {
         slog(&format!("assets Cellar : bucket {}", b.to_string_lossy()));
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
