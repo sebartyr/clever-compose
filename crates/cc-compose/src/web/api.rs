@@ -223,6 +223,8 @@ pub struct Client {
     /// (voir [`from_host`]). Seule une telle requête reçoit les
     /// identifiants du serveur ou l'exécution locale.
     pub from_host: bool,
+    /// Adresse du pair (`ConnectInfo`), pour la limitation de débit.
+    pub peer: Option<std::net::IpAddr>,
 }
 
 /// En-têtes qu'un proxy pose : leur présence dit que la connexion
@@ -245,7 +247,7 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
             _ => None,
         };
         let peer = parts.extensions.get::<axum::extract::ConnectInfo<std::net::SocketAddr>>().map(|c| c.0);
-        Ok(Client { tokens, org: h("x-cc-org"), from_host: from_host(&parts.headers, peer) })
+        Ok(Client { tokens, org: h("x-cc-org"), from_host: from_host(&parts.headers, peer), peer: peer.map(|p| p.ip()) })
     }
 }
 
@@ -272,7 +274,11 @@ struct OauthStart {
 /// Début de la connexion d'un navigateur : request token avec callback
 /// sur ce serveur, URL d'autorisation à ouvrir. Le callback renvoie les
 /// jetons dans le fragment de l'URL de retour.
-async fn login_start(AxState(s): AxState<Shared>, headers: axum::http::HeaderMap, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
+async fn login_start(AxState(s): AxState<Shared>, headers: axum::http::HeaderMap, c: Client, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
+    if !s.limiter.allow(c.peer) {
+        super::slog(&format!("connexion refusée : trop de débuts depuis {}", c.peer.map(|p| p.to_string()).unwrap_or_default()));
+        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "trop de connexions commencées : réessayez dans une minute".into()));
+    }
     let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
     let public_base = s.public_base_for(&headers);
     let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
@@ -283,9 +289,17 @@ async fn login_start(AxState(s): AxState<Shared>, headers: axum::http::HeaderMap
     };
     let callback = format!("{public_base}/api/session/oauth/callback");
     super::slog(&format!("connexion : callback {callback}"));
+    {
+        // Les connexions en attente : expirées purgées, plafond sinon.
+        let mut pending = s.pending.lock().unwrap_or_else(|e| e.into_inner());
+        pending.retain(|_, (_, _, at)| at.elapsed() < super::PENDING_TTL);
+        if pending.len() >= super::PENDING_MAX {
+            return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "trop de connexions en attente sur ce serveur : réessayez plus tard".into()));
+        }
+    }
     let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
     super::slog(&format!("connexion : request token obtenu, retour prévu vers {return_to}"));
-    s.pending.lock().unwrap().insert(token.clone(), (secret, return_to));
+    s.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(token.clone(), (secret, return_to, std::time::Instant::now()));
     Ok(Json(json!({ "mode": "redirect", "url": url })))
 }
 
@@ -299,7 +313,10 @@ struct OauthCallback {
 /// jetons dans le fragment (`#token=…&secret=…`, jamais envoyé au serveur
 /// par le navigateur).
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
-    let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
+    let (request_secret, return_to, at) = s.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
+    if at.elapsed() >= super::PENDING_TTL {
+        return Err(bad("connexion expirée (plus de dix minutes) : recommencez"));
+    }
     let (token, secret) = crate::auth::access_token(&s.oauth, &q.oauth_token, &request_secret, &q.oauth_verifier).await.map_err(internal)?;
     let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), consumer_key: None, user_id: None, email: None };
     crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
@@ -909,6 +926,7 @@ mod tests {
             listen: "127.0.0.1:8080".parse().unwrap(),
             origins: Vec::new(),
             pending: Default::default(),
+            limiter: super::super::Limiter::new(std::time::Duration::from_secs(60), 20),
             api_key: None,
             local_exec,
             validated: Default::default(),
@@ -918,7 +936,7 @@ mod tests {
     }
 
     fn client(tokens: bool, from_host: bool) -> Client {
-        Client { tokens: tokens.then(|| super::super::ClientTokens::Bearer("x".into())), org: None, from_host }
+        Client { tokens: tokens.then(|| super::super::ClientTokens::Bearer("x".into())), org: None, from_host, peer: None }
     }
 
     /// Une requête prête à partir : pair, en-têtes, jetons, corps JSON
@@ -996,6 +1014,24 @@ mod tests {
         // Depuis le poste : identifiants du serveur, organisation du serveur ;
         // assets non configurés dans ce test → `present: false`.
         assert_eq!(get(LOOPBACK).await, StatusCode::OK);
+    }
+
+    /// Des jetons inconnus répétés depuis une adresse finissent refusés
+    /// avant tout appel à Clever Cloud (le limiteur du test est petit).
+    #[tokio::test]
+    async fn repeated_unknown_tokens_are_throttled() {
+        let (s, _, _d) = state(true);
+        // Fenêtre déjà pleine (0 tentative) : coupé avant tout appel réseau.
+        let s = Arc::new(State { limiter: super::super::Limiter::new(std::time::Duration::from_secs(60), 0), ..match Arc::try_unwrap(s) { Ok(st) => st, Err(_) => unreachable!() } });
+        let c = Client { tokens: Some(super::super::ClientTokens::Bearer("x".into())), org: None, from_host: false, peer: Some("203.0.113.7".parse().unwrap()) };
+        let err = match s.api_for(&c).await {
+            Err(e) => e,
+            Ok(_) => panic!("jetons bidon acceptés"),
+        };
+        assert!(err.contains("trop de tentatives"), "{err}");
+        // La route de connexion aussi (429).
+        let req = request("POST", "/api/session/login", REMOTE, &[], false, Some("{}".into()));
+        assert_eq!(app(&s).oneshot(req).await.unwrap().status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     /// Un nom de projet de l'URL entre dans des clés S3 et des chemins :

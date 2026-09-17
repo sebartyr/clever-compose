@@ -561,6 +561,18 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Base publique sur `Host` seul, connexions bornées, limiteur
+  (17/09/2026)** : audit #12, S6 et S7. `public_base_for` prenait
+  `X-Forwarded-Host`, qu'un client peut poser lui-même : callback OAuth
+  et `return` détournables derrière un proxy laxiste. Désormais `Host`
+  (validé par `same_site` en écoute locale) et `X-Forwarded-Proto`
+  restreint à http/https ; avis au démarrage sans `--public-url` hors
+  loopback. `pending` : `PENDING_TTL` 10 min (purge à chaque début,
+  vérifié au callback), `PENDING_MAX` 1000 → 429. `Limiter` (fenêtre
+  fixe par adresse, 20/min) sur `POST /api/session/login` (un request
+  token chez Clever Cloud par appel) et sur la validation de jetons
+  inconnus (`api_for`, un `/v2/self` par tentative) ; `Client::peer`.
+  Tests : fenêtre par adresse, jetons coupés avant l'API, 429 sur login.
 - **Archives bornées, extraction en flux hors du runtime (17/09/2026)** :
   audit #12, S8. Corps de 256 Mio en mémoire, chaque entrée lue en
   mémoire sans plafond de taille décompressée (zip bomb), le tout dans le

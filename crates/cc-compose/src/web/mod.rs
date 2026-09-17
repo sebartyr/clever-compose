@@ -55,8 +55,13 @@ pub struct State {
     /// Origines autorisées en CORS (interface servie ailleurs) ; aussi les
     /// seules destinations acceptées pour le retour après la danse OAuth.
     pub origins: Vec<String>,
-    /// Request tokens en attente d'autorisation → (secret, URL de retour).
-    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Request tokens en attente d'autorisation → (secret, URL de retour,
+    /// date) ; expirés après [`PENDING_TTL`], au plus [`PENDING_MAX`].
+    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String, std::time::Instant)>>,
+    /// Limitation par adresse des débuts de connexion et des jetons
+    /// refusés : ces deux chemins appellent Clever Cloud pour un client
+    /// qui n'a rien prouvé.
+    pub limiter: Limiter,
     /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
     /// exposé au-delà du poste.
     pub api_key: Option<String>,
@@ -134,6 +139,42 @@ impl ClientTokens {
 }
 
 const VALIDATION_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+/// Un request token non autorisé en dix minutes est oublié.
+pub const PENDING_TTL: std::time::Duration = std::time::Duration::from_secs(600);
+/// Connexions en attente au plus (au-delà : 429).
+pub const PENDING_MAX: usize = 1000;
+
+/// Fenêtre fixe par adresse : au plus `max` événements par `window`.
+/// Sert aux débuts de connexion (un request token chez Clever Cloud par
+/// appel) et aux jetons refusés (un `/v2/self` par tentative).
+pub struct Limiter {
+    window: std::time::Duration,
+    max: u32,
+    hits: std::sync::Mutex<std::collections::HashMap<std::net::IpAddr, (std::time::Instant, u32)>>,
+}
+
+impl Limiter {
+    pub fn new(window: std::time::Duration, max: u32) -> Limiter {
+        Limiter { window, max, hits: Default::default() }
+    }
+
+    /// Compte un événement pour `ip` ; `false` si la fenêtre est pleine.
+    /// Sans adresse (pas de `ConnectInfo`), rien n'est limité.
+    pub fn allow(&self, ip: Option<std::net::IpAddr>) -> bool {
+        let Some(ip) = ip else { return true };
+        let now = std::time::Instant::now();
+        let mut hits = self.hits.lock().unwrap_or_else(|e| e.into_inner());
+        if hits.len() > 10_000 {
+            hits.retain(|_, (t, _)| now.duration_since(*t) < self.window);
+        }
+        let e = hits.entry(ip).or_insert((now, 0));
+        if now.duration_since(e.0) >= self.window {
+            *e = (now, 0);
+        }
+        e.1 += 1;
+        e.1 <= self.max
+    }
+}
 
 /// Journal du serveur sur stderr, horodaté : requêtes, clients validés
 /// ou refusés, connexions, opérations et leur issue. Toujours verbeux
@@ -149,14 +190,16 @@ pub fn slog(line: &str) {
 impl State {
     /// Base publique pour cette requête : `--public-url`, sinon le
     /// schéma de `X-Forwarded-Proto` (un proxy devant, comme sur Clever
-    /// Cloud) ou `http`, et l'hôte de `X-Forwarded-Host` ou `Host`.
+    /// Cloud) ou `http`, et l'hôte de `Host` (celui que le navigateur a
+    /// appelé ; jamais `X-Forwarded-Host`, qu'un client peut poser
+    /// lui-même). En écoute locale, `Host` a déjà passé `same_site`.
     pub fn public_base_for(&self, headers: &axum::http::HeaderMap) -> String {
         if let Some(b) = &self.public_base {
             return b.clone();
         }
         let h = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(|v| v.split(',').next().unwrap_or(v).trim().to_string()).filter(|v| !v.is_empty());
-        let scheme = h("x-forwarded-proto").unwrap_or_else(|| "http".into());
-        let host = h("x-forwarded-host").or_else(|| h("host")).unwrap_or_else(|| self.listen.to_string());
+        let scheme = h("x-forwarded-proto").filter(|s| s == "http" || s == "https").unwrap_or_else(|| "http".into());
+        let host = h("host").unwrap_or_else(|| self.listen.to_string());
         format!("{scheme}://{host}")
     }
 
@@ -203,6 +246,10 @@ impl State {
             if v.at.elapsed() < VALIDATION_TTL {
                 return Ok((v.api.clone(), v.email.clone()));
             }
+        }
+        if !self.limiter.allow(c.peer) {
+            slog(&format!("jetons non validés : trop de tentatives depuis {}", c.peer.map(|p| p.to_string()).unwrap_or_default()));
+            return Err("trop de tentatives de connexion : réessayez dans une minute".to_string());
         }
         let api = Api::new(String::new(), t.credentials(&self.oauth));
         let (user, email) = match api.whoami().await {
@@ -289,7 +336,10 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if let Some(b) = std::env::var_os(crate::exec::assets::ENV_BUCKET) {
         slog(&format!("assets Cellar : bucket {}", b.to_string_lossy()));
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), api_key: o.api_key.clone(), local_exec, validated: Default::default() });
+    if !listen.ip().is_loopback() && public_base.is_none() {
+        slog("sans --public-url : le callback OAuth est bâti sur l'en-tête Host de chaque requête (X-Forwarded-Proto pour le schéma) ; posez --public-url derrière un proxy pour figer la base");
+    }
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
@@ -334,5 +384,16 @@ mod tests {
         assert!(!local_exec_policy(LocalExec::Auto, local, false, false, true));
         assert!(local_exec_policy(LocalExec::On, public, true, true, true));
         assert!(!local_exec_policy(LocalExec::Off, local, false, false, false));
+    }
+
+    #[test]
+    fn limiter_counts_per_address_in_a_window() {
+        let l = Limiter::new(std::time::Duration::from_secs(60), 3);
+        let a: std::net::IpAddr = "203.0.113.7".parse().unwrap();
+        let b: std::net::IpAddr = "203.0.113.8".parse().unwrap();
+        assert!(l.allow(Some(a)) && l.allow(Some(a)) && l.allow(Some(a)));
+        assert!(!l.allow(Some(a)));
+        assert!(l.allow(Some(b)));
+        assert!(l.allow(None) && l.allow(None) && l.allow(None) && l.allow(None));
     }
 }
