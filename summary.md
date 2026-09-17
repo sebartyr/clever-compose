@@ -561,6 +561,19 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Contexte de build plafonné, fichiers texte jugés sur un préfixe,
+  objets Cellar en parallèle (17/09/2026)** : audit #12, P5 et P6.
+  `collect_tree` chargeait tout le contexte en mémoire sans borne :
+  `MAX_CONTEXT` 512 Mio, erreur qui renvoie au `.dockerignore`.
+  `text_files` et `project_files` lisaient chaque fichier en entier pour
+  tester l'UTF-8 : `assets::looks_text` (8 Kio, séquence coupée en fin
+  de fenêtre tolérée, octet nul refusé). `assets::sync`/`fetch`/`clear`
+  : envois, lectures et suppressions par `inspect::each` (8 à la fois),
+  empreintes calculées avant. Non retenus : déploiement parallèle des
+  applications indépendantes (changement de sémantique du `up`, journal
+  entrelacé : à décider), canal SSE borné (le journal est synchrone ; un
+  client parti ne bloque rien, un client lent accumule au pire quelques
+  milliers de lignes).
 - **Shim : DNS amont connecté, table UDP bornée ; fichiers sensibles
   créés avec leur mode (17/09/2026)** : audit #12, S11 et S12. Le stub
   DNS liait un socket sur `0.0.0.0:0` sans `connect` et prenait le

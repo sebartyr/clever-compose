@@ -402,12 +402,18 @@ pub fn unique_work_dir(what: &str) -> Result<std::path::PathBuf, String> {
     Ok(work)
 }
 
+/// Taille cumulée d'un contexte de build poussé dans le dépôt
+/// synthétique, tout en mémoire le temps du commit : au-delà, c'est un
+/// `.dockerignore` qui manque (`node_modules`, artefacts).
+pub const MAX_CONTEXT: u64 = 512 * 1024 * 1024;
+
 pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
     let mut files = sources::files(app, project_dir)?;
     if let Source::Context { context, .. } = &app.source {
         let root = project_dir.join(context.trim_start_matches("./"));
         let ignore = DockerIgnore::load(&root)?;
-        collect_tree(&root, &root, &ignore, &mut files)?;
+        let mut total: u64 = files.iter().map(|f| f.content.len() as u64).sum();
+        collect_tree(&root, &root, &ignore, &mut files, &mut total)?;
     }
     Ok(files)
 }
@@ -456,7 +462,7 @@ impl DockerIgnore {
     }
 }
 
-fn collect_tree(root: &FsPath, dir: &FsPath, ignore: &DockerIgnore, out: &mut Vec<sources::File>) -> Result<(), String> {
+fn collect_tree(root: &FsPath, dir: &FsPath, ignore: &DockerIgnore, out: &mut Vec<sources::File>, total: &mut u64) -> Result<(), String> {
     let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(|e| format!("{} : {e}", dir.display()))?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
     for e in entries {
@@ -467,8 +473,12 @@ fn collect_tree(root: &FsPath, dir: &FsPath, ignore: &DockerIgnore, out: &mut Ve
         }
         let ft = e.file_type().map_err(|x| x.to_string())?;
         if ft.is_dir() {
-            collect_tree(root, &path, ignore, out)?;
+            collect_tree(root, &path, ignore, out, total)?;
         } else if ft.is_file() && !out.iter().any(|f| f.path == rel) {
+            *total += e.metadata().map(|m| m.len()).unwrap_or(0);
+            if *total > MAX_CONTEXT {
+                return Err(format!("contexte de build {} : plus de {} Mio à pousser ; excluez ce qui n'entre pas dans l'image avec un .dockerignore (node_modules, target, données…)", root.display(), MAX_CONTEXT / (1024 * 1024)));
+            }
             #[cfg(unix)]
             let executable = {
                 use std::os::unix::fs::PermissionsExt;

@@ -621,12 +621,8 @@ fn text_files(dir: &Path) -> Vec<String> {
                     continue;
                 }
                 walk(root, &p, depth + 1, out);
-            } else if p.is_file() && e.metadata().map(|m| m.len() <= 512 * 1024).unwrap_or(false) {
-                if let Ok(bytes) = std::fs::read(&p) {
-                    if std::str::from_utf8(&bytes).is_ok() && !bytes.contains(&0) {
-                        out.push(p.strip_prefix(root).unwrap_or(&p).to_string_lossy().to_string());
-                    }
-                }
+            } else if p.is_file() && e.metadata().map(|m| m.len() <= 512 * 1024).unwrap_or(false) && crate::exec::assets::looks_text(&p) {
+                out.push(p.strip_prefix(root).unwrap_or(&p).to_string_lossy().to_string());
             }
         }
     }

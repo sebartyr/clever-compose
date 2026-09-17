@@ -163,11 +163,36 @@ impl Cellar {
 
     /// Retire les objets d'un projet ; le bucket reste.
     pub async fn clear(&self, owner: &str, project: &str) -> Result<usize, String> {
-        let keys = self.list(&prefix(owner, project)).await?;
-        for (key, _) in &keys {
-            self.delete(key).await?;
+        let keys: Vec<String> = self.list(&prefix(owner, project)).await?.into_iter().map(|(k, _)| k).collect();
+        let n = keys.len();
+        super::inspect::each(keys, |key| async move { self.delete(&key).await }).await?;
+        Ok(n)
+    }
+}
+
+/// Un fichier texte, jugé sur ses premiers 8 Kio : UTF-8 valide (une
+/// séquence coupée en fin de fenêtre est tolérée) et sans octet nul.
+/// Évite de lire chaque fichier du projet en entier à chaque listage.
+pub fn looks_text(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let mut buf = [0u8; 8192];
+    let mut read = 0;
+    while read < buf.len() {
+        match f.read(&mut buf[read..]) {
+            Ok(0) => break,
+            Ok(n) => read += n,
+            Err(_) => return false,
         }
-        Ok(keys.len())
+    }
+    let window = &buf[..read];
+    if window.contains(&0) {
+        return false;
+    }
+    match std::str::from_utf8(window) {
+        Ok(_) => true,
+        // Séquence multi-octets tronquée par la fenêtre seulement.
+        Err(e) => read == buf.len() && e.error_len().is_none() && window.len() - e.valid_up_to() < 4,
     }
 }
 
@@ -190,12 +215,8 @@ pub fn project_files(plan: &Plan, project_dir: &Path) -> Vec<(String, PathBuf)> 
                     continue;
                 }
                 walk(root, &p, depth + 1, out);
-            } else if p.is_file() && e.metadata().map(|m| m.len() <= 512 * 1024).unwrap_or(false) {
-                if let Ok(bytes) = std::fs::read(&p) {
-                    if std::str::from_utf8(&bytes).is_ok() && !bytes.contains(&0) {
-                        out.push((p.strip_prefix(root).unwrap_or(&p).to_string_lossy().to_string(), p.clone()));
-                    }
-                }
+            } else if p.is_file() && e.metadata().map(|m| m.len() <= 512 * 1024).unwrap_or(false) && looks_text(&p) {
+                out.push((p.strip_prefix(root).unwrap_or(&p).to_string_lossy().to_string(), p.clone()));
             }
         }
     }
@@ -249,7 +270,9 @@ pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::re
     let previous: Option<Manifest> = cellar.get(&format!("{pre}manifest.json")).await?.and_then(|b| serde_json::from_slice(&b).ok());
     let mut manifest = Manifest { project: plan.project.clone(), spec_hash: plan.spec_hash.clone(), uploaded_at: super::inspect::rfc3339(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()), files: Vec::new() };
     let mut wanted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let mut pushed = 0;
+    // Empreintes d'abord (lecture locale), puis les envois nécessaires en
+    // parallèle borné.
+    let mut to_push: Vec<(String, Vec<u8>)> = Vec::new();
     for (rel, abs) in &files {
         let bytes = std::fs::read(abs).map_err(|e| format!("{} : {e}", abs.display()))?;
         let sha = {
@@ -262,23 +285,21 @@ pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::re
         wanted.insert(key.clone());
         // Même taille et même empreinte que dans le manifeste en place : sauté.
         let unchanged = existing.get(&key).is_some_and(|s| *s == bytes.len() as u64) && previous.as_ref().and_then(|m| m.files.iter().find(|f| f.path == *rel)).is_some_and(|f| f.sha256 == sha);
-        if !unchanged {
-            cellar.put(&key, bytes.clone()).await?;
-            pushed += 1;
-        }
         manifest.files.push(ManifestFile { path: rel.clone(), size: bytes.len() as u64, sha256: sha });
+        if !unchanged {
+            to_push.push((key, bytes));
+        }
     }
+    let pushed = to_push.len();
+    let cellar_ref = &cellar;
+    super::inspect::each(to_push, |(key, bytes)| async move { cellar_ref.put(&key, bytes).await }).await?;
     cellar.put(&format!("{pre}plan.json"), serde_json::to_vec_pretty(plan).unwrap()).await?;
     cellar.put(&format!("{pre}manifest.json"), serde_json::to_vec_pretty(&manifest).unwrap()).await?;
     wanted.insert(format!("{pre}plan.json"));
     wanted.insert(format!("{pre}manifest.json"));
-    let mut removed = 0;
-    for key in existing.keys() {
-        if !wanted.contains(key) {
-            cellar.delete(key).await?;
-            removed += 1;
-        }
-    }
+    let stale: Vec<String> = existing.keys().filter(|k| !wanted.contains(*k)).cloned().collect();
+    let removed = stale.len();
+    super::inspect::each(stale, |key| async move { cellar_ref.delete(&key).await }).await?;
     log(&format!("assets : {} fichier(s) dans {}/{pre} ({pushed} poussé(s), {removed} retiré(s))", files.len(), cellar.bucket_name()));
     Ok(())
 }
@@ -296,12 +317,9 @@ pub async fn open(owner: &str, project: &str) -> Result<Option<(Cellar, Manifest
 pub async fn fetch(cellar: &Cellar, owner: &str, manifest: &Manifest) -> Result<(Option<Plan>, Vec<(String, Vec<u8>)>), String> {
     let pre = prefix(owner, &manifest.project);
     let plan = cellar.get(&format!("{pre}plan.json")).await?.and_then(|b| serde_json::from_slice(&b).ok());
-    let mut files = Vec::new();
-    for f in &manifest.files {
-        if let Some(b) = cellar.get(&format!("{pre}files/{}", f.path)).await? {
-            files.push((f.path.clone(), b));
-        }
-    }
+    let keys: Vec<(String, String)> = manifest.files.iter().map(|f| (f.path.clone(), format!("{pre}files/{}", f.path))).collect();
+    let got = super::inspect::each(keys, |(path, key)| async move { Ok((path, cellar.get(&key).await?)) }).await?;
+    let files = got.into_iter().filter_map(|(path, b)| b.map(|b| (path, b))).collect();
     Ok((plan, files))
 }
 
