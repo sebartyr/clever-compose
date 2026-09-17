@@ -61,3 +61,5 @@ ui-bundled = ["ui"]
 
 [dev-dependencies]
 pretty_assertions = "1"
+# Tests de route du serveur (`oneshot` sur le `Router`).
+tower = { version = "0.5", features = ["util"] }

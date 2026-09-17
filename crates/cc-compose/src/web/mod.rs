@@ -60,7 +60,37 @@ pub struct State {
     /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
     /// exposé au-delà du poste.
     pub api_key: Option<String>,
+    /// Exécution des tâches depuis la machine du serveur (`run: local`,
+    /// `seed --local`) permise : serveur du poste seulement, voir
+    /// [`LocalExec`] et [`api::local_execution_allowed`].
+    pub local_exec: bool,
     validated: std::sync::Mutex<std::collections::HashMap<String, Validated>>,
+}
+
+/// L'exécution locale des tâches est-elle possible sur ce serveur ?
+/// `Auto` : oui si rien n'indique un serveur publié (écoute locale, sans
+/// `--public-url`, `--cors` ni `--api-key`) ; `Off` la refuse toujours ;
+/// `On` la permet malgré ces indices (un proxy devant un serveur qui
+/// reste personnel). Dans tous les cas, chaque requête doit venir du
+/// poste (pair loopback, aucun en-tête de proxy, aucun jeton propre).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LocalExec {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
+impl std::str::FromStr for LocalExec {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "auto" => Ok(LocalExec::Auto),
+            "on" => Ok(LocalExec::On),
+            "off" => Ok(LocalExec::Off),
+            _ => Err(format!("`{s}` : auto, on ou off attendu")),
+        }
+    }
 }
 
 /// Ce que le serveur sert et d'où l'interface peut l'appeler.
@@ -75,6 +105,7 @@ pub struct ServeOptions {
     pub public_url: Option<String>,
     /// Clé d'API exigée des clients ; `None` : aucune vérification.
     pub api_key: Option<String>,
+    pub local_exec: LocalExec,
     pub initial_dir: Option<std::path::PathBuf>,
     pub open_browser: bool,
 }
@@ -175,6 +206,17 @@ impl State {
     }
 }
 
+/// Exécution locale permise par le serveur : un indice de publication
+/// (écoute non locale, `--public-url`, `--cors`, `--api-key`) la coupe en
+/// `Auto` ; `On`/`Off` tranchent.
+pub fn local_exec_policy(mode: LocalExec, listen: SocketAddr, public_url: bool, cors: bool, api_key: bool) -> bool {
+    match mode {
+        LocalExec::On => true,
+        LocalExec::Off => false,
+        LocalExec::Auto => listen.ip().is_loopback() && !public_url && !cors && !api_key,
+    }
+}
+
 async fn api_only() -> (axum::http::StatusCode, &'static str) {
     (axum::http::StatusCode::NOT_FOUND, "API seule : l'interface est servie ailleurs (clever-compose ui, binaire avec la feature `ui`, pour l'embarquer)")
 }
@@ -212,10 +254,17 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
         slog(&format!("CORS : {}", origins.join(", ")));
     }
     slog(&format!("clé d'API : {}", if o.api_key.is_some() { "exigée" } else { "aucune (serveur à réserver au poste)" }));
+    let local_exec = local_exec_policy(o.local_exec, listen, public_base.is_some(), !origins.is_empty(), o.api_key.is_some());
+    slog(&format!("exécution locale des tâches (run: local, seed --local) : {}", match (local_exec, o.local_exec) {
+        (true, LocalExec::On) => "permise (--local-exec on), pour les requêtes du poste seulement",
+        (true, _) => "permise, pour les requêtes du poste seulement (--local-exec off pour la couper)",
+        (false, LocalExec::Off) => "refusée (--local-exec off)",
+        (false, _) => "refusée (serveur publié : écoute non locale, --public-url, --cors ou --api-key ; --local-exec on pour forcer)",
+    }));
     if let Some(b) = std::env::var_os(crate::exec::assets::ENV_BUCKET) {
         slog(&format!("assets Cellar : bucket {}", b.to_string_lossy()));
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), api_key: o.api_key.clone(), local_exec, validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
@@ -232,7 +281,29 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if o.open_browser && o.ui {
         let _ = std::process::Command::new("xdg-open").arg(&url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }
+    // L'adresse du pair est exposée aux routes (`ConnectInfo`) : l'exécution
+    // locale exige une connexion depuis le poste.
+    let app = app.into_make_service_with_connect_info::<SocketAddr>();
     axum::serve(listener, app).with_graceful_shutdown(async {
         let _ = tokio::signal::ctrl_c().await;
     }).await.map_err(|e| format!("serveur : {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_exec_auto_follows_publication_hints() {
+        let local: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let public: SocketAddr = "0.0.0.0:8080".parse().unwrap();
+        assert!(local_exec_policy(LocalExec::Auto, local, false, false, false));
+        assert!(!local_exec_policy(LocalExec::Auto, public, false, false, false));
+        // Loopback derrière un proxy déclaré, ou avec une clé : publié.
+        assert!(!local_exec_policy(LocalExec::Auto, local, true, false, false));
+        assert!(!local_exec_policy(LocalExec::Auto, local, false, true, false));
+        assert!(!local_exec_policy(LocalExec::Auto, local, false, false, true));
+        assert!(local_exec_policy(LocalExec::On, public, true, true, true));
+        assert!(!local_exec_policy(LocalExec::Off, local, false, false, false));
+    }
 }

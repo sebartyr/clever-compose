@@ -210,6 +210,9 @@ enum Command {
         /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
         #[arg(long, env = "CLEVER_COMPOSE_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
+        /// Exécution des tâches depuis cette machine (run: local, seed --local) : auto (refusée dès que le serveur semble publié), on, off
+        #[arg(long, default_value = "auto", env = "CLEVER_COMPOSE_LOCAL_EXEC", value_name = "MODE")]
+        local_exec: cc_compose::web::LocalExec,
     },
     /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL)
     #[cfg(feature = "api")]
@@ -229,6 +232,9 @@ enum Command {
         /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
         #[arg(long, env = "CLEVER_COMPOSE_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
+        /// Exécution des tâches depuis cette machine (run: local, seed --local) : auto (refusée dès que le serveur semble publié), on, off
+        #[arg(long, default_value = "auto", env = "CLEVER_COMPOSE_LOCAL_EXEC", value_name = "MODE")]
+        local_exec: cc_compose::web::LocalExec,
     },
     /// Fixture des configurations d'images du projet, lues sur les registres (tests hors ligne)
     #[command(hide = true)]
@@ -274,9 +280,9 @@ fn main() -> ExitCode {
         Command::Export { plan, what, output, branches } => cmd_export(opts, &plan, what, &output, branches),
         Command::Images => cmd_images(opts),
         #[cfg(feature = "ui")]
-        Command::Ui { org, listen, no_open, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: true, origins: Vec::new(), public_url, api_key, initial_dir: None, open_browser: !no_open }),
+        Command::Ui { org, listen, no_open, public_url, api_key, local_exec } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: true, origins: Vec::new(), public_url, api_key, local_exec, initial_dir: None, open_browser: !no_open }),
         #[cfg(feature = "api")]
-        Command::Api { org, listen, cors, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, initial_dir: None, open_browser: false }),
+        Command::Api { org, listen, cors, public_url, api_key, local_exec } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, local_exec, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
         Command::Login { no_open, callback_port } => cmd_login(callback_port, !no_open),
         Command::Logout => match cc_compose::auth::remove() {

@@ -571,9 +571,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   locale **et** client servi par les identifiants du serveur) ; `local_up`
   refuse un plan qui porte une app `RunWhere::Local`, `local_seed` refuse
   `local: true` (403), message qui renvoie vers la tâche plateforme.
-  `/api/info` expose `local_listen` ; le front masque « exécuter depuis
-  ce poste » quand le serveur n'est pas local ou que le client a ses
-  jetons. La CLI et `ui` sur le poste sont inchangés.
+  Revue de la première version (27bba49) : une écoute loopback derrière un
+  reverse proxy public passait la garde, et « pas de jetons » était
+  déduit de `owner().is_none()` (id de `/v2/self`) plutôt que des jetons
+  eux-mêmes. Deuxième version : `--local-exec auto|on|off`
+  (`CLEVER_COMPOSE_LOCAL_EXEC`), `auto` refusant dès qu'un indice de
+  publication existe (écoute non locale, `--public-url`, `--cors`,
+  `--api-key` ; `local_exec_policy`), et par requête `c.tokens.is_none()`,
+  pair loopback (`ConnectInfo`, `into_make_service_with_connect_info`) et
+  aucun en-tête de proxy (`Forwarded`, `X-Forwarded-*`, `X-Real-IP`,
+  `Via`) ; garde évaluée avant tout appel réseau. `/api/info` expose
+  `local_exec` ; le front masque « exécuter depuis ce poste » quand le
+  serveur la refuse ou que le client a ses jetons. Tests de route
+  (`tower::ServiceExt::oneshot`, dev-dependency `tower`) : jetons, pair
+  distant, loopback proxyfié, serveur publié → 403 ; depuis le poste la
+  garde passe. La CLI et `ui` sur le poste sont inchangés.
 - **Shim compilé par `build.rs` (16/09/2026)** : le propriétaire découvrait
   un `target/release/cc-shim` (version hôte, glibc, inutile) à côté du shim
   musl de `target/x86_64-unknown-linux-musl/shim/` compilé à la main le

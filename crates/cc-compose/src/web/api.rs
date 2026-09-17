@@ -152,9 +152,10 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
         "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
         // Le serveur a-t-il ses propres identifiants (clients sans jetons servis) ?
         "server_credentials": s.fallback.is_some(),
-        // Écoute locale : l'exécution depuis le poste (`seed --local`,
-        // `init: local`) est possible pour un client sans jetons.
-        "local_listen": s.listen.ip().is_loopback(),
+        // Exécution depuis le poste (`seed --local`, `init: local`) permise
+        // par le serveur ; chaque requête doit en plus venir du poste sans
+        // jetons propres (`local_execution_allowed`).
+        "local_exec": s.local_exec,
     }))
 }
 
@@ -444,13 +445,19 @@ async fn owner(s: &State, c: &Client) -> Result<Option<String>, ApiError> {
     s.owner_of(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))
 }
 
+/// En-têtes qu'un proxy pose : leur présence dit que la connexion
+/// loopback ne vient pas du poste.
+const PROXY_HEADERS: &[&str] = &["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "via"];
+
 /// L'exécution « locale » d'une tâche (`x-clever.init: local`, `run: local`,
-/// `seed --local`) tourne sur la machine du serveur : réservée au serveur
-/// du poste (écoute locale, client servi par les identifiants du serveur).
-/// Sur un serveur partagé, un client à jetons ferait exécuter son script
-/// ici. `Err` avec le message à rendre au client sinon.
-async fn local_execution_allowed(s: &State, c: &Client) -> Result<bool, ApiError> {
-    Ok(s.listen.ip().is_loopback() && owner(s, c).await?.is_none())
+/// `seed --local`) tourne sur la machine du serveur. Sur un serveur
+/// partagé, un client ferait exécuter son script ici : elle exige que le
+/// serveur la permette (`State::local_exec`) **et** que la requête vienne
+/// du poste : pair loopback, aucun en-tête de proxy, aucun jeton propre
+/// (un client à jetons est quelqu'un d'autre, même sur le poste). Aucun
+/// appel réseau : décidable avant tout le reste.
+pub fn local_execution_allowed(s: &State, c: &Client, headers: &axum::http::HeaderMap, peer: std::net::SocketAddr) -> bool {
+    s.local_exec && c.tokens.is_none() && peer.ip().is_loopback() && !PROXY_HEADERS.iter().any(|h| headers.contains_key(*h))
 }
 
 const LOCAL_EXECUTION_REFUSED: &str = "exécution locale réservée au poste : sur ce serveur, laissez la plateforme exécuter la tâche (retirez `x-clever.init: local`, ou décochez « exécuter depuis ce poste »)";
@@ -595,9 +602,9 @@ struct UpBody {
     assets: bool,
 }
 
-async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, headers: axum::http::HeaderMap, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let local_ok = local_execution_allowed(&s, &org, &headers, peer);
     let dir = project_dir(&s, &id, &org).await?;
-    let local_ok = local_execution_allowed(&s, &org).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
@@ -629,12 +636,12 @@ struct SeedBody {
     no_wait: bool,
 }
 
-async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let dir = project_dir(&s, &id, &org).await?;
-    let dump = safe_file(&dir, &b.dump)?;
-    if b.local && !local_execution_allowed(&s, &org).await? {
+async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, headers: axum::http::HeaderMap, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    if b.local && !local_execution_allowed(&s, &org, &headers, peer) {
         return Err(ApiError(StatusCode::FORBIDDEN, LOCAL_EXECUTION_REFUSED.into()));
     }
+    let dir = project_dir(&s, &id, &org).await?;
+    let dump = safe_file(&dir, &b.dump)?;
     Ok(stream_task(s, format!("seed {id} --service {}", b.service), move |state, mut log| async move {
         let d2 = dir.clone();
         let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, false)).await.map_err(|e| e.to_string())??;
@@ -758,4 +765,108 @@ async fn local_export(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>,
     .map_err(|e| internal(e.to_string()))?
     .map_err(bad)?;
     Ok(Json(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use axum::http::Request;
+    use std::net::SocketAddr;
+    use tower::ServiceExt;
+
+    const LOOPBACK: &str = "127.0.0.1:41000";
+    const REMOTE: &str = "203.0.113.7:41000";
+
+    /// Un serveur du poste : identifiants de repli, écoute locale, un
+    /// projet local enregistré. Aucun appel réseau tant que les jetons du
+    /// client ne sont pas validés (ils ne le sont jamais ici).
+    fn state(local_exec: bool) -> (Shared, String, tempdir::Dir) {
+        let dir = tempdir::Dir::new();
+        std::fs::write(dir.path.join("compose.yaml"), "services:\n  web:\n    image: nginx\n").unwrap();
+        let api = crate::exec::platform::Api::new("orga_test".into(), clevercloud_sdk::Credentials::Bearer { token: "t".into() });
+        let s = State {
+            fallback: Some(super::super::Session { api, org: "orga_test".into() }),
+            locals: super::super::local::Locals::default(),
+            oauth: super::super::OauthConsumer { key: "k".into(), secret: "s".into() },
+            public_base: None,
+            listen: "127.0.0.1:8080".parse().unwrap(),
+            origins: Vec::new(),
+            pending: Default::default(),
+            api_key: None,
+            local_exec,
+            validated: Default::default(),
+        };
+        let id = s.locals.add_dir(dir.path.clone(), false, None).unwrap();
+        (Arc::new(s), id, dir)
+    }
+
+    fn client(tokens: bool) -> Client {
+        Client { tokens: tokens.then(|| super::super::ClientTokens::Bearer("x".into())), org: None }
+    }
+
+    async fn seed(s: &Shared, id: &str, peer: &str, headers: &[(&str, &str)], tokens: bool, dump: &str) -> StatusCode {
+        let mut req = Request::builder().method("POST").uri(format!("/api/local/{id}/seed")).header("content-type", "application/json");
+        for (k, v) in headers {
+            req = req.header(*k, *v);
+        }
+        if tokens {
+            req = req.header("x-cc-api-token", "x");
+        }
+        let mut req = req.body(Body::from(format!(r#"{{"service":"db","dump":"{dump}","local":true}}"#))).unwrap();
+        req.extensions_mut().insert(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        router(s.clone()).oneshot(req).await.unwrap().status()
+    }
+
+    #[test]
+    fn allowed_only_from_the_host_without_tokens() {
+        let (s, _, _d) = state(true);
+        let none = axum::http::HeaderMap::new();
+        let mut proxied = axum::http::HeaderMap::new();
+        proxied.insert("x-forwarded-for", "198.51.100.4".parse().unwrap());
+        assert!(local_execution_allowed(&s, &client(false), &none, LOOPBACK.parse().unwrap()));
+        assert!(!local_execution_allowed(&s, &client(true), &none, LOOPBACK.parse().unwrap()));
+        assert!(!local_execution_allowed(&s, &client(false), &none, REMOTE.parse().unwrap()));
+        assert!(!local_execution_allowed(&s, &client(false), &proxied, LOOPBACK.parse().unwrap()));
+        let (off, _, _d2) = state(false);
+        assert!(!local_execution_allowed(&off, &client(false), &none, LOOPBACK.parse().unwrap()));
+    }
+
+    #[tokio::test]
+    async fn seed_local_refused_unless_from_the_host() {
+        let (s, id, _d) = state(true);
+        // Client à jetons (refus avant toute validation réseau des jetons).
+        assert_eq!(seed(&s, &id, LOOPBACK, &[], true, "dump.sql").await, StatusCode::FORBIDDEN);
+        // Pair non loopback (écoute publique).
+        assert_eq!(seed(&s, &id, REMOTE, &[], false, "dump.sql").await, StatusCode::FORBIDDEN);
+        // Loopback derrière un reverse proxy.
+        assert_eq!(seed(&s, &id, LOOPBACK, &[("x-forwarded-for", "198.51.100.4")], false, "dump.sql").await, StatusCode::FORBIDDEN);
+        assert_eq!(seed(&s, &id, LOOPBACK, &[("forwarded", "for=198.51.100.4")], false, "dump.sql").await, StatusCode::FORBIDDEN);
+        // Serveur configuré publié (`--local-exec off` ou indice de publication).
+        let (off, id2, _d2) = state(false);
+        assert_eq!(seed(&off, &id2, LOOPBACK, &[], false, "dump.sql").await, StatusCode::FORBIDDEN);
+        // Depuis le poste : la garde passe, la requête échoue plus loin
+        // (chemin de dump hors du projet), sans rien exécuter.
+        assert_eq!(seed(&s, &id, LOOPBACK, &[], false, "../x").await, StatusCode::BAD_REQUEST);
+    }
+
+    mod tempdir {
+        pub struct Dir {
+            pub path: std::path::PathBuf,
+        }
+        impl Dir {
+            pub fn new() -> Dir {
+                static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                let path = std::env::temp_dir().join(format!("cc-compose-test-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)));
+                std::fs::create_dir_all(&path).unwrap();
+                Dir { path: std::fs::canonicalize(&path).unwrap() }
+            }
+        }
+        impl Drop for Dir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.path);
+            }
+        }
+    }
 }

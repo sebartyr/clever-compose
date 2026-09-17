@@ -409,9 +409,10 @@ export const App = defineComponent({
     const doStop = () => run('stop ' + current.value.name, (onLog) => api.stop(current.value.name, onLog));
     const doStart = () => run('start ' + current.value.name, (onLog) => api.start(current.value.name, onLog));
     const doDown = () => { dialog.down = false; run('down ' + current.value.name, (onLog) => api.down(current.value.name, { yes: opts.yes, dry_run: opts.dry_run }, onLog)); };
-    // Exécution depuis le poste (`seed --local`) : serveur en écoute locale et
-    // client servi par ses identifiants ; ailleurs le serveur la refuse.
-    const localExecution = computed(() => info.value.local_listen !== false && !session.value?.own_tokens);
+    // Exécution depuis le poste (`seed --local`) : permise par le serveur
+    // (`local_exec`) et client servi par ses identifiants ; ailleurs le
+    // serveur la refuse (403).
+    const localExecution = computed(() => info.value.local_exec !== false && !session.value?.own_tokens);
     const doSeed = () => { dialog.seed = false; run('seed ' + seed.service, (onLog) => api.seed(current.value.id, { service: seed.service, dump: seed.dump, local: seed.local && localExecution.value, yes: opts.yes, no_wait: opts.no_wait }, onLog)); };
     const doLogs = (service) => {
       const services = service ? [service] : logQuery.services.split(',').map((s) => s.trim()).filter(Boolean);

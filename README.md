@@ -47,8 +47,8 @@ clever-compose seed   --service db --dump dump.sql [--local]
 clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
 clever-compose orgs                               # organisations accessibles avec les identifiants
-clever-compose ui     [--listen 127.0.0.1:8080] [--no-open] [--public-url URL]   # interface web locale
-clever-compose api    [--listen 127.0.0.1:8080] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part
+clever-compose ui     [--listen 127.0.0.1:8080] [--no-open] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]  # interface web locale
+clever-compose api    [--listen 127.0.0.1:8080] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]  # API seule, interface déployée à part
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -166,6 +166,16 @@ interface statique sans devenir publique). Elle ne protège pas les
 organisations, seulement l'usage de la machine. La CLI, elle, se suffit à
 elle-même : elle parle directement à Clever Cloud, jamais à un serveur
 `clever-compose api`.
+
+L'exécution d'une tâche **depuis la machine du serveur** (`x-clever.init:
+local`, `seed --local`) est réservée au serveur du poste : `--local-exec`
+(ou `CLEVER_COMPOSE_LOCAL_EXEC`) vaut `auto` par défaut, ce qui la refuse
+dès que le serveur semble publié (écoute non locale, `--public-url`,
+`--cors` ou `--api-key`) ; `off` la refuse toujours, `on` la permet malgré
+ces indices. Même permise, elle n'est acceptée que d'une requête venue du
+poste : pair loopback, sans en-tête de proxy (`Forwarded`,
+`X-Forwarded-*`), sans jetons propres. Ailleurs, la tâche plateforme fait
+le même travail.
 
 ### Interface déployée à part
 

@@ -114,8 +114,11 @@ mêmes commits déployés (vérifié en réel).
   pour un client sans jetons seulement en écoute locale ; projets locaux
   par propriétaire (`Locals`, id Clever Cloud), répertoire du poste et
   **exécution locale des tâches** (`run: local`, `seed --local`)
-  réservés à l'usage local (écoute locale, client sans jetons :
-  `local_execution_allowed`, issue #12) ; connexion par
+  réservés à l'usage local : `--local-exec auto|on|off` (`auto` : refusée
+  dès qu'un indice de publication existe, `local_exec_policy`) **et** par
+  requête pair loopback, aucun en-tête de proxy, aucun jeton propre
+  (`local_execution_allowed`, tests de route dans `web/api.rs` ; issue
+  #12) ; connexion par
   `POST /api/session/login` (request token, callback du serveur) :
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons
@@ -313,8 +316,8 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
   seed --service SVC --dump FICHIER [--local]
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
-  orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ]
-  api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]
+  orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]
+  api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]
   login [--no-open] [--callback-port 8080] | logout
 ```
 Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
