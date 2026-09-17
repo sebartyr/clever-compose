@@ -101,13 +101,30 @@ impl ClientTokens {
 
 const VALIDATION_TTL: std::time::Duration = std::time::Duration::from_secs(300);
 
+/// Journal du serveur sur stderr, horodaté : requêtes, clients validés
+/// ou refusés, connexions, opérations et leur issue. Toujours verbeux
+/// (demande du propriétaire, 17/09/2026) : ce qu'un serveur fait avec
+/// des jetons d'autrui doit se lire.
+pub fn slog(line: &str) {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let hms = crate::exec::inspect::rfc3339(now);
+    let hms = hms.get(11..19).unwrap_or(&hms);
+    eprintln!("{hms}  {line}");
+}
+
 impl State {
     /// L'API pour un client : ses jetons (validés chez Clever Cloud, cache
     /// de cinq minutes), sinon les identifiants du serveur. `Err` : rien
     /// d'utilisable, ou jetons refusés.
     pub async fn api_for(&self, tokens: Option<&ClientTokens>) -> Result<(Api, Option<String>), String> {
         let Some(t) = tokens else {
-            return self.fallback.as_ref().map(|s| (s.api.clone(), None)).ok_or_else(|| "aucun identifiant : connectez-vous (jetons X-CC-Token/X-CC-Secret ou X-CC-Api-Token ; `clever-compose login` pour la CLI)".to_string());
+            return match self.fallback.as_ref() {
+                Some(s) => Ok((s.api.clone(), None)),
+                None => {
+                    slog("client sans jetons refusé (le serveur n'a pas d'identifiants)");
+                    Err("aucun identifiant : connectez-vous (jetons X-CC-Token/X-CC-Secret ou X-CC-Api-Token)".to_string())
+                }
+            };
         };
         let key = t.key();
         if let Some(v) = self.validated.lock().unwrap().get(&key) {
@@ -116,7 +133,14 @@ impl State {
             }
         }
         let api = Api::new(String::new(), t.credentials(&self.oauth));
-        let (_, email) = api.whoami().await.map_err(|e| format!("jetons refusés par Clever Cloud : {e}"))?;
+        let (_, email) = match api.whoami().await {
+            Ok(me) => me,
+            Err(e) => {
+                slog(&format!("jetons refusés par Clever Cloud : {e}"));
+                return Err(format!("jetons refusés par Clever Cloud : {e}"));
+            }
+        };
+        slog(&format!("jetons validés : {} (cache {} s)", email.as_deref().unwrap_or("utilisateur sans email"), VALIDATION_TTL.as_secs()));
         let mut cache = self.validated.lock().unwrap();
         cache.retain(|_, v| v.at.elapsed() < VALIDATION_TTL);
         cache.insert(key, Validated { api: api.clone(), email: email.clone(), at: std::time::Instant::now() });
@@ -144,8 +168,16 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
         }
     }
     match &fallback {
-        None => eprintln!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer CLEVER_CONSUMER_KEY, base URL {public_base})"),
-        Some(_) => eprintln!("identifiants du serveur utilisés pour les clients qui n'en envoient pas"),
+        None => slog(&format!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer {}, base URL {public_base})", oauth.key)),
+        Some(s) => slog(&format!("identifiants du serveur prêtés aux clients qui n'en envoient pas{}", if s.org.is_empty() { String::new() } else { format!(" (organisation {})", s.org) })),
+    }
+    slog(&format!("consumer OAuth : {}{}", oauth.key, if std::env::var_os("CLEVER_CONSUMER_KEY").is_some() { " (environnement)" } else { " (embarqué)" }));
+    if !origins.is_empty() {
+        slog(&format!("CORS : {}", origins.join(", ")));
+    }
+    slog(&format!("clé d'API : {}", if o.api_key.is_some() { "exigée" } else { "aucune (serveur à réserver au poste)" }));
+    if let Some(b) = std::env::var_os(crate::exec::assets::ENV_BUCKET) {
+        slog(&format!("assets Cellar : bucket {}", b.to_string_lossy()));
     }
     let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
     let app = api::router(state.clone());
@@ -153,13 +185,13 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
     #[cfg(not(feature = "ui"))]
     let app = app.fallback(api_only);
-    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::require_key)).layer(axum::middleware::from_fn_with_state(state.clone(), api::cors));
+    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::require_key)).layer(axum::middleware::from_fn_with_state(state.clone(), api::cors)).layer(axum::middleware::from_fn(api::log_request));
     let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| format!("écoute sur {listen} : {e}"))?;
     let url = format!("http://{}/", listener.local_addr().map_err(|e| e.to_string())?);
     if o.ui {
-        eprintln!("interface : {url}  (Ctrl-C pour arrêter)");
+        slog(&format!("interface : {url}  (Ctrl-C pour arrêter)"));
     } else {
-        eprintln!("API : {url}api/  (Ctrl-C pour arrêter){}", if state.origins.is_empty() { "\n  (sans --cors : interface attendue sur la même origine, par ex. derrière le proxy Vite ; --cors https://<hôte> pour une interface servie ailleurs)" } else { "" });
+        slog(&format!("API : {url}api/  (Ctrl-C pour arrêter){}", if state.origins.is_empty() { " — sans --cors : interface attendue sur la même origine, par ex. derrière le proxy Vite" } else { "" }));
     }
     if o.open_browser && o.ui {
         let _ = std::process::Command::new("xdg-open").arg(&url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();

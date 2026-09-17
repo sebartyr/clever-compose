@@ -394,6 +394,15 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Serveur verbeux (17/09/2026)** : « rends l'utilisation de l'ui/api
+  verbeuse ». `web::slog` (stderr, horodaté) : au démarrage, mode
+  d'identifiants, consumer (environnement ou embarqué), CORS, clé, bucket ;
+  une ligne par requête `/api/*` (méthode, chemin, statut, durée, jetons
+  du client ou identifiants du serveur, organisation) par le middleware
+  `log_request` ; jetons validés (email) ou refusés (raison) ; connexion
+  (request token, jetons obtenus pour qui) ; projets reçus/retirés ;
+  opérations SSE `▶ up …` puis chaque ligne du journal et `✔`/`✘` avec la
+  durée (`stream_task` prend un libellé).
 - **Consumer clever-compose embarqué, CLI autonome (17/09/2026)** : « pose
   les consumers dédiés à clever compose dans le code par défaut », « on
   override tjs avec les var d'env », « la cli se suffit à elle même,

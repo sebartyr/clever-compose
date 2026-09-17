@@ -72,6 +72,29 @@ pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Reques
     next.run(req).await
 }
 
+/// Une ligne par requête : méthode, chemin, statut, durée, organisation
+/// visée, jetons propres ou non. Les fichiers de l'interface sont tus.
+pub async fn log_request(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    let query = req.uri().query().map(|q| format!("?{q}")).unwrap_or_default();
+    let org = req.headers().get("x-cc-org").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let own = req.headers().contains_key("x-cc-token") || req.headers().contains_key("x-cc-api-token");
+    let started = std::time::Instant::now();
+    let resp = next.run(req).await;
+    if path.starts_with("/api/") && method != axum::http::Method::OPTIONS {
+        let ms = started.elapsed().as_millis();
+        let who = match (own, org) {
+            (true, Some(o)) => format!("  [jetons du client, {o}]"),
+            (true, None) => "  [jetons du client]".to_string(),
+            (false, Some(o)) => format!("  [identifiants du serveur, {o}]"),
+            (false, None) => String::new(),
+        };
+        super::slog(&format!("{method} {path}{query} → {} ({ms} ms){who}", resp.status().as_u16()));
+    }
+    resp
+}
+
 pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
@@ -187,6 +210,7 @@ async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>
     };
     let callback = format!("{}/api/session/oauth/callback", s.public_base);
     let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
+    super::slog(&format!("connexion : request token obtenu, retour prévu vers {return_to}"));
     s.pending.lock().unwrap().insert(token.clone(), (secret, return_to));
     Ok(Json(json!({ "mode": "redirect", "url": url })))
 }
@@ -205,6 +229,7 @@ async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallba
     let (token, secret) = crate::auth::access_token(&s.oauth, &q.oauth_token, &request_secret, &q.oauth_verifier).await.map_err(internal)?;
     let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), consumer_key: None, user_id: None, email: None };
     crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    super::slog(&format!("connexion : jetons obtenus pour {}", stored.email.as_deref().unwrap_or("utilisateur sans email")));
     Ok(axum::response::Redirect::temporary(&format!("{return_to}#token={}&secret={}", oauth_enc(&token), oauth_enc(&secret))).into_response())
 }
 
@@ -277,12 +302,12 @@ struct LogsQuery {
 
 async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let opts = crate::exec::inspect::LogsOptions { services: q.services.map(|v| v.split(',').filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(), since: q.since, follow: q.follow.unwrap_or(false), limit: q.limit };
-    stream_task(s, move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await })
+    stream_task(s, format!("logs {project}"), move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await })
 }
 
 /// `ps` tel que la CLI l'affiche (exécution distante).
 async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &mut log).await })
+    stream_task(s, format!("ps {project}"), move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &mut log).await })
 }
 
 #[derive(Deserialize, Default)]
@@ -295,15 +320,15 @@ struct DownBody {
 
 async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let b = body.map(|Json(b)| b).unwrap_or_default();
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
+    stream_task(s, format!("down {project}"), move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
 }
 
 async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, false, &mut log).await })
+    stream_task(s, format!("stop {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, false, &mut log).await })
 }
 
 async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await })
+    stream_task(s, format!("start {project}"), move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await })
 }
 
 /// Manifeste, plan et fichiers texte du bucket d'assets du projet.
@@ -335,18 +360,30 @@ async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<Stri
 }
 
 /// Lance `f` dans une tâche et diffuse son journal en SSE.
-fn stream_task<F, Fut>(state: Shared, f: F) -> Sse<impl Stream<Item = Result<Event, Infallible>>>
+fn stream_task<F, Fut>(state: Shared, label: String, f: F) -> Sse<impl Stream<Item = Result<Event, Infallible>>>
 where
     F: FnOnce(Shared, Log) -> Fut + Send + 'static,
     Fut: std::future::Future<Output = Result<(), String>> + Send + 'static,
 {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
     let tx_log = tx.clone();
+    // Chaque ligne va au client et au journal du serveur.
+    let tag = label.clone();
     let log: Log = Box::new(move |line: &str| {
+        if !line.starts_with(crate::ui::PROGRESS) {
+            super::slog(&format!("  {tag} │ {line}"));
+        }
         let _ = tx_log.send(("log".into(), line.to_string()));
     });
+    super::slog(&format!("▶ {label}"));
+    let started = std::time::Instant::now();
     tokio::spawn(async move {
         let result = f(state, log).await;
+        let secs = started.elapsed().as_secs();
+        match &result {
+            Ok(()) => super::slog(&format!("✔ {label} terminé ({secs} s)")),
+            Err(e) => super::slog(&format!("✘ {label} : {e} ({secs} s)")),
+        }
         let _ = tx.send(("done".into(), match result {
             Ok(()) => "ok".into(),
             Err(e) => format!("error: {e}"),
@@ -378,11 +415,12 @@ async fn local_upload(AxState(s): AxState<Shared>, mut multipart: Multipart) -> 
     let name = field.file_name().map(str::to_string).unwrap_or_else(|| "archive.zip".into());
     let bytes = field.bytes().await.map_err(|e| bad(e.to_string()))?;
     let id = s.locals.add_archive(&name, &bytes).map_err(bad)?;
+    super::slog(&format!("projet reçu : {name} ({} octets) → {id}", bytes.len()));
     Ok(Json(json!({ "id": id })))
 }
 
 async fn local_remove(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    if s.locals.remove(&id) { Ok(Json(json!({ "ok": true }))) } else { Err(ApiError(StatusCode::NOT_FOUND, "projet inconnu".into())) }
+    if s.locals.remove(&id) { super::slog(&format!("projet retiré : {id}")); Ok(Json(json!({ "ok": true }))) } else { Err(ApiError(StatusCode::NOT_FOUND, "projet inconnu".into())) }
 }
 
 fn project_dir(s: &State, id: &str) -> Result<PathBuf, ApiError> {
@@ -527,7 +565,7 @@ struct UpBody {
 async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
-    Ok(stream_task(s, move |state, mut log| async move {
+    Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, b.allow_ephemeral)).await.map_err(|e| e.to_string())??;
         for d in diags.as_array().into_iter().flatten() {
             log(&format!("{}{}", if d["severity"] == "error" { "erreur : " } else { "" }, d["rendered"].as_str().unwrap_or("")));
@@ -554,7 +592,7 @@ struct SeedBody {
 async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let dump = safe_file(&dir, &b.dump)?;
-    Ok(stream_task(s, move |state, mut log| async move {
+    Ok(stream_task(s, format!("seed {id} --service {}", b.service), move |state, mut log| async move {
         let d2 = dir.clone();
         let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
@@ -636,7 +674,7 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
 /// Pousse les assets du projet dans le bucket configuré, sans `up`.
 async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
-    Ok(stream_task(s, move |_state, mut log| async move {
+    Ok(stream_task(s, format!("assets {id}"), move |_state, mut log| async move {
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&dir, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
