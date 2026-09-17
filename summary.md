@@ -394,6 +394,10 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Port 8080 par défaut (17/09/2026)** : `ui`/`api` écoutent sur
+  `127.0.0.1:8080` (`--listen` ou `CC_LISTEN`), `login --callback-port`
+  8080 : le port attendu par une application Clever Cloud, et la base
+  URL du consumer sur le poste devient `http://127.0.0.1:8080/`.
 - **Interface hébergée sur Clever Cloud (17/09/2026)** : capture du
   propriétaire, `ui` lancé dans une application cleverapps.io refusait
   `return=https://app-….cleverapps.io/` (« ni un chemin de ce serveur ni

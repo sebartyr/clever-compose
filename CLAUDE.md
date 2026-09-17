@@ -33,7 +33,7 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
   avec callback local `127.0.0.1:<port>` ; jetons dans
   `~/.config/clever-cloud/clever-compose.json`, notre fichier dans leur
   répertoire). Consumer **de clever-compose embarqué** (`auth.rs`,
-  `DEFAULT_CONSUMER_*`, base URL `http://127.0.0.1:7777/` ; décision du
+  `DEFAULT_CONSUMER_*`, base URL `http://127.0.0.1:8080/` ; décision du
   17/09/2026, comme clever-tools embarque le sien), toujours remplacé par
   `CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET` si présents. **La CLI se
   suffit à elle-même** : aucune exécution via un serveur distant (retirée
@@ -311,7 +311,7 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
   orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ]
   api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]
-  login [--no-open] [--callback-port 7777] | logout
+  login [--no-open] [--callback-port 8080] | logout
 ```
 Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
 Côté serveur, l'organisation passe en `X-CC-Org`, la clé en

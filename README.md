@@ -32,7 +32,7 @@ l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
 
 ```sh
 clever-compose login                     # danse OAuth 1.0 dans le navigateur (consumer clever-compose, callback local
-                                         # 127.0.0.1:7777) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
+                                         # 127.0.0.1:8080) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
                                          # (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN ; CLEVER_CONSUMER_KEY/SECRET pour un autre consumer)
 export CC_ORG=orga_xxx                   # ou --org
 
@@ -47,8 +47,8 @@ clever-compose seed   --service db --dump dump.sql [--local]
 clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
 clever-compose orgs                               # organisations accessibles avec les identifiants
-clever-compose ui     [--listen 127.0.0.1:7777] [--no-open] [--public-url URL]   # interface web locale
-clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part
+clever-compose ui     [--listen 127.0.0.1:8080] [--no-open] [--public-url URL]   # interface web locale
+clever-compose api    [--listen 127.0.0.1:8080] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -113,7 +113,7 @@ OAuth est celui de clever-compose, embarqué ; `CLEVER_CONSUMER_KEY` /
 `CLEVER_CONSUMER_SECRET` dans l'environnement le remplacent toujours.
 Clever Cloud n'accepte le callback (`<base>/api/session/oauth/callback`)
 que sous la **base URL déclarée pour le consumer** dans la console : elle
-doit être l'adresse publique du serveur (`http://127.0.0.1:7777/` sur le
+doit être l'adresse publique du serveur (`http://127.0.0.1:8080/` sur le
 poste, `https://app-….cleverapps.io/` pour une application Clever Cloud).
 Cette adresse est déduite de chaque requête (`Host`, `X-Forwarded-Proto`
 du proxy) ; `--public-url` la fixe si la déduction ne convient pas. Un
@@ -122,7 +122,8 @@ la page part vers l'autorisation Clever Cloud et le callback ramène les
 jetons dans le fragment de l'URL.
 
 Sur une application Clever Cloud : `clever-compose ui --listen 0.0.0.0:8080
---api-key …` (variables `CC_API_KEY`, et `CLEVER_CONSUMER_*` si le consumer
+--api-key …` (ou `CC_LISTEN=0.0.0.0:8080` ; le port par défaut est 8080, celui
+qu'attend la plateforme) (variables `CC_API_KEY`, et `CLEVER_CONSUMER_*` si le consumer
 embarqué n'a pas cette base URL) ; rien d'autre à configurer.
 
 Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
@@ -157,7 +158,7 @@ serveur `clever-compose api`.
 
 ### Interface déployée à part
 
-`clever-compose api --listen 0.0.0.0:7777 --cors https://ui.exemple` sert
+`clever-compose api --listen 0.0.0.0:8080 --cors https://ui.exemple` sert
 l'API seule (les chemins hors `/api` répondent 404) et autorise l'origine
 de l'interface en CORS ; `--public-url https://api.exemple` donne la base
 du callback OAuth quand un proxy est devant (c'est elle qu'on déclare comme

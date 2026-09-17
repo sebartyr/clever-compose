@@ -1,6 +1,6 @@
 //! Identifiants du poste et connexion (`clever-compose login`). Danse
 //! OAuth 1.0 à trois pattes avec le consumer de clever-compose (embarqué,
-//! base URL `http://127.0.0.1:7777/`), ou celui de l'environnement
+//! base URL `http://127.0.0.1:8080/`), ou celui de l'environnement
 //! (`CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET`, qui prime toujours) :
 //! request token avec un callback local (`http://127.0.0.1:<port>/callback`),
 //! autorisation dans le navigateur, access token. Les jetons sont gardés

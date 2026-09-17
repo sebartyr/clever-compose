@@ -187,7 +187,7 @@ enum Command {
         #[arg(long)]
         no_open: bool,
         /// Port local du callback OAuth ; la base URL du consumer doit être http://127.0.0.1:<port>
-        #[arg(long, default_value_t = 7777, value_name = "PORT")]
+        #[arg(long, default_value_t = 8080, value_name = "PORT")]
         callback_port: u16,
     },
     /// Oublie les jetons gardés par `login`
@@ -198,8 +198,8 @@ enum Command {
         /// Organisation initiale (sinon choisie dans l'interface)
         #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
         org: Option<String>,
-        /// Adresse et port d'écoute
-        #[arg(long, default_value = "127.0.0.1:7777", value_name = "ADRESSE:PORT")]
+        /// Adresse et port d'écoute (0.0.0.0:8080 dans une application Clever Cloud)
+        #[arg(long, default_value = "127.0.0.1:8080", env = "CC_LISTEN", value_name = "ADRESSE:PORT")]
         listen: std::net::SocketAddr,
         /// N'ouvre pas le navigateur
         #[arg(long)]
@@ -217,8 +217,8 @@ enum Command {
         /// Organisation initiale (sinon choisie dans l'interface)
         #[arg(short = 'o', long, env = "CC_ORG", value_name = "ORG")]
         org: Option<String>,
-        /// Adresse et port d'écoute
-        #[arg(long, default_value = "127.0.0.1:7777", value_name = "ADRESSE:PORT")]
+        /// Adresse et port d'écoute (0.0.0.0:8080 dans une application Clever Cloud)
+        #[arg(long, default_value = "127.0.0.1:8080", env = "CC_LISTEN", value_name = "ADRESSE:PORT")]
         listen: std::net::SocketAddr,
         /// Origine de l'interface autorisée en CORS (répétable), ex. https://ui.exemple
         #[arg(long, value_name = "ORIGINE")]
@@ -319,7 +319,7 @@ fn fail(msg: &str) -> ExitCode {
             let mut line = String::new();
             let _ = std::io::stdin().read_line(&mut line);
             if matches!(line.trim().to_ascii_lowercase().as_str(), "" | "o" | "oui" | "y" | "yes") {
-                if cmd_login(7777, true) == ExitCode::SUCCESS {
+                if cmd_login(8080, true) == ExitCode::SUCCESS {
                     eprintln!("relancez la commande.");
                 }
                 return ExitCode::from(1);

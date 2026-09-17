@@ -8,5 +8,5 @@ export default defineConfig({
   base: './',
   resolve: { alias: { vue: 'vue/dist/vue.esm-bundler.js' } },
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022' },
-  server: { proxy: { '/api': 'http://127.0.0.1:7777' } },
+  server: { proxy: { '/api': 'http://127.0.0.1:8080' } },
 });
