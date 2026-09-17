@@ -561,6 +561,12 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **`seed` web : plan hors du runtime (17/09/2026)** : audit #12, P1.
+  `local_seed` construisait `Registry` et appelait `seed_plan` (donc
+  `images.resolve` → `block_on` du runtime du registre) dans la tâche
+  Tokio : panique « Cannot start a runtime from within a runtime » dès
+  qu'une image n'était pas en cache, SSE jamais terminé. Comme `local_up`,
+  tout le calcul passe dans `spawn_blocking`.
 - **Assets authentifiés et par organisation (17/09/2026)** : audit #12,
   S4. `GET /api/platform/projects/{p}/assets` n'avait ni extracteur
   `Client` ni validation : quiconque atteignait le serveur lisait tout

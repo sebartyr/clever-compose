@@ -712,11 +712,19 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
     let (dir, confine) = project_dir(&s, &id, &org).await?;
     let dump = safe_file(&dir, &b.dump)?;
     Ok(stream_task(s, format!("seed {id} --service {}", b.service), move |state, mut log| async move {
-        let d2 = dir.clone();
-        let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, confine, false)).await.map_err(|e| e.to_string())??;
-        let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
-        let resolver = registry(confine)?;
-        let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
+        // Plan et plan de seed hors du runtime : `Registry` résout les
+        // images avec son propre runtime (`block_on`), interdit depuis une
+        // tâche Tokio.
+        let (service, local) = (b.service.clone(), b.local);
+        let (plan, project_dir) = tokio::task::spawn_blocking(move || -> Result<(Plan, PathBuf), String> {
+            let (plan, _diags, project_dir) = compute(&dir, confine, false)?;
+            let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
+            let resolver = registry(confine)?;
+            let plan = crate::plan::initdb::seed_plan(&plan, &service, &dump, &project_dir, &resolver, local)?;
+            Ok((plan, project_dir))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
         crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
