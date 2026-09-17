@@ -48,18 +48,16 @@ rusty-s3 = "0.10"
 quick-xml = "0.37"
 
 # Trois binaires possibles :
-#   cargo build --release                                   CLI + API + interface
+#   cargo build --release                                   CLI + API + interface (npm requis au build)
 #   cargo build --release --no-default-features --features api   CLI + API (interface servie ailleurs)
 #   cargo build --release --no-default-features             CLI seule (exécution locale ou distante par --api-url)
 [features]
 default = ["ui"]
 # Serveur HTTP : commande `api`, routes JSON/SSE.
 api = ["dep:axum", "dep:tokio-stream", "dep:zip"]
-# Interface embarquée (sources ESM + CDN) : commande `ui`.
+# Interface embarquée (`web/dist`, bâti par Vite depuis build.rs) :
+# commande `ui`.
 ui = ["api", "dep:rust-embed", "dep:mime_guess"]
-# Interface empaquetée par Vite (`web/dist`, `npm run build`) au lieu des
-# sources + CDN.
-ui-bundled = ["ui"]
 
 [dev-dependencies]
 pretty_assertions = "1"

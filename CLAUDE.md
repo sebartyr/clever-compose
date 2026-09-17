@@ -129,8 +129,10 @@ mêmes commits déployés (vérifié en réel).
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons
   valides, l'interface n'affiche que l'écran de connexion ; front Vue 3 + `@clevercloud/components` dans `web/` à la
-  racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
-  import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
+  racine, templates en chaînes ; bâti par Vite depuis `build.rs` (feature
+  `ui`, `npm ci` + `npm run build`, `CLEVER_COMPOSE_UI_DIST` pour un
+  build déjà fait) et embarqué en `web/dist` ; plus de mode CDN, décision
+  du 17/09/2026).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
   (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe
   `<propriétaire>/<projet>/` (lecture authentifiée, sous l'organisation du
@@ -332,7 +334,7 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]
   login [--no-open] [--callback-port 8080] | logout
 ```
-Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
+Features : `ui` (défaut, Node/npm requis au build) ⊃ `api` ⊃ rien (CLI seule).
 Côté serveur, l'organisation passe en `X-CC-Org`, la clé en
 `Authorization: Bearer` (middleware `require_key`, `/api/info` et le
 callback OAuth exemptés).

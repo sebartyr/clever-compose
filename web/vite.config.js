@@ -1,7 +1,6 @@
-// Mode empaqueté (`cargo build --features ui-bundled`) : tout est dans
-// `dist/`, embarqué dans le binaire. Vue avec son compilateur de templates,
-// puisque les composants sont écrits en templates de chaînes (pas de SFC :
-// les mêmes sources tournent sans build, chargées depuis esm.sh).
+// Build de l'interface : tout est dans `dist/`, embarqué dans le binaire
+// par le `build.rs` de la CLI. Vue avec son compilateur de templates,
+// puisque les composants sont écrits en templates de chaînes.
 import { defineConfig } from 'vite';
 
 export default defineConfig({

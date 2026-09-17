@@ -500,7 +500,7 @@ export const App = defineComponent({
     <div v-else class="layout" :class="{ 'side-open': sideOpen }">
       <header class="top">
         <cc-button class="menu" :outlined="true" :hideText="true" title="Projets" @cc-click="sideOpen = !sideOpen">Projets</cc-button>
-        <h1>clever-compose <small class="dim" :title="'build ' + (info.built || '') + (info.bundled ? ', interface empaquetée' : ', interface via CDN')">{{ info.version }}{{ info.commit ? ' · ' + info.commit : '' }}</small></h1>
+        <h1>clever-compose <small class="dim" :title="'build ' + (info.built || '')">{{ info.version }}{{ info.commit ? ' · ' + info.commit : '' }}</small></h1>
         <span class="grow"></span>
         <session-panel :session="session" :orgs="orgs" @changed="refreshSession" @login="startLogin" @logout="logout"></session-panel>
       </header>

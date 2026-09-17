@@ -20,7 +20,10 @@ cargo build --release --no-default-features                     # CLI seule
 Trois binaires selon les features : `ui` (défaut, commandes `ui` et
 `api`), `api` (commande `api` seulement, pas d'interface embarquée), ou
 rien (CLI seule, qui peut tout de même s'exécuter à distance contre un
-serveur `api`, voir plus bas). `ui-bundled` empaquette le front Vite.
+serveur `api`, voir plus bas). Avec `ui`, le `build.rs` bâtit l'interface
+avec Vite (`npm ci`, `npm run build` dans `web/`) et l'embarque : Node et
+npm sont requis au build ; `CLEVER_COMPOSE_UI_DIST=<dist>` embarque un
+build déjà fait.
 
 Le shim (PID 1 des conteneurs, crate `cc-compose-shim`) est compilé pour
 musl par le `build.rs` de la CLI (dans `target/shim-build/`, relancé quand
@@ -211,14 +214,10 @@ revient sur l'origine de l'interface, à condition qu'elle soit listée en
 `--cors`.
 
 Le front (Vue 3 + [`@clevercloud/components`](https://www.npmjs.com/package/@clevercloud/components))
-est embarqué dans le binaire, de deux façons choisies au build :
-
-- par défaut, les sources ESM sont servies telles quelles et la page charge
-  Vue, Lit et les composants depuis esm.sh / jsDelivr à l'usage (réseau
-  nécessaire, pas de Node au build) ;
-- `cargo build --features ui-bundled` embarque `web/dist`,
-  produit par `cd web && npm install && npm run build`
-  (Vite) : tout est dans le binaire, utilisable hors ligne.
+est bâti par Vite au `cargo build` (feature `ui`) et embarqué dans le
+binaire, dépendances comprises : rien n'est chargé depuis un CDN à
+l'usage, la page s'ouvre hors ligne. `cd web && npm run dev` sert
+l'interface en développement, avec un proxy vers `clever-compose api`.
 
 ## Extension `x-clever`
 

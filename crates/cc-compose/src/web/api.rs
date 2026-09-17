@@ -213,7 +213,7 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
     let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
     Json(json!({
         "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)),
-        "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
+"assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
         // Le serveur a-t-il ses propres identifiants (clients sans jetons servis) ?
         "server_credentials": s.fallback.is_some(),
         // Exécution depuis le poste (`seed --local`, `init: local`) permise

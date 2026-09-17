@@ -561,6 +561,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Plus de mode CDN : l'interface est bâtie au `cargo build`
+  (17/09/2026)** : « je veux abandonner le mode sans build qui me semble
+  inutile et juste embarquer le résultat du build dans le binaire ».
+  `build.rs` (feature `ui`) lance `npm ci` (si `node_modules` manque)
+  puis `npm run build` dans `web/`, avec `rerun-if-changed` sur `src`,
+  `index.html`, `package*.json`, `vite.config.js` ;
+  `CLEVER_COMPOSE_UI_DIST` copie un `dist` déjà bâti ; sans npm, un
+  `dist` existant est réutilisé avec avertissement, sinon échec explicite
+  (ou `--no-default-features --features api`). `assets.rs` embarque
+  `web/dist` seul, CSP sans CDN ni empreinte d'import map ;
+  `index.cdn.html`, la feature `ui-bundled` et `info.bundled` disparaissent.
+  Vérifié en Chromium headless : la page s'exécute jusqu'à la connexion
+  sans erreur de console. Le front reste en templates de chaînes (pas de
+  SFC ni TypeScript) : le passage aux `.vue`/TS devient possible, non
+  fait.
 - **Seconde revue de l'audit (17/09/2026)** : réserves reprises.
   **S4** : `X-CC-Org` n'était pas vérifié avant l'accès au bucket
   (`api_of` → `for_owner` sans contrôle ; les routes plateforme
