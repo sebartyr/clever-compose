@@ -39,6 +39,11 @@ struct Validated {
     api: Api,
     user: Option<String>,
     email: Option<String>,
+    /// Propriétaires que ces jetons peuvent viser : l'espace personnel
+    /// (`user_…`) et les organisations (`orga_…`), lus à la validation.
+    /// `X-CC-Org` doit en faire partie avant tout accès qui ne passe pas
+    /// par l'API Clever Cloud (bucket d'assets du serveur).
+    owners: Vec<String>,
     at: std::time::Instant,
 }
 
@@ -58,6 +63,10 @@ pub struct State {
     /// Request tokens en attente d'autorisation → (secret, URL de retour,
     /// date) ; expirés après [`PENDING_TTL`], au plus [`PENDING_MAX`].
     pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String, std::time::Instant)>>,
+    /// Connexions commencées dont le request token n'est pas encore
+    /// inséré dans `pending` (en attente de Clever Cloud) : comptées dans
+    /// le plafond, sinon des débuts simultanés le dépassent.
+    pub pending_reserved: std::sync::atomic::AtomicUsize,
     /// Limitation par adresse des débuts de connexion et des jetons
     /// refusés : ces deux chemins appellent Clever Cloud pour un client
     /// qui n'a rien prouvé.
@@ -278,11 +287,26 @@ impl State {
                 return Err(format!("jetons refusés par Clever Cloud : {e}"));
             }
         };
-        slog(&format!("jetons validés : {} (cache {} s)", email.as_deref().unwrap_or("utilisateur sans email"), VALIDATION_TTL.as_secs()));
+        let owners: Vec<String> = match api.organisations().await {
+            Ok(orgs) => orgs.into_iter().map(|o| o.id).collect(),
+            Err(e) => {
+                slog(&format!("organisations du client illisibles : {e}"));
+                return Err(format!("organisations du client illisibles : {e}"));
+            }
+        };
+        slog(&format!("jetons validés : {} ({} propriétaire(s), cache {} s)", email.as_deref().unwrap_or("utilisateur sans email"), owners.len(), VALIDATION_TTL.as_secs()));
         let mut cache = self.validated.lock().unwrap_or_else(|e| e.into_inner());
         cache.retain(|_, v| v.at.elapsed() < VALIDATION_TTL);
-        cache.insert(key, Validated { api: api.clone(), user, email: email.clone(), at: std::time::Instant::now() });
+        cache.insert(key, Validated { api: api.clone(), user, email: email.clone(), owners, at: std::time::Instant::now() });
         Ok((api, email))
+    }
+
+    /// Le client à jetons peut-il viser `owner` ? D'après la liste lue à
+    /// la validation de ses jetons. Un client sans jetons (identifiants
+    /// du serveur, requête du poste) n'est pas restreint ici.
+    pub fn may_own(&self, c: &api::Client, owner: &str) -> bool {
+        let Some(t) = c.tokens.as_ref() else { return true };
+        self.validated.lock().unwrap_or_else(|e| e.into_inner()).get(&t.key()).is_some_and(|v| v.owners.iter().any(|o| o == owner))
     }
 
     /// Qui dépose ou consulte un projet : l'id Clever Cloud du client à
@@ -358,7 +382,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if !listen.ip().is_loopback() && public_base.is_none() {
         slog("sans --public-url : le callback OAuth est bâti sur l'en-tête Host de chaque requête (X-Forwarded-Proto pour le schéma) ; posez --public-url derrière un proxy pour figer la base");
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default(), registries: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), pending_reserved: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default(), registries: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };

@@ -384,28 +384,41 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
 }
 
 /// Un répertoire de travail neuf sous `temp_dir()`, jamais partagé :
-/// `clever-compose-<pid>-<n>-<quoi>`, refusé s'il existe déjà.
+/// `clever-compose-<quoi>-<aléa>`, voir [`fresh_dir`].
 pub fn unique_work_dir(what: &str) -> Result<std::path::PathBuf, String> {
-    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let safe: String = what.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect();
-    let work = std::env::temp_dir().join(format!("clever-compose-{}-{n}-{safe}", std::process::id()));
-    if work.exists() {
-        return Err(format!("{} existe déjà", work.display()));
-    }
-    std::fs::create_dir_all(&work).map_err(|e| format!("{} : {e}", work.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700));
-    }
-    Ok(work)
+    fresh_dir(&std::env::temp_dir(), "clever-compose-", what)
 }
 
-/// Taille cumulée d'un contexte de build poussé dans le dépôt
-/// synthétique, tout en mémoire le temps du commit : au-delà, c'est un
-/// `.dockerignore` qui manque (`node_modules`, artefacts).
-pub const MAX_CONTEXT: u64 = 512 * 1024 * 1024;
+/// Crée `<base>/<prefix><quoi>-<16 hex aléatoires>` en 0700 par un
+/// `create_dir` (atomique : échoue si le chemin existe, lien symbolique
+/// compris — pas de course sur un `/tmp` partagé) ; nom imprévisible
+/// (`getrandom`), quelques tentatives en cas de collision.
+pub fn fresh_dir(base: &FsPath, prefix: &str, what: &str) -> Result<std::path::PathBuf, String> {
+    let safe: String = what.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '-' }).collect();
+    for _ in 0..8 {
+        let mut rnd = [0u8; 8];
+        getrandom::fill(&mut rnd).map_err(|e| format!("aléa : {e}"))?;
+        let hex: String = rnd.iter().map(|b| format!("{b:02x}")).collect();
+        let dir = base.join(format!("{prefix}{safe}-{hex}"));
+        let mut b = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            b.mode(0o700);
+        }
+        match b.create(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{} : {e}", dir.display())),
+        }
+    }
+    Err(format!("{} : impossible de créer un répertoire neuf", base.display()))
+}
+
+/// Même plafond que `sources::MAX_REPO`, appliqué au contexte de build
+/// qui s'ajoute aux fichiers copiés : au-delà, c'est un `.dockerignore`
+/// qui manque (`node_modules`, artefacts).
+pub const MAX_CONTEXT: u64 = sources::MAX_REPO;
 
 pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>, String> {
     let mut files = sources::files(app, project_dir)?;

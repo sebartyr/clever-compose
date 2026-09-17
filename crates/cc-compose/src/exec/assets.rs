@@ -257,7 +257,24 @@ pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::re
     let Some(cellar) = from_env()? else {
         return Err(format!("assets demandés mais non configurés : posez {ENV_BUCKET} et les variables de l'addon Cellar ({ENV_HOST}, {ENV_KEY}, {ENV_SECRET})"));
     };
-    let files = project_files(plan, project_dir);
+    // Parcours du projet, lecture et empreintes : hors du runtime.
+    let (plan2, dir2) = (plan.clone(), project_dir.to_path_buf());
+    let files: Vec<(String, Vec<u8>, String)> = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let mut out = Vec::new();
+        for (rel, abs) in project_files(&plan2, &dir2) {
+            let bytes = std::fs::read(&abs).map_err(|e| format!("{} : {e}", abs.display()))?;
+            let sha = {
+                use sha2::Digest;
+                let mut h = sha2::Sha256::new();
+                h.update(&bytes);
+                h.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()
+            };
+            out.push((rel, bytes, sha));
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let pre = prefix(owner, &plan.project);
     if opts.dry_run {
         log(&format!("assets : {} fichier(s) + plan.json à pousser dans {}/{pre}", files.len(), cellar.bucket_name()));
@@ -273,19 +290,12 @@ pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::re
     // Empreintes d'abord (lecture locale), puis les envois nécessaires en
     // parallèle borné.
     let mut to_push: Vec<(String, Vec<u8>)> = Vec::new();
-    for (rel, abs) in &files {
-        let bytes = std::fs::read(abs).map_err(|e| format!("{} : {e}", abs.display()))?;
-        let sha = {
-            use sha2::Digest;
-            let mut h = sha2::Sha256::new();
-            h.update(&bytes);
-            h.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()
-        };
+    for (rel, bytes, sha) in files {
         let key = format!("{pre}files/{rel}");
         wanted.insert(key.clone());
         // Même taille et même empreinte que dans le manifeste en place : sauté.
-        let unchanged = existing.get(&key).is_some_and(|s| *s == bytes.len() as u64) && previous.as_ref().and_then(|m| m.files.iter().find(|f| f.path == *rel)).is_some_and(|f| f.sha256 == sha);
-        manifest.files.push(ManifestFile { path: rel.clone(), size: bytes.len() as u64, sha256: sha });
+        let unchanged = existing.get(&key).is_some_and(|s| *s == bytes.len() as u64) && previous.as_ref().and_then(|m| m.files.iter().find(|f| f.path == rel)).is_some_and(|f| f.sha256 == sha);
+        manifest.files.push(ManifestFile { path: rel, size: bytes.len() as u64, sha256: sha });
         if !unchanged {
             to_push.push((key, bytes));
         }
@@ -300,7 +310,7 @@ pub async fn sync(owner: &str, plan: &Plan, project_dir: &Path, opts: &super::re
     let stale: Vec<String> = existing.keys().filter(|k| !wanted.contains(*k)).cloned().collect();
     let removed = stale.len();
     super::inspect::each(stale, |key| async move { cellar_ref.delete(&key).await }).await?;
-    log(&format!("assets : {} fichier(s) dans {}/{pre} ({pushed} poussé(s), {removed} retiré(s))", files.len(), cellar.bucket_name()));
+    log(&format!("assets : {} fichier(s) dans {}/{pre} ({pushed} poussé(s), {removed} retiré(s))", manifest.files.len(), cellar.bucket_name()));
     Ok(())
 }
 

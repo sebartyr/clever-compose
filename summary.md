@@ -561,6 +561,28 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Seconde revue de l'audit (17/09/2026)** : réserves reprises.
+  **S4** : `X-CC-Org` n'était pas vérifié avant l'accès au bucket
+  (`api_of` → `for_owner` sans contrôle ; les routes plateforme
+  finissaient par être refusées par Clever Cloud, pas les assets).
+  `Validated::owners` (espace personnel + organisations, lus à la
+  validation des jetons, même cache 5 min), `State::may_own`, `api_of`
+  → 403 pour un propriétaire hors liste ; test avec jetons pré-validés.
+  **S7** : le plafond `PENDING_MAX` avait une course entre test et
+  insertion (await de `request_token` entre les deux) :
+  `pending_reserved` réservé sous le verrou, relâché à l'insertion
+  (garde `Drop`). **S12** : noms `pid + compteur` prévisibles et
+  `exists()` puis `create_dir_all` non atomique : `reconcile::fresh_dir`
+  (16 hex de `getrandom`, `DirBuilder::create` en 0700 qui échoue si le
+  chemin existe, lien compris), utilisé par `unique_work_dir` et
+  `fresh_temp_dir`. **P3** : `assets::sync` parcourait, lisait et
+  hachait dans le futur async, `assets_open` écrivait avec `std::fs` :
+  tous deux dans `spawn_blocking`. **P5** : `sources::files` chargeait
+  les fichiers copiés sans plafond : `sources::MAX_REPO` (512 Mio,
+  taille annoncée vérifiée avant lecture), `MAX_CONTEXT` s'y aligne et
+  le total continue sur le contexte. Non traité : `cargo fmt --check`
+  (le dépôt n'est pas formaté par rustfmt, choix du propriétaire) ;
+  aucun test frontend.
 - **Contexte de build plafonné, fichiers texte jugés sur un préfixe,
   objets Cellar en parallèle (17/09/2026)** : audit #12, P5 et P6.
   `collect_tree` chargeait tout le contexte en mémoire sans borne :

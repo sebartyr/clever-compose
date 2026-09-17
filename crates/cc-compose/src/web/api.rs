@@ -300,17 +300,31 @@ async fn login_start(AxState(s): AxState<Shared>, headers: axum::http::HeaderMap
     };
     let callback = format!("{public_base}/api/session/oauth/callback");
     super::slog(&format!("connexion : callback {callback}"));
-    {
-        // Les connexions en attente : expirées purgées, plafond sinon.
-        let mut pending = s.pending.lock().unwrap_or_else(|e| e.into_inner());
-        pending.retain(|_, (_, _, at)| at.elapsed() < super::PENDING_TTL);
-        if pending.len() >= super::PENDING_MAX {
-            return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "trop de connexions en attente sur ce serveur : réessayez plus tard".into()));
+    // Une place est réservée sous le verrou avant d'appeler Clever Cloud :
+    // le plafond compte les débuts en cours, pas seulement les insérés.
+    struct Reservation<'a>(&'a std::sync::atomic::AtomicUsize);
+    impl Drop for Reservation<'_> {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         }
     }
+    let _reserved = {
+        let mut pending = s.pending.lock().unwrap_or_else(|e| e.into_inner());
+        pending.retain(|_, (_, _, at)| at.elapsed() < super::PENDING_TTL);
+        let reserved = s.pending_reserved.load(std::sync::atomic::Ordering::SeqCst);
+        if pending.len() + reserved >= super::PENDING_MAX {
+            return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "trop de connexions en attente sur ce serveur : réessayez plus tard".into()));
+        }
+        s.pending_reserved.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Reservation(&s.pending_reserved)
+    };
     let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
     super::slog(&format!("connexion : request token obtenu, retour prévu vers {return_to}"));
-    s.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(token.clone(), (secret, return_to, std::time::Instant::now()));
+    {
+        let mut pending = s.pending.lock().unwrap_or_else(|e| e.into_inner());
+        pending.insert(token.clone(), (secret, return_to, std::time::Instant::now()));
+        drop(_reserved);
+    }
     Ok(Json(json!({ "mode": "redirect", "url": url })))
 }
 
@@ -342,7 +356,9 @@ async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiErro
 }
 
 /// L'API d'un client pour une organisation : ses jetons (ou ceux du
-/// serveur), l'organisation de `X-CC-Org` ou celle du serveur.
+/// serveur), l'organisation de `X-CC-Org` ou celle du serveur. Un client
+/// à jetons ne vise qu'un propriétaire de sa liste (validée avec ses
+/// jetons) : le bucket d'assets du serveur, lui, ne vérifie rien.
 async fn api_of(s: &State, c: &Client) -> Result<crate::exec::platform::Api, ApiError> {
     let (api, _) = s.api_for(c).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     let org = c.org.clone().or_else(|| s.fallback.as_ref().map(|f| f.org.clone()).filter(|o| !o.is_empty() && c.tokens.is_none()));
@@ -352,6 +368,10 @@ async fn api_of(s: &State, c: &Client) -> Result<crate::exec::platform::Api, Api
     };
     if api.owner().is_empty() {
         return Err(ApiError(StatusCode::BAD_REQUEST, "aucune organisation choisie (en-tête X-CC-Org)".into()));
+    }
+    if !s.may_own(c, api.owner()) {
+        super::slog(&format!("refusé : X-CC-Org {} n'est pas une organisation du client", api.owner()));
+        return Err(ApiError(StatusCode::FORBIDDEN, format!("`{}` n'est pas une organisation accessible avec vos jetons (X-CC-Org)", api.owner())));
     }
     Ok(api)
 }
@@ -477,15 +497,22 @@ async fn assets_open(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<Stri
     // Un répertoire par rapatriement (deux clients, ou deux organisations,
     // peuvent ouvrir un projet du même nom) ; `project` est validé, la
     // jointure ne peut pas remplacer la racine.
-    let root = super::local::fresh_temp_dir(&s.locals, &format!("assets-{project}")).map_err(internal)?;
+    let root = super::local::fresh_temp_dir(&format!("assets-{project}")).map_err(internal)?;
     let dir = root.join(&project);
-    for (path, bytes) in files {
-        let Some(target) = safe_file(&dir, &path).ok() else { continue };
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| internal(e.to_string()))?;
+    let d2 = dir.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        for (path, bytes) in files {
+            let Ok(target) = safe_file(&d2, &path) else { continue };
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&target, bytes).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&target, bytes).map_err(|e| internal(e.to_string()))?;
-    }
+        Ok(())
+    })
+    .await
+    .map_err(|e| internal(e.to_string()))?
+    .map_err(internal)?;
     let id = s.locals.add_dir(dir, true, o.as_deref()).map_err(internal)?;
     Ok(Json(json!({ "id": id })))
 }
@@ -941,6 +968,7 @@ mod tests {
             listen: "127.0.0.1:8080".parse().unwrap(),
             origins: Vec::new(),
             pending: Default::default(),
+            pending_reserved: Default::default(),
             limiter: super::super::Limiter::new(std::time::Duration::from_secs(60), 20),
             api_key: None,
             local_exec,
@@ -1015,6 +1043,23 @@ mod tests {
         assert_eq!(list(LOOPBACK, &[]).await, StatusCode::OK);
         assert_eq!(list(REMOTE, &[]).await, StatusCode::UNAUTHORIZED);
         assert_eq!(list(LOOPBACK, &[("x-forwarded-for", "198.51.100.4")]).await, StatusCode::UNAUTHORIZED);
+    }
+
+    /// Un client à jetons ne vise que ses propres organisations : un
+    /// `X-CC-Org` étranger est refusé avant tout accès (bucket compris).
+    #[tokio::test]
+    async fn foreign_org_is_refused_for_a_token_client() {
+        let (s, _, _d) = state(true);
+        let tokens = super::super::ClientTokens::Bearer("x".into());
+        // Jetons « validés » d'avance, avec leur liste de propriétaires.
+        s.validated.lock().unwrap().insert(tokens.key(), super::super::Validated { api: crate::exec::platform::Api::new(String::new(), clevercloud_sdk::Credentials::Bearer { token: "x".into() }), user: Some("user_1".into()), email: None, owners: vec!["user_1".into(), "orga_mine".into()], at: std::time::Instant::now() });
+        let call = |org: &'static str| {
+            let s = s.clone();
+            async move { app(&s).oneshot(request("GET", "/api/platform/projects/demo/assets", REMOTE, &[("x-cc-org", org)], true, None)).await.unwrap().status() }
+        };
+        assert_eq!(call("orga_victim").await, StatusCode::FORBIDDEN);
+        assert_eq!(call("orga_mine").await, StatusCode::OK);
+        assert_eq!(call("user_1").await, StatusCode::OK);
     }
 
     /// Les assets d'un projet ne se lisent qu'authentifié (organisation

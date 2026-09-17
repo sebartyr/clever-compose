@@ -7,6 +7,10 @@ use std::path::Path as FsPath;
 use cc_compose_model::plan::{App, Source};
 use cc_compose_model::shim::{ShimConfig, CONFIG_PATH, IDS_PATH};
 
+/// Taille cumulée des fichiers d'un dépôt synthétique (fichiers copiés,
+/// contexte de build), tous en mémoire le temps du commit.
+pub const MAX_REPO: u64 = 512 * 1024 * 1024;
+
 /// Un fichier du dépôt synthétique.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File {
@@ -105,8 +109,14 @@ pub fn files(app: &App, project_dir: &FsPath) -> Result<Vec<File>, String> {
     let copied = match &app.source {
         Source::Synthetic { files, .. } | Source::Context { files, .. } => files,
     };
+    let mut total: u64 = out.iter().map(|f| f.content.len() as u64).sum();
     for (i, f) in copied.iter().enumerate() {
         let abs = project_dir.join(f.source.trim_start_matches("./"));
+        // Plafond vérifié sur la taille annoncée, avant de charger.
+        total += std::fs::metadata(&abs).map(|m| m.len()).map_err(|e| format!("{} : {e}", abs.display()))?;
+        if total > MAX_REPO {
+            return Err(format!("{} : les fichiers copiés dans l'image de `{}` dépassent {} Mio ; un fichier monté aussi gros n'a pas sa place dans une image (volume, addon, ou `seed`)", abs.display(), app.service, MAX_REPO / (1024 * 1024)));
+        }
         let content = std::fs::read(&abs).map_err(|e| format!("{} : {e}", abs.display()))?;
         out.push(File { path: format!("cc-files/{i}"), content, executable: false });
     }
