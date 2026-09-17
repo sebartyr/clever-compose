@@ -72,6 +72,52 @@ pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Reques
     next.run(req).await
 }
 
+/// Contre le CSRF et le DNS rebinding sur `/api/*` :
+///
+/// - `Host` : en écoute locale, seuls l'adresse d'écoute, `localhost`,
+///   les hôtes de `--public-url` et de `--cors` sont admis (un site
+///   qui fait pointer son nom vers 127.0.0.1 est refusé, 421). En écoute
+///   non locale sans `--public-url`, l'hôte n'est pas connu du serveur
+///   (application Clever Cloud) : pas de vérification.
+/// - Requêtes mutantes (`POST`, `PUT`, `DELETE`) : un `Origin` présent doit
+///   être la même origine que `Host` ou une origine `--cors`, et
+///   `Sec-Fetch-Site: cross-site` est refusé (403). Les navigateurs posent
+///   `Origin` sur toute requête cross-origin, `fetch` en `no-cors` et
+///   formulaires compris ; les clients hors navigateur n'en ont pas.
+///   Le callback OAuth (`GET`, redirigé par Clever Cloud) n'est pas concerné.
+pub async fn same_site(AxState(s): AxState<Shared>, req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    use axum::http::{header, Method};
+    let path = req.uri().path().to_string();
+    let method = req.method().clone();
+    if !path.starts_with("/api/") || method == Method::OPTIONS {
+        return next.run(req).await;
+    }
+    // Lu d'un bloc : un emprunt de `req` (corps non `Sync`) gardé jusqu'à
+    // l'`await` rendrait le futur non `Send`.
+    let (host, fetch_site, origin) = {
+        let get = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok()).map(|v| v.trim().to_string());
+        (get("host").map(|h| h.to_lowercase()).unwrap_or_default(), get("sec-fetch-site").map(|v| v.to_lowercase()), get(header::ORIGIN.as_str()).map(|o| o.trim_end_matches('/').to_string()))
+    };
+    if (s.listen.ip().is_loopback() || s.public_base.is_some()) && !host.is_empty() && !s.host_allowed(&host) {
+        super::slog(&format!("refusé : Host `{host}` inconnu (écoute {}, --public-url, --cors)", s.listen));
+        return ApiError(StatusCode::MISDIRECTED_REQUEST, format!("Host `{host}` : ce serveur ne répond que pour {}", s.listen)).into_response();
+    }
+    if [Method::POST, Method::PUT, Method::DELETE, Method::PATCH].contains(&method) {
+        if fetch_site.as_deref() == Some("cross-site") {
+            super::slog(&format!("refusé : {method} {path} cross-site (Sec-Fetch-Site)"));
+            return ApiError(StatusCode::FORBIDDEN, "requête cross-site refusée".into()).into_response();
+        }
+        if let Some(origin) = origin {
+            let same = origin.split("://").nth(1).is_some_and(|o| o.eq_ignore_ascii_case(&host));
+            if !same && !s.origins.contains(&origin) {
+                super::slog(&format!("refusé : {method} {path} depuis l'origine `{origin}` (Host {host})"));
+                return ApiError(StatusCode::FORBIDDEN, format!("origine `{origin}` refusée : ni ce serveur, ni une origine --cors")).into_response();
+            }
+        }
+    }
+    next.run(req).await
+}
+
 /// Une ligne par requête : méthode, chemin, statut, durée, organisation
 /// visée, jetons propres ou non. Les fichiers de l'interface sont tus.
 pub async fn log_request(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
@@ -166,6 +212,20 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
 pub struct Client {
     pub tokens: Option<super::ClientTokens>,
     pub org: Option<String>,
+    /// La requête vient du poste : pair loopback et aucun en-tête de proxy
+    /// (voir [`from_host`]). Seule une telle requête reçoit les
+    /// identifiants du serveur ou l'exécution locale.
+    pub from_host: bool,
+}
+
+/// En-têtes qu'un proxy pose : leur présence dit que la connexion
+/// loopback ne vient pas du poste.
+const PROXY_HEADERS: &[&str] = &["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "via"];
+
+/// Requête du poste : pair loopback (`ConnectInfo`, posé par `serve`),
+/// sans en-tête de proxy.
+pub fn from_host(headers: &axum::http::HeaderMap, peer: Option<std::net::SocketAddr>) -> bool {
+    peer.is_some_and(|p| p.ip().is_loopback()) && !PROXY_HEADERS.iter().any(|h| headers.contains_key(*h))
 }
 
 impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
@@ -177,7 +237,8 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
             (_, _, Some(t)) => Some(super::ClientTokens::Bearer(t)),
             _ => None,
         };
-        Ok(Client { tokens, org: h("x-cc-org") })
+        let peer = parts.extensions.get::<axum::extract::ConnectInfo<std::net::SocketAddr>>().map(|c| c.0);
+        Ok(Client { tokens, org: h("x-cc-org"), from_host: from_host(&parts.headers, peer) })
     }
 }
 
@@ -185,7 +246,7 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
 /// `authenticated: false` avec `reason` quand les jetons sont refusés :
 /// l'interface propose alors la connexion.
 async fn session_get(AxState(s): AxState<Shared>, c: Client) -> Json<J> {
-    match s.api_for(c.tokens.as_ref()).await {
+    match s.api_for(&c).await {
         Ok((_, email)) => Json(json!({ "authenticated": true, "email": email, "org": c.org.unwrap_or_default(), "own_tokens": c.tokens.is_some() })),
         Err(reason) => Json(json!({ "authenticated": false, "reason": reason, "org": c.org.unwrap_or_default(), "own_tokens": c.tokens.is_some() })),
     }
@@ -240,7 +301,7 @@ async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallba
 }
 
 async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {
-    let (api, _) = s.api_for(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    let (api, _) = s.api_for(&c).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     let orgs = api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     Ok(Json(json!({ "orgs": orgs })))
 }
@@ -248,7 +309,7 @@ async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiErro
 /// L'API d'un client pour une organisation : ses jetons (ou ceux du
 /// serveur), l'organisation de `X-CC-Org` ou celle du serveur.
 async fn api_of(s: &State, c: &Client) -> Result<crate::exec::platform::Api, ApiError> {
-    let (api, _) = s.api_for(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    let (api, _) = s.api_for(c).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     let org = c.org.clone().or_else(|| s.fallback.as_ref().map(|f| f.org.clone()).filter(|o| !o.is_empty() && c.tokens.is_none()));
     let api = match org {
         Some(o) => api.for_owner(&o),
@@ -442,22 +503,18 @@ async fn local_remove(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>,
 
 /// Le propriétaire des projets pour cette requête (voir `State::owner_of`).
 async fn owner(s: &State, c: &Client) -> Result<Option<String>, ApiError> {
-    s.owner_of(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))
+    s.owner_of(c).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))
 }
-
-/// En-têtes qu'un proxy pose : leur présence dit que la connexion
-/// loopback ne vient pas du poste.
-const PROXY_HEADERS: &[&str] = &["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "via"];
 
 /// L'exécution « locale » d'une tâche (`x-clever.init: local`, `run: local`,
 /// `seed --local`) tourne sur la machine du serveur. Sur un serveur
 /// partagé, un client ferait exécuter son script ici : elle exige que le
 /// serveur la permette (`State::local_exec`) **et** que la requête vienne
-/// du poste : pair loopback, aucun en-tête de proxy, aucun jeton propre
-/// (un client à jetons est quelqu'un d'autre, même sur le poste). Aucun
-/// appel réseau : décidable avant tout le reste.
-pub fn local_execution_allowed(s: &State, c: &Client, headers: &axum::http::HeaderMap, peer: std::net::SocketAddr) -> bool {
-    s.local_exec && c.tokens.is_none() && peer.ip().is_loopback() && !PROXY_HEADERS.iter().any(|h| headers.contains_key(*h))
+/// du poste ([`Client::from_host`]) sans jeton propre (un client à jetons
+/// est quelqu'un d'autre, même sur le poste). Aucun appel réseau :
+/// décidable avant tout le reste.
+pub fn local_execution_allowed(s: &State, c: &Client) -> bool {
+    s.local_exec && c.tokens.is_none() && c.from_host
 }
 
 const LOCAL_EXECUTION_REFUSED: &str = "exécution locale réservée au poste : sur ce serveur, laissez la plateforme exécuter la tâche (retirez `x-clever.init: local`, ou décochez « exécuter depuis ce poste »)";
@@ -602,8 +659,8 @@ struct UpBody {
     assets: bool,
 }
 
-async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, headers: axum::http::HeaderMap, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let local_ok = local_execution_allowed(&s, &org, &headers, peer);
+async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let local_ok = local_execution_allowed(&s, &org);
     let dir = project_dir(&s, &id, &org).await?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, format!("up {id}{}", if b.dry_run { " --dry-run" } else { "" }), move |state, mut log| async move {
@@ -636,8 +693,8 @@ struct SeedBody {
     no_wait: bool,
 }
 
-async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, headers: axum::http::HeaderMap, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    if b.local && !local_execution_allowed(&s, &org, &headers, peer) {
+async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    if b.local && !local_execution_allowed(&s, &org) {
         return Err(ApiError(StatusCode::FORBIDDEN, LOCAL_EXECUTION_REFUSED.into()));
     }
     let dir = project_dir(&s, &id, &org).await?;
@@ -802,35 +859,101 @@ mod tests {
         (Arc::new(s), id, dir)
     }
 
-    fn client(tokens: bool) -> Client {
-        Client { tokens: tokens.then(|| super::super::ClientTokens::Bearer("x".into())), org: None }
+    fn client(tokens: bool, from_host: bool) -> Client {
+        Client { tokens: tokens.then(|| super::super::ClientTokens::Bearer("x".into())), org: None, from_host }
     }
 
-    async fn seed(s: &Shared, id: &str, peer: &str, headers: &[(&str, &str)], tokens: bool, dump: &str) -> StatusCode {
-        let mut req = Request::builder().method("POST").uri(format!("/api/local/{id}/seed")).header("content-type", "application/json");
+    /// Une requête prête à partir : pair, en-têtes, jetons, corps JSON
+    /// facultatif.
+    fn request(method: &str, uri: &str, peer: &str, headers: &[(&str, &str)], tokens: bool, body: Option<String>) -> Request<Body> {
+        let mut req = Request::builder().method(method).uri(uri).header("host", "127.0.0.1:8080");
         for (k, v) in headers {
             req = req.header(*k, *v);
         }
         if tokens {
             req = req.header("x-cc-api-token", "x");
         }
-        let mut req = req.body(Body::from(format!(r#"{{"service":"db","dump":"{dump}","local":true}}"#))).unwrap();
+        let mut req = match body {
+            Some(b) => req.header("content-type", "application/json").body(Body::from(b)).unwrap(),
+            None => req.body(Body::empty()).unwrap(),
+        };
         req.extensions_mut().insert(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
-        router(s.clone()).oneshot(req).await.unwrap().status()
+        req
+    }
+
+    /// Le routeur avec les mêmes couches que `serve`.
+    fn app(s: &Shared) -> axum::Router {
+        router(s.clone()).layer(axum::middleware::from_fn_with_state(s.clone(), require_key)).layer(axum::middleware::from_fn_with_state(s.clone(), same_site)).layer(axum::middleware::from_fn_with_state(s.clone(), cors))
+    }
+
+    async fn seed(s: &Shared, id: &str, peer: &str, headers: &[(&str, &str)], tokens: bool, dump: &str) -> StatusCode {
+        let req = request("POST", &format!("/api/local/{id}/seed"), peer, headers, tokens, Some(format!(r#"{{"service":"db","dump":"{dump}","local":true}}"#)));
+        app(s).oneshot(req).await.unwrap().status()
+    }
+
+    #[test]
+    fn from_host_requires_loopback_peer_without_proxy_headers() {
+        let none = axum::http::HeaderMap::new();
+        let mut proxied = axum::http::HeaderMap::new();
+        proxied.insert("x-forwarded-for", "198.51.100.4".parse().unwrap());
+        assert!(from_host(&none, Some(LOOPBACK.parse().unwrap())));
+        assert!(!from_host(&none, Some(REMOTE.parse().unwrap())));
+        assert!(!from_host(&proxied, Some(LOOPBACK.parse().unwrap())));
+        assert!(!from_host(&none, None));
     }
 
     #[test]
     fn allowed_only_from_the_host_without_tokens() {
         let (s, _, _d) = state(true);
-        let none = axum::http::HeaderMap::new();
-        let mut proxied = axum::http::HeaderMap::new();
-        proxied.insert("x-forwarded-for", "198.51.100.4".parse().unwrap());
-        assert!(local_execution_allowed(&s, &client(false), &none, LOOPBACK.parse().unwrap()));
-        assert!(!local_execution_allowed(&s, &client(true), &none, LOOPBACK.parse().unwrap()));
-        assert!(!local_execution_allowed(&s, &client(false), &none, REMOTE.parse().unwrap()));
-        assert!(!local_execution_allowed(&s, &client(false), &proxied, LOOPBACK.parse().unwrap()));
+        assert!(local_execution_allowed(&s, &client(false, true)));
+        assert!(!local_execution_allowed(&s, &client(true, true)));
+        assert!(!local_execution_allowed(&s, &client(false, false)));
         let (off, _, _d2) = state(false);
-        assert!(!local_execution_allowed(&off, &client(false), &none, LOOPBACK.parse().unwrap()));
+        assert!(!local_execution_allowed(&off, &client(false, true)));
+    }
+
+    /// Les identifiants du serveur ne sont prêtés qu'aux requêtes du poste.
+    #[tokio::test]
+    async fn server_credentials_only_from_the_host() {
+        let (s, _, _d) = state(true);
+        let list = |peer: &'static str, headers: &'static [(&'static str, &'static str)]| {
+            let s = s.clone();
+            async move { app(&s).oneshot(request("GET", "/api/local", peer, headers, false, None)).await.unwrap().status() }
+        };
+        assert_eq!(list(LOOPBACK, &[]).await, StatusCode::OK);
+        assert_eq!(list(REMOTE, &[]).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(list(LOOPBACK, &[("x-forwarded-for", "198.51.100.4")]).await, StatusCode::UNAUTHORIZED);
+    }
+
+    /// Anti-CSRF et anti-rebinding : `Host` inconnu, `Origin` étrangère,
+    /// `Sec-Fetch-Site: cross-site`.
+    #[tokio::test]
+    async fn same_site_rejects_foreign_host_and_origin() {
+        let (s, id, _d) = state(true);
+        let call = |method: &'static str, uri: String, headers: Vec<(&'static str, &'static str)>| {
+            let s = s.clone();
+            async move {
+                let mut req = request(method, &uri, LOOPBACK, &[], false, if method == "GET" { None } else { Some("{}".into()) });
+                for (k, v) in headers {
+                    if k == "host" {
+                        req.headers_mut().remove("host");
+                    }
+                    req.headers_mut().append(k, v.parse().unwrap());
+                }
+                app(&s).oneshot(req).await.unwrap().status()
+            }
+        };
+        // Host : rebinding DNS vers 127.0.0.1.
+        assert_eq!(call("GET", "/api/local".into(), vec![("host", "attaquant.example")]).await, StatusCode::MISDIRECTED_REQUEST);
+        assert_eq!(call("GET", "/api/local".into(), vec![("host", "localhost:8080")]).await, StatusCode::OK);
+        assert_eq!(call("GET", "/api/local".into(), vec![("host", "LOCALHOST:8080")]).await, StatusCode::OK);
+        // Origin : POST cross-origin (fetch no-cors, formulaire).
+        let down = format!("/api/local/{id}/scaling");
+        assert_eq!(call("PUT", down.clone(), vec![("origin", "https://attaquant.example")]).await, StatusCode::FORBIDDEN);
+        assert_eq!(call("PUT", down.clone(), vec![("sec-fetch-site", "cross-site")]).await, StatusCode::FORBIDDEN);
+        // Même origine : la requête passe la garde (400 : corps incomplet).
+        assert_eq!(call("PUT", down.clone(), vec![("origin", "http://127.0.0.1:8080"), ("sec-fetch-site", "same-origin")]).await, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(call("PUT", down, vec![]).await, StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]

@@ -160,13 +160,38 @@ impl State {
         format!("{scheme}://{host}")
     }
 
+    /// `host` (minuscule, `hôte[:port]`) est un nom sous lequel ce serveur
+    /// accepte d'être appelé : l'adresse d'écoute, `localhost` et les
+    /// adresses de bouclage sur le port d'écoute, l'hôte de `--public-url`,
+    /// ceux des origines `--cors`.
+    pub fn host_allowed(&self, host: &str) -> bool {
+        let port = self.listen.port();
+        let of_url = |u: &str| u.split("://").nth(1).map(|h| h.trim_end_matches('/').to_lowercase());
+        let mut ok: Vec<String> = vec![self.listen.to_string(), format!("localhost:{port}"), format!("127.0.0.1:{port}"), format!("[::1]:{port}")];
+        if port == 80 {
+            ok.extend(["localhost".into(), "127.0.0.1".into(), "[::1]".into(), self.listen.ip().to_string()]);
+        }
+        ok.extend(self.public_base.as_deref().and_then(of_url));
+        ok.extend(self.origins.iter().filter_map(|o| of_url(o)));
+        ok.iter().any(|h| h == host)
+    }
+
     /// L'API pour un client : ses jetons (validés chez Clever Cloud, cache
     /// de cinq minutes), sinon les identifiants du serveur. `Err` : rien
     /// d'utilisable, ou jetons refusés.
-    pub async fn api_for(&self, tokens: Option<&ClientTokens>) -> Result<(Api, Option<String>), String> {
-        let Some(t) = tokens else {
+    ///
+    /// Les identifiants du serveur ne sont prêtés qu'à une requête **du
+    /// poste** (`Client::from_host` : pair loopback, sans en-tête de
+    /// proxy) : derrière un reverse proxy vers loopback, chaque client
+    /// envoie les siens.
+    pub async fn api_for(&self, c: &api::Client) -> Result<(Api, Option<String>), String> {
+        let Some(t) = c.tokens.as_ref() else {
             return match self.fallback.as_ref() {
-                Some(s) => Ok((s.api.clone(), None)),
+                Some(s) if c.from_host => Ok((s.api.clone(), None)),
+                Some(_) => {
+                    slog("client sans jetons refusé (requête qui ne vient pas du poste : pair non loopback ou en-tête de proxy)");
+                    Err("aucun identifiant : les identifiants du serveur ne servent qu'au poste ; connectez-vous (jetons X-CC-Token/X-CC-Secret ou X-CC-Api-Token)".to_string())
+                }
                 None => {
                     slog("client sans jetons refusé (le serveur n'a pas d'identifiants)");
                     Err("aucun identifiant : connectez-vous (jetons X-CC-Token/X-CC-Secret ou X-CC-Api-Token)".to_string())
@@ -197,11 +222,11 @@ impl State {
     /// Qui dépose ou consulte un projet : l'id Clever Cloud du client à
     /// jetons (validés), `None` pour un client sans jetons servi par les
     /// identifiants du serveur. Erreur si rien n'est utilisable.
-    pub async fn owner_of(&self, tokens: Option<&ClientTokens>) -> Result<Option<String>, String> {
-        let Some(t) = tokens else {
-            return self.api_for(None).await.map(|_| None);
+    pub async fn owner_of(&self, c: &api::Client) -> Result<Option<String>, String> {
+        let Some(t) = c.tokens.as_ref() else {
+            return self.api_for(c).await.map(|_| None);
         };
-        self.api_for(Some(t)).await?;
+        self.api_for(c).await?;
         Ok(self.validated.lock().unwrap().get(&t.key()).and_then(|v| v.user.clone()))
     }
 }
@@ -270,7 +295,11 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
     #[cfg(not(feature = "ui"))]
     let app = app.fallback(api_only);
-    let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::require_key)).layer(axum::middleware::from_fn_with_state(state.clone(), api::cors)).layer(axum::middleware::from_fn(api::log_request));
+    let app = app
+        .layer(axum::middleware::from_fn_with_state(state.clone(), api::require_key))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), api::same_site))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), api::cors))
+        .layer(axum::middleware::from_fn(api::log_request));
     let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| format!("écoute sur {listen} : {e}"))?;
     let url = format!("http://{}/", listener.local_addr().map_err(|e| e.to_string())?);
     if o.ui {

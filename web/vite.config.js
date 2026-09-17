@@ -8,5 +8,16 @@ export default defineConfig({
   base: './',
   resolve: { alias: { vue: 'vue/dist/vue.esm-bundler.js' } },
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022' },
-  server: { proxy: { '/api': 'http://127.0.0.1:8080' } },
+  // Proxy de développement vers `clever-compose api` : le serveur vérifie
+  // `Host` et `Origin` (anti-CSRF) ; on lui présente les siens, la page et
+  // le proxy étant la même origine pour le navigateur.
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+        configure: (proxy) => proxy.on('proxyReq', (req) => req.removeHeader('origin')),
+      },
+    },
+  },
 });

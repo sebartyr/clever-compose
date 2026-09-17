@@ -561,6 +561,25 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Requête du poste, anti-CSRF et anti-rebinding (17/09/2026)** : audit
+  #12, S5. Le prêt des identifiants du serveur reposait sur « écoute
+  loopback » seul (un reverse proxy vers `127.0.0.1` les prêtait à tous)
+  et rien ne vérifiait `Host` ni `Origin` : depuis n'importe quelle page,
+  `fetch(..., {method: 'POST', mode: 'no-cors'})` sans corps faisait
+  passer `Option<Json<DownBody>>` à `None` (axum 0.8.9) et exécutait
+  `down`/`up`/`stop` avec les identifiants du poste ; un nom DNS pointé
+  vers 127.0.0.1 rendait même les requêtes JSON « same-origin ».
+  `Client::from_host` (pair loopback via `ConnectInfo`, aucun en-tête de
+  proxy) : `State::api_for`/`owner_of` prennent le `Client` et ne prêtent
+  le repli qu'à une requête du poste ; `local_execution_allowed` s'en
+  sert. Middleware `same_site` sur `/api/*` : `Host` admis (écoute,
+  `localhost`/loopback sur le port, hôte de `--public-url`, hôtes
+  `--cors` ; vérifié en écoute locale ou avec `--public-url`, 421 sinon) ;
+  sur `POST`/`PUT`/`DELETE`/`PATCH`, `Sec-Fetch-Site: cross-site` ou un
+  `Origin` ni même origine ni `--cors` → 403. Proxy Vite : `changeOrigin`
+  et retrait de l'`Origin`. Tests de route : repli refusé hors du poste,
+  `Host` étranger 421, `Origin` étrangère et cross-site 403, même origine
+  passe.
 - **Exécution locale refusée sur un serveur partagé (17/09/2026)** : audit
   de sécurité (issue #12, S1). En rendant le serveur exposable, la garde
   « réservé à l'usage local » avait été posée sur l'ouverture d'un

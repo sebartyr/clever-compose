@@ -111,7 +111,11 @@ mêmes commits déployés (vérifié en réel).
   ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` issus de la
   danse du serveur, ou `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
-  pour un client sans jetons seulement en écoute locale ; projets locaux
+  pour un client sans jetons seulement pour une **requête du poste**
+  (`Client::from_host` : pair loopback, sans en-tête de proxy ; un reverse
+  proxy vers loopback ne les reçoit pas) ; middleware `same_site`
+  (anti-CSRF/rebinding : `Host` admis, `Origin`/`Sec-Fetch-Site` sur les
+  méthodes mutantes) ; projets locaux
   par propriétaire (`Locals`, id Clever Cloud), répertoire du poste et
   **exécution locale des tâches** (`run: local`, `seed --local`)
   réservés à l'usage local : `--local-exec auto|on|off` (`auto` : refusée
