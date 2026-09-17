@@ -85,3 +85,25 @@ fn files_inside_the_project_stay_readable() {
     d.write("sub/other.yaml", "services:\n  db:\n    image: alpine\n");
     assert_eq!(codes(&d.0, true), Vec::<String>::new());
 }
+
+/// Plan d'un projet déposé : un secret `environment:` lirait
+/// l'environnement du serveur ; refusé. Les identifiants Docker du poste
+/// n'y entrent pas non plus (`private_registries` vide).
+#[test]
+fn deposited_project_cannot_read_server_environment() {
+    use cc_compose::plan::cli::{run, PlanOptions};
+    use cc_compose::plan::images::Fixture;
+    let d = Dir::new("secret-env");
+    d.write("compose.yaml", "services:\n  web:\n    image: busybox:1.36\n    secrets: [s]\nsecrets:\n  s:\n    environment: HOME\n");
+    let fixture: Fixture = serde_json::from_str(r#"{ "busybox:1.36": { "entrypoint": [], "cmd": ["sh"], "user": null, "workdir": null, "exposed_ports": [] } }"#).unwrap();
+    let plan_with = |confine: bool| {
+        let opts = PlanOptions { project: Options { project_dir: d.0.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine }, allow_ephemeral: false, private_registries: None };
+        let mut diags = Diagnostics::default();
+        let plan = run(&opts, &fixture, &mut diags);
+        (plan.is_some(), diags.items.iter().map(|x| x.code.to_string()).collect::<Vec<_>>())
+    };
+    let (ok, codes) = plan_with(true);
+    assert!(!ok && codes.iter().any(|c| c == "secret-environment-confined"), "{codes:?}");
+    let (ok, codes) = plan_with(false);
+    assert!(ok && !codes.iter().any(|c| c == "secret-environment-confined"), "{codes:?}");
+}

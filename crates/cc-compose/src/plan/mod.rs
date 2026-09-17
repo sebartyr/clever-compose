@@ -41,6 +41,10 @@ pub struct Context<'a> {
     /// Hôtes de registre pour lesquels le poste a des identifiants
     /// (`docker login`) : une image qui en vient est traitée comme privée.
     pub private_registries: &'a [String],
+    /// Projet déposé sur un serveur (`Options::confine`) : rien de la
+    /// machine qui calcule le plan ne doit y entrer (variables
+    /// d'environnement du serveur, identifiants Docker du serveur).
+    pub confined: bool,
 }
 
 impl Context<'_> {
@@ -641,6 +645,12 @@ fn plan_service(
             }
             SecretSource::File { path: ctx.display(f) }
         } else if let Some(var) = &def.environment {
+            if ctx.confined {
+                // La valeur serait lue dans l'environnement du serveur, pas
+                // du poste de l'utilisateur.
+                diags.push(Diagnostic::error("secret-environment-confined", format!("le secret `{}` lit la variable `{var}` de l'environnement : sur un projet déposé, elle viendrait du serveur ; déclarez-le avec `file:`", sm.source)).with_path(&Path::root().child("secrets").child(&sm.source).child("environment")));
+                continue;
+            }
             SecretSource::Environment { var: var.clone() }
         } else {
             diags.push(Diagnostic::error("secret-invalid", format!("le secret `{}` n'a ni `file` ni `environment`", sm.source)).with_path(&Path::root().child("secrets").child(&sm.source)));

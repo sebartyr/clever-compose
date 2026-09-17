@@ -164,7 +164,9 @@ organisations.
 Un projet déposé (archive envoyée, assets rapatriés, ou envoyé par un
 client à jetons) ne peut lire que ses propres fichiers : un `env_file`,
 un `secrets.file`, un `include`, un bind ou un `~` qui sortent de son
-répertoire sont refusés (`path-outside-project`). La CLI, et un
+répertoire sont refusés (`path-outside-project`) ; un secret
+`environment:` (qui lirait l'environnement du serveur) aussi, et ses
+images se lisent sans les identifiants Docker du serveur. La CLI, et un
 répertoire du poste ouvert en usage local, gardent le comportement
 Compose.
 

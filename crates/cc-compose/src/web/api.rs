@@ -615,8 +615,14 @@ struct PlanQuery {
 }
 
 /// Plan et diagnostics d'un projet local, en JSON structuré.
+/// Le résolveur d'images d'un projet : avec les identifiants Docker du
+/// poste pour un répertoire du poste, sans pour un projet déposé.
+fn registry(confine: bool) -> Result<crate::plan::registry::Registry, String> {
+    if confine { crate::plan::registry::Registry::anonymous() } else { crate::plan::registry::Registry::new() }
+}
+
 fn compute(dir: &Path, confine: bool, allow_ephemeral: bool) -> Result<(Option<Plan>, J, PathBuf), String> {
-    let resolver = crate::plan::registry::Registry::new()?;
+    let resolver = registry(confine)?;
     let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine };
     let project_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let popts = crate::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
@@ -705,7 +711,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
         let d2 = dir.clone();
         let (plan, _diags, project_dir) = tokio::task::spawn_blocking(move || compute(&d2, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.ok_or("plan refusé : corrigez les erreurs")?;
-        let resolver = crate::plan::registry::Registry::new()?;
+        let resolver = registry(confine)?;
         let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
         crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())

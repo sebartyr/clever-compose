@@ -37,11 +37,21 @@ struct Cached {
 }
 
 impl Registry {
+    /// Avec les identifiants Docker du poste (`~/.docker/config.json`).
     pub fn new() -> Result<Self, String> {
+        Self::build(docker_auths())
+    }
+
+    /// Sans aucun identifiant : pour un projet déposé sur un serveur, dont
+    /// les images ne doivent pas se lire avec les identifiants du serveur.
+    pub fn anonymous() -> Result<Self, String> {
+        Self::build(HashMap::new())
+    }
+
+    fn build(auths: HashMap<String, (String, String)>) -> Result<Self, String> {
         let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|e| format!("runtime : {e}"))?;
         let config = ClientConfig { platform_resolver: Some(Box::new(linux_amd64_resolver)), ..ClientConfig::default() };
         let client = Client::new(config);
-        let auths = docker_auths();
         let cache_dir = std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))

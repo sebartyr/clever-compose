@@ -561,6 +561,14 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Projet déposé : rien du serveur dans le plan (17/09/2026)** : audit
+  #12, S3. `secrets.environment` faisait lire `std::env::var` du serveur
+  au `up` (`reconcile::resolve`) et une image d'un registre connu de
+  `~/.docker/config.json` du serveur recevait ses `CC_DOCKER_LOGIN_*`.
+  `Context::confined` (depuis `Options::confine`) : diagnostic
+  `secret-environment-confined` ; `private_registries` vide ;
+  `Registry::anonymous()` pour lire les manifestes sans identifiants
+  (`web::api::registry(confine)`). Test dans `tests/confine.rs`.
 - **Projet déposé confiné à son répertoire (17/09/2026)** : audit #12,
   S2. `compose/paths.rs` résolvait `~` et laissait passer les chemins
   absolus (comportement Compose) : depuis une archive envoyée à un

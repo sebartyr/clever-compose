@@ -246,8 +246,10 @@ utilisable en local.
 `network-groups-unspecified`, `network-groups-merged`, `service-unreachable`,
 `proxy-resolver`, `port-assumed-http`, `redirection-tcp-multiple`,
 `replicas-fixed`, `resources-capped`, `terraform-task`, `terraform-udp`,
-`path-outside-project` (projet déposé sur un serveur : `Options::confine`,
-aucun fichier lu hors de son répertoire, `tests/confine.rs`).
+`path-outside-project`, `secret-environment-confined` (projet déposé sur
+un serveur : `Options::confine`, aucun fichier lu hors de son répertoire,
+aucune variable d'environnement ni identifiant Docker du serveur,
+`tests/confine.rs`).
 
 ---
 
