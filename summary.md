@@ -394,6 +394,18 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Serveur exposé : deux garde-fous (17/09/2026)** : discussion sur
+  l'utilité de la clé d'API (« si on doit s'identifier avec ses jetons de
+  toute manière on va déployer sur ses orga ») : elle ne protège que la
+  machine, pas les organisations ; en interface statique elle ne peut
+  être que saisie. Fait : (1) les identifiants du serveur ne sont prêtés
+  aux clients sans jetons qu'en écoute sur une adresse de bouclage
+  (sinon ignorés, journalisé) ; (2) chaque projet local a un propriétaire
+  (id Clever Cloud du client à jetons, `None` pour le serveur), `Locals`
+  filtre par propriétaire, « ouvrir un répertoire du poste » est refusé
+  (403) à un client à jetons et masqué dans l'interface. Clé conservée en
+  option. Vérifié : sur `0.0.0.0` avec `CLEVER_COMPOSE_API_TOKEN`, repli
+  ignoré et 401 pour un client sans jetons.
 - **Préfixe `CLEVER_COMPOSE_` (17/09/2026)** : « prefix tout avec
   CLEVER_COMPOSE plutôt que CC_ ». Toutes nos variables changent de nom :
   `CLEVER_COMPOSE_{API_TOKEN, ORG, API_KEY, LISTEN, ASSETS_BUCKET,

@@ -11,6 +11,14 @@ pub struct LocalProject {
     pub dir: PathBuf,
     /// Répertoire créé par le serveur (archive) : supprimé à l'oubli.
     pub temporary: bool,
+    /// Utilisateur Clever Cloud (id) qui l'a déposé ; `None` : projet du
+    /// serveur lui-même (répertoire de lancement, client local sans
+    /// jetons), visible de tous.
+    pub owner: Option<String>,
+}
+
+fn visible(p: &LocalProject, owner: Option<&str>) -> bool {
+    p.owner.is_none() || p.owner.as_deref() == owner
 }
 
 #[derive(Default)]
@@ -27,7 +35,7 @@ impl Locals {
         format!("{safe}-{n}")
     }
 
-    pub fn add_dir(&self, dir: PathBuf, temporary: bool) -> Result<String, String> {
+    pub fn add_dir(&self, dir: PathBuf, temporary: bool, owner: Option<&str>) -> Result<String, String> {
         // `~` et chemins relatifs au lancement, comme dans un shell.
         let dir = match dir.to_str().and_then(|s| s.strip_prefix("~/")) {
             Some(rest) => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(rest)).unwrap_or(dir),
@@ -41,18 +49,18 @@ impl Locals {
             return Err(format!("{} : aucun compose.yaml / docker-compose.yml", dir.display()));
         }
         let mut inner = self.inner.lock().unwrap();
-        if let Some(p) = inner.values().find(|p| p.dir == dir) {
+        if let Some(p) = inner.values().find(|p| p.dir == dir && visible(p, owner)) {
             return Ok(p.id.clone());
         }
         let id = self.new_id(&dir);
-        inner.insert(id.clone(), LocalProject { id: id.clone(), dir, temporary });
+        inner.insert(id.clone(), LocalProject { id: id.clone(), dir, temporary, owner: owner.map(str::to_string) });
         Ok(id)
     }
 
     /// Extrait une archive (`.zip`, `.tar.gz`, `.tgz`, `.tar`) dans un
     /// répertoire temporaire et l'enregistre. Si l'archive contient un seul
     /// répertoire racine, c'est lui le projet.
-    pub fn add_archive(&self, name: &str, bytes: &[u8]) -> Result<String, String> {
+    pub fn add_archive(&self, name: &str, bytes: &[u8], owner: Option<&str>) -> Result<String, String> {
         let stem = Path::new(name).file_name().and_then(|s| s.to_str()).unwrap_or("archive").trim_end_matches(".zip").trim_end_matches(".tgz").trim_end_matches(".tar.gz").trim_end_matches(".tar").to_string();
         let root = std::env::temp_dir().join(format!("clever-compose-ui-{}-{}", std::process::id(), self.next.load(std::sync::atomic::Ordering::SeqCst)));
         let target = root.join(&stem);
@@ -78,15 +86,21 @@ impl Locals {
                 _ => break,
             }
         }
-        self.add_dir(dir, true)
+        self.add_dir(dir, true, owner)
     }
 
-    pub fn get(&self, id: &str) -> Option<PathBuf> {
-        self.inner.lock().unwrap().get(id).map(|p| p.dir.clone())
+    /// Le répertoire d'un projet, s'il est visible de `owner`.
+    pub fn get(&self, id: &str, owner: Option<&str>) -> Option<PathBuf> {
+        self.inner.lock().unwrap().get(id).filter(|p| visible(p, owner)).map(|p| p.dir.clone())
     }
 
-    pub fn remove(&self, id: &str) -> bool {
-        let Some(p) = self.inner.lock().unwrap().remove(id) else { return false };
+    pub fn remove(&self, id: &str, owner: Option<&str>) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        if !inner.get(id).is_some_and(|p| visible(p, owner)) {
+            return false;
+        }
+        let Some(p) = inner.remove(id) else { return false };
+        drop(inner);
         if p.temporary {
             // Le répertoire temporaire est le parent créé par `add_archive`.
             let mut root = p.dir.clone();
@@ -105,8 +119,8 @@ impl Locals {
         true
     }
 
-    pub fn list(&self) -> Vec<(String, PathBuf, bool)> {
-        self.inner.lock().unwrap().values().map(|p| (p.id.clone(), p.dir.clone(), p.temporary)).collect()
+    pub fn list(&self, owner: Option<&str>) -> Vec<(String, PathBuf, bool)> {
+        self.inner.lock().unwrap().values().filter(|p| visible(p, owner)).map(|p| (p.id.clone(), p.dir.clone(), p.temporary)).collect()
     }
 }
 

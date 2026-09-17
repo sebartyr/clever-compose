@@ -37,6 +37,7 @@ pub struct Session {
 /// requête. Clé : les jetons tels qu'envoyés.
 struct Validated {
     api: Api,
+    user: Option<String>,
     email: Option<String>,
     at: std::time::Instant,
 }
@@ -148,7 +149,7 @@ impl State {
             }
         }
         let api = Api::new(String::new(), t.credentials(&self.oauth));
-        let (_, email) = match api.whoami().await {
+        let (user, email) = match api.whoami().await {
             Ok(me) => me,
             Err(e) => {
                 slog(&format!("jetons refusés par Clever Cloud : {e}"));
@@ -158,8 +159,19 @@ impl State {
         slog(&format!("jetons validés : {} (cache {} s)", email.as_deref().unwrap_or("utilisateur sans email"), VALIDATION_TTL.as_secs()));
         let mut cache = self.validated.lock().unwrap();
         cache.retain(|_, v| v.at.elapsed() < VALIDATION_TTL);
-        cache.insert(key, Validated { api: api.clone(), email: email.clone(), at: std::time::Instant::now() });
+        cache.insert(key, Validated { api: api.clone(), user, email: email.clone(), at: std::time::Instant::now() });
         Ok((api, email))
+    }
+
+    /// Qui dépose ou consulte un projet : l'id Clever Cloud du client à
+    /// jetons (validés), `None` pour un client sans jetons servi par les
+    /// identifiants du serveur. Erreur si rien n'est utilisable.
+    pub async fn owner_of(&self, tokens: Option<&ClientTokens>) -> Result<Option<String>, String> {
+        let Some(t) = tokens else {
+            return self.api_for(None).await.map(|_| None);
+        };
+        self.api_for(Some(t)).await?;
+        Ok(self.validated.lock().unwrap().get(&t.key()).and_then(|v| v.user.clone()))
     }
 }
 
@@ -179,9 +191,18 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     let locals = local::Locals::default();
     if let Some(dir) = o.initial_dir {
         if dir.join("compose.yaml").is_file() || dir.join("compose.yml").is_file() || dir.join("docker-compose.yaml").is_file() || dir.join("docker-compose.yml").is_file() {
-            locals.add_dir(dir, false)?;
+            locals.add_dir(dir, false, None)?;
         }
     }
+    // Les identifiants du serveur ne se prêtent qu'à des clients du même
+    // poste : ailleurs, chacun envoie les siens.
+    let fallback = match fallback {
+        Some(_) if !listen.ip().is_loopback() => {
+            slog(&format!("identifiants du serveur ignorés : écoute sur {listen}, pas locale ; chaque client envoie ses jetons"));
+            None
+        }
+        f => f,
+    };
     match &fallback {
         None => slog(&format!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer {}, base URL {})", oauth.key, public_base.clone().unwrap_or_else(|| format!("déduite des requêtes, http://{listen} par défaut")))),
         Some(s) => slog(&format!("identifiants du serveur prêtés aux clients qui n'en envoient pas{}", if s.org.is_empty() { String::new() } else { format!(" (organisation {})", s.org) })),

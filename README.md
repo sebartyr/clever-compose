@@ -148,13 +148,24 @@ recréer ; un addon existant n'est jamais recréé, un changement de plan
 d'addon est signalé et reste manuel. Le `.env` du projet (ou `--env-file`)
 est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
 
-### Clé d'API
+### Serveur exposé
 
-`--api-key CLÉ` (ou `CLEVER_COMPOSE_API_KEY`) sur `ui`/`api` exige `Authorization:
-Bearer CLÉ` sur tout `/api/*` sauf `/api/info` ; l'interface la demande une
-fois par onglet. Sans clé, le serveur est à réserver au poste. La CLI, elle,
-se suffit à elle-même : elle parle directement à Clever Cloud, jamais à un
-serveur `clever-compose api`.
+Deux garde-fous s'appliquent d'eux-mêmes dès que le serveur n'écoute pas
+sur `127.0.0.1` : ses propres identifiants (fichier de `login`, variables)
+ne sont **jamais** prêtés aux clients (chacun envoie ses jetons, obtenus
+par la danse dans son navigateur), et les projets déposés sont visibles
+du seul utilisateur Clever Cloud qui les a envoyés (« Ouvrir un
+répertoire du poste » n'existe qu'en usage local). Les jetons ne sortent
+pas de l'onglet et n'autorisent que ce que l'utilisateur peut déjà faire
+sur ses organisations.
+
+En plus, facultatif : `--api-key CLÉ` (ou `CLEVER_COMPOSE_API_KEY`) exige
+`Authorization: Bearer CLÉ` sur tout `/api/*` sauf `/api/info` ; l'interface
+la demande une fois par onglet (elle ne peut pas être « injectée » dans une
+interface statique sans devenir publique). Elle ne protège pas les
+organisations, seulement l'usage de la machine. La CLI, elle, se suffit à
+elle-même : elle parle directement à Clever Cloud, jamais à un serveur
+`clever-compose api`.
 
 ### Interface déployée à part
 

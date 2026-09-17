@@ -511,7 +511,7 @@ export const App = defineComponent({
           </li>
         </ul>
         <label class="upload" title="Archive .zip, .tar.gz, .tgz ou .tar contenant le projet ; extraite dans un répertoire temporaire"><input type="file" accept=".zip,.tar,.tgz,.tar.gz" @change="upload"><span>Charger une archive (.zip, .tar.gz)</span></label>
-        <cc-button :outlined="true" title="Un répertoire du poste qui contient un compose.yaml" @cc-click="dialog.addDir = true">Ouvrir un répertoire du poste</cc-button>
+        <cc-button v-if="!session.own_tokens" :outlined="true" title="Un répertoire du poste qui contient un compose.yaml (usage local seulement)" @cc-click="dialog.addDir = true">Ouvrir un répertoire du poste</cc-button>
         <h2>Sur la plateforme <cc-button :outlined="true" :hideText="true" title="Relit les projets de l'organisation" @cc-click="refreshPlatform">Rafraîchir</cc-button></h2>
         <p v-if="!session.authenticated" class="dim">Connectez-vous (en haut à droite) pour voir les projets déployés.</p>
         <p v-else-if="!session.org" class="dim">Choisissez une organisation.</p>

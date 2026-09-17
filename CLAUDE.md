@@ -111,7 +111,9 @@ mêmes commits déployés (vérifié en réel).
   ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` issus de la
   danse du serveur, ou `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
-  pour un client sans jetons (usage local) ; connexion par
+  pour un client sans jetons seulement en écoute locale ; projets locaux
+  par propriétaire (`Locals`, id Clever Cloud), répertoire du poste
+  réservé à l'usage local ; connexion par
   `POST /api/session/login` (request token, callback du serveur) :
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons
