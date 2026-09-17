@@ -394,6 +394,36 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Jetons du client, pas de session serveur (17/09/2026)** : « faut que
+  ce soit le client qui envoie ses tokens ou qu'il fasse la danse. Une
+  session par utilisateur » ; « la cli doit permettre de faire la danse
+  avec clever-compose login » ; « ou alors utiliser les tokens en var
+  d'env » ; « prends exemple sur les clever tools » ; « un middleware qui
+  vérifie que les tokens sont valides chez clever cloud » ; « un fichier
+  .json peut être mis dans .config/clever-cloud » ; « si tokens invalides
+  on propose de se connecter côté UI, idem côté CLI ». Fait : `auth.rs`
+  (`login` = `cli_token` aléatoire, page `cli-oauth` de la console,
+  polling `/v2/self/cli_tokens`, vérification `/v2/self`, fichier
+  `~/.config/clever-cloud/clever-compose.json` en 0600 ; `credentials()` :
+  env puis fichier ; `logout`). Serveur : plus de session partagée ;
+  extracteur `Client` (`X-CC-Token`/`X-CC-Secret`, `X-CC-Api-Token`,
+  `X-CC-Org`), `State::api_for` valide chez Clever Cloud avec cache 5 min,
+  repli sur les identifiants du serveur pour les clients sans jetons
+  (usage local conservé) ; `GET /api/session` dit `authenticated`,
+  `email`, `reason`, `own_tokens` ; connexion navigateur :
+  `POST /api/session/login` (`console` : URL + `cli_token`, puis
+  `GET /api/session/login/{cli_token}` un tour à la fois ; `redirect` :
+  callback → `#token=…&secret=…`) ; CORS autorise les nouveaux en-têtes.
+  Front : jetons en sessionStorage, organisation en localStorage envoyée
+  en `X-CC-Org` (plus de `POST /api/session`), « Se déconnecter », jetons
+  refusés → oubliés et écran de connexion avec la raison. CLI :
+  `remote.rs` envoie les jetons du poste ; `fail()` reconnaît un échec
+  d'identifiants et propose `login` (lancé sur `o` dans un terminal).
+  Vérifié en local : serveur sans identifiants → `authenticated:false`
+  avec raison, `login` console → `{ready:false}` en attendant, jetons
+  bidon → 401 « Unknown token » côté API et hint côté CLI, écran de
+  connexion en headless ; la fin de la danse (dépôt des jetons par la
+  console) reste à valider par le propriétaire.
 - **Trois binaires et exécution distante (17/09/2026)** : demandes « un
   binaire uniquement CLI, un uniquement API et un UI+API » et « indiquer
   une URL d'API à la CLI pour de l'exécution distante ». Features cargo

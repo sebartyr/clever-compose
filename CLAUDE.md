@@ -28,10 +28,13 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
 
 - **Indépendant de la CLI clever.** L'outil final n'appelle jamais `clever`
   en sous-processus et ne lit jamais `~/.config/clever-cloud/clever-tools.json`.
-  Identifiants : `CC_API_TOKEN` (bearer) ou `CLEVER_TOKEN` + `CLEVER_SECRET`
-  (OAuth 1.0). Le consumer public de clever-tools (constantes du SDK) sert
-  de repli pour la connexion depuis l'interface (décision du 17/09/2026) :
-  c'est une constante, pas une dépendance. La CLI sert seulement aux tests
+  Identifiants : `CC_API_TOKEN` (bearer), `CLEVER_TOKEN` + `CLEVER_SECRET`
+  (OAuth 1.0), ou `clever-compose login` (`auth.rs`, même danse que
+  `clever login` : page `cli-oauth` de la console + `/v2/self/cli_tokens`,
+  jetons dans `~/.config/clever-cloud/clever-compose.json`, notre fichier
+  dans leur répertoire). Le consumer public de clever-tools (constantes
+  du SDK) est le consumer par défaut (décision du 17/09/2026) : une
+  constante, pas une dépendance. La CLI clever sert seulement aux tests
   manuels et au ménage.
 - **Le plan intermédiaire est le contrat.** Toute évolution qui le touche se
   discute avant d'être codée (les ajouts additifs avec valeur par défaut
@@ -100,13 +103,16 @@ mêmes commits déployés (vérifié en réel).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
-  locaux et archives, session par identifiants d'environnement ou
-  connexion depuis l'interface — jamais de jetons saisis : consumer
-  `CLEVER_CONSUMER_KEY`/`SECRET` (danse OAuth 1.0 avec callback) ou, à
-  défaut, consumer de clever-tools (`clevercloud_sdk::DEFAULT_CONSUMER_*`,
-  callback refusé par l'API : page `cli-oauth` de la console + polling de
-  `/v2/self/cli_tokens`, comme `clever login`) ; sans session, l'interface
-  n'affiche que l'écran de connexion, démarré automatiquement ; front Vue 3 + `@clevercloud/components` dans `web/` à la
+  locaux et archives ; **pas de session serveur** : chaque client envoie
+  ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` ou
+  `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
+  `State::api_for` (cache 5 min), repli sur les identifiants du serveur
+  pour un client sans jetons (usage local) ; connexion du navigateur par
+  `POST /api/session/login` + `GET /api/session/login/{cli_token}`
+  (consumer de clever-tools, page `cli-oauth`) ou danse avec callback
+  (consumer `CLEVER_CONSUMER_KEY`/`SECRET`, jetons rendus dans le fragment
+  de l'URL de retour) ; jetons gardés en sessionStorage ; sans jetons
+  valides, l'interface n'affiche que l'écran de connexion ; front Vue 3 + `@clevercloud/components` dans `web/` à la
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
@@ -306,9 +312,12 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
 ```
 Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
 `--api-url` (`remote.rs`) envoie le projet en `.tar.gz` à `/api/local/upload`
-et rejoue les routes SSE ; l'organisation passe en `X-CC-Org` (extracteur
-`ReqOrg`), la clé en `Authorization: Bearer` (middleware `require_key`,
-`/api/info` et le callback OAuth exemptés).
+et rejoue les routes SSE avec les jetons du poste en en-têtes ;
+l'organisation passe en `X-CC-Org`, la clé en `Authorization: Bearer`
+(middleware `require_key`, `/api/info` et le callback OAuth exemptés).
+`login` / `logout` gèrent les jetons du poste ; un échec d'identifiants
+(`auth::looks_like_auth_failure`) propose `login`, interactivement dans un
+terminal.
 `api` sert l'API sans l'interface (front Vite bâti à part avec
 `VITE_API_URL`, sinon même origine) ; CORS limité aux origines `--cors`,
 qui sont aussi les seuls retours admis après la danse OAuth (`?return=`).

@@ -15,45 +15,35 @@ mod assets;
 mod local;
 
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::exec::platform::Api;
 
-/// Identifiants et organisation courants : ceux de l'environnement au
-/// lancement, ou saisis dans l'interface (`POST /api/session`). Rien n'est
-/// écrit sur le disque.
+pub use crate::auth::Consumer as OauthConsumer;
+
+/// Un client authentifié : les jetons envoyés dans la requête
+/// (`X-CC-Token` + `X-CC-Secret`, ou `X-CC-Api-Token`), validés chez
+/// Clever Cloud, ou les identifiants du serveur (`credentials.json` du
+/// `login`, `CLEVER_TOKEN`/`CLEVER_SECRET`, `CC_API_TOKEN`) pour un
+/// client qui n'en envoie pas : l'usage local, `clever-compose ui` sur
+/// son poste.
+#[derive(Clone)]
 pub struct Session {
     pub api: Api,
     pub org: String,
 }
 
-/// Consumer OAuth 1.0 pour la connexion depuis l'interface. Soit celui de
-/// l'utilisateur (`CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET`, créé
-/// dans la console avec la base URL du serveur : danse classique avec
-/// callback), soit, à défaut, celui de clever-tools (constantes publiques
-/// du SDK) : ce consumer refuse tout callback (« OAuth callback is
-/// invalid ») et se connecte par la page `cli-oauth` de la console, dont
-/// le serveur récupère les jetons sur `/v2/self/cli_tokens`.
-#[derive(Clone)]
-pub struct OauthConsumer {
-    pub key: String,
-    pub secret: String,
-    /// Consumer de clever-tools : connexion par la console.
-    pub builtin: bool,
-}
-
-impl OauthConsumer {
-    /// Le consumer de l'environnement, sinon celui de clever-tools.
-    pub fn from_env() -> Self {
-        match (std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
-            (Ok(key), Ok(secret)) if !key.is_empty() && !secret.is_empty() => OauthConsumer { key, secret, builtin: false },
-            _ => OauthConsumer { key: clevercloud_sdk::DEFAULT_CONSUMER_KEY.into(), secret: clevercloud_sdk::DEFAULT_CONSUMER_SECRET.into(), builtin: true },
-        }
-    }
+/// Jetons validés récemment : on n'interroge pas `/v2/self` à chaque
+/// requête. Clé : les jetons tels qu'envoyés.
+struct Validated {
+    api: Api,
+    email: Option<String>,
+    at: std::time::Instant,
 }
 
 pub struct State {
-    pub session: RwLock<Option<Session>>,
+    /// Identifiants du serveur, pour les clients sans jetons.
+    pub fallback: Option<Session>,
     pub locals: local::Locals,
     pub oauth: OauthConsumer,
     /// Base publique du serveur (`http://<adresse d'écoute>` ou
@@ -67,15 +57,7 @@ pub struct State {
     /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
     /// exposé au-delà du poste.
     pub api_key: Option<String>,
-    /// Connexion par la console en cours (`cli_token` attendu), ou son
-    /// dernier échec.
-    pub console_login: std::sync::Mutex<ConsoleLogin>,
-}
-
-#[derive(Default)]
-pub struct ConsoleLogin {
-    pub pending: bool,
-    pub error: Option<String>,
+    validated: std::sync::Mutex<std::collections::HashMap<String, Validated>>,
 }
 
 /// Ce que le serveur sert et d'où l'interface peut l'appeler.
@@ -94,10 +76,50 @@ pub struct ServeOptions {
     pub open_browser: bool,
 }
 
+/// Jetons envoyés par un client.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum ClientTokens {
+    OAuth1 { token: String, secret: String },
+    Bearer(String),
+}
+
+impl ClientTokens {
+    fn key(&self) -> String {
+        match self {
+            ClientTokens::OAuth1 { token, secret } => format!("o:{token}:{secret}"),
+            ClientTokens::Bearer(t) => format!("b:{t}"),
+        }
+    }
+    fn credentials(&self, consumer: &OauthConsumer) -> clevercloud_sdk::Credentials {
+        match self {
+            ClientTokens::OAuth1 { token, secret } => clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key: consumer.key.clone(), consumer_secret: consumer.secret.clone() },
+            ClientTokens::Bearer(t) => clevercloud_sdk::Credentials::Bearer { token: t.clone() },
+        }
+    }
+}
+
+const VALIDATION_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
 impl State {
-    /// L'API de la session, ou une erreur si aucun identifiant n'est posé.
-    pub fn api(&self) -> Result<Api, String> {
-        self.session.read().unwrap().as_ref().map(|s| s.api.clone()).ok_or_else(|| "aucun identifiant : renseignez un jeton dans l'interface (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN au lancement)".to_string())
+    /// L'API pour un client : ses jetons (validés chez Clever Cloud, cache
+    /// de cinq minutes), sinon les identifiants du serveur. `Err` : rien
+    /// d'utilisable, ou jetons refusés.
+    pub async fn api_for(&self, tokens: Option<&ClientTokens>) -> Result<(Api, Option<String>), String> {
+        let Some(t) = tokens else {
+            return self.fallback.as_ref().map(|s| (s.api.clone(), None)).ok_or_else(|| "aucun identifiant : connectez-vous (jetons X-CC-Token/X-CC-Secret ou X-CC-Api-Token ; `clever-compose login` pour la CLI)".to_string());
+        };
+        let key = t.key();
+        if let Some(v) = self.validated.lock().unwrap().get(&key) {
+            if v.at.elapsed() < VALIDATION_TTL {
+                return Ok((v.api.clone(), v.email.clone()));
+            }
+        }
+        let api = Api::new(String::new(), t.credentials(&self.oauth));
+        let (_, email) = api.whoami().await.map_err(|e| format!("jetons refusés par Clever Cloud : {e}"))?;
+        let mut cache = self.validated.lock().unwrap();
+        cache.retain(|_, v| v.at.elapsed() < VALIDATION_TTL);
+        cache.insert(key, Validated { api: api.clone(), email: email.clone(), at: std::time::Instant::now() });
+        Ok((api, email))
     }
 }
 
@@ -107,7 +129,7 @@ async fn api_only() -> (axum::http::StatusCode, &'static str) {
 
 /// Lance le serveur et bloque jusqu'à Ctrl-C. `session` peut être absente :
 /// l'interface demandera les identifiants.
-pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: OauthConsumer) -> Result<(), String> {
+pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsumer) -> Result<(), String> {
     let listen = o.listen;
     let origins: Vec<String> = o.origins.iter().map(|s| s.trim_end_matches('/').to_string()).collect();
     if let Some(bad) = origins.iter().find(|s| !(s.starts_with("http://") || s.starts_with("https://")) || s[s.find("://").unwrap() + 3..].contains('/')) {
@@ -120,10 +142,11 @@ pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: OauthConsum
             locals.add_dir(dir, false)?;
         }
     }
-    if session.is_none() {
-        eprintln!("aucun identifiant dans l'environnement : l'interface demandera la connexion ({})", if oauth.builtin { "par la console Clever Cloud, consumer de clever-tools" } else { "danse OAuth avec le consumer CLEVER_CONSUMER_KEY" });
+    match &fallback {
+        None => eprintln!("aucun identifiant sur le serveur : chaque client envoie les siens ({})", if oauth.builtin { "connexion par la console Clever Cloud, consumer de clever-tools" } else { "danse OAuth avec le consumer CLEVER_CONSUMER_KEY" }),
+        Some(_) => eprintln!("identifiants du serveur utilisés pour les clients qui n'en envoient pas"),
     }
-    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), console_login: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };

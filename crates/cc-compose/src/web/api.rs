@@ -41,7 +41,7 @@ pub async fn cors(AxState(s): AxState<Shared>, req: axum::extract::Request, next
             let h = r.headers_mut();
             h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_str(o).unwrap());
             h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
-            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type"));
+            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type, Authorization, X-CC-Token, X-CC-Secret, X-CC-Api-Token, X-CC-Org"));
             h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
         }
         return r;
@@ -75,9 +75,9 @@ pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Reques
 pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
-        .route("/api/session", get(session_get).post(session_set))
+        .route("/api/session", get(session_get))
         .route("/api/session/login", post(login_start))
-        .route("/api/session/oauth/start", get(oauth_start))
+        .route("/api/session/login/{cli_token}", get(login_poll))
         .route("/api/session/oauth/callback", get(oauth_callback))
         .route("/api/orgs", get(orgs))
         .route("/api/platform/projects", get(platform_projects))
@@ -123,44 +123,50 @@ fn internal(msg: impl Into<String>) -> ApiError {
 }
 
 async fn info(AxState(s): AxState<Shared>) -> Json<J> {
-    let org = s.session.read().unwrap().as_ref().map(|x| x.org.clone()).unwrap_or_default();
     let stamp = env!("CC_BUILD_STAMP");
     let (commit, secs) = stamp.split_once(' ').unwrap_or((stamp, "0"));
-    Json(json!({ "org": org, "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)), "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some() }))
-}
-
-/// Session courante : identifiants posés ?, organisation choisie, danse
-/// OAuth disponible ?
-async fn session_get(AxState(s): AxState<Shared>) -> Json<J> {
-    let guard = s.session.read().unwrap();
-    let console = s.console_login.lock().unwrap();
     Json(json!({
-        "authenticated": guard.is_some(),
-        "org": guard.as_ref().map(|x| x.org.clone()).unwrap_or_default(),
-        "oauth": true,
-        // Comment l'interface se connecte : `console` (consumer de
-        // clever-tools, jetons récupérés par le serveur) ou `redirect`
-        // (danse avec callback vers ce serveur).
+        "version": env!("CARGO_PKG_VERSION"), "commit": commit, "built": crate::exec::inspect::rfc3339(secs.parse().unwrap_or(0)),
+        "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
+        // Le serveur a-t-il ses propres identifiants (clients sans jetons servis) ?
+        "server_credentials": s.fallback.is_some(),
+        // Comment un navigateur se connecte : `console` (consumer de
+        // clever-tools, jetons rendus par le serveur) ou `redirect` (danse
+        // avec callback vers ce serveur).
         "login_mode": if s.oauth.builtin { "console" } else { "redirect" },
-        "login_pending": console.pending,
-        "login_error": console.error,
     }))
 }
 
-#[derive(Deserialize, Default)]
-struct SessionBody {
-    org: Option<String>,
+/// Jetons et organisation de la requête. `X-CC-Token` + `X-CC-Secret`
+/// (OAuth 1.0, ceux de `login` ou de l'environnement du client) ou
+/// `X-CC-Api-Token` (bearer) ; `X-CC-Org` pour l'organisation visée.
+#[derive(Clone, Default)]
+pub struct Client {
+    pub tokens: Option<super::ClientTokens>,
+    pub org: Option<String>,
 }
 
-/// Choisit l'organisation de la session (les identifiants viennent de
-/// l'environnement ou de la danse OAuth, jamais du corps).
-async fn session_set(AxState(s): AxState<Shared>, Json(b): Json<SessionBody>) -> Result<Json<J>, ApiError> {
-    let api = s.api().map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
-    let orgs = api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("identifiants refusés : {e}")))?;
-    let org = b.org.filter(|o| !o.is_empty()).or_else(|| s.session.read().unwrap().as_ref().map(|x| x.org.clone()).filter(|o| !o.is_empty())).unwrap_or_default();
-    let api = api.for_owner(&org);
-    *s.session.write().unwrap() = Some(super::Session { api, org: org.clone() });
-    Ok(Json(json!({ "authenticated": true, "org": org, "orgs": orgs })))
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
+    type Rejection = std::convert::Infallible;
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, _s: &S) -> Result<Self, Self::Rejection> {
+        let h = |name: &str| parts.headers.get(name).and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let tokens = match (h("x-cc-token"), h("x-cc-secret"), h("x-cc-api-token")) {
+            (Some(token), Some(secret), _) => Some(super::ClientTokens::OAuth1 { token, secret }),
+            (_, _, Some(t)) => Some(super::ClientTokens::Bearer(t)),
+            _ => None,
+        };
+        Ok(Client { tokens, org: h("x-cc-org") })
+    }
+}
+
+/// Qui est le client : jetons valides ?, utilisateur, organisation demandée.
+/// `authenticated: false` avec `reason` quand les jetons sont refusés :
+/// l'interface propose alors la connexion.
+async fn session_get(AxState(s): AxState<Shared>, c: Client) -> Json<J> {
+    match s.api_for(c.tokens.as_ref()).await {
+        Ok((_, email)) => Json(json!({ "authenticated": true, "email": email, "org": c.org.unwrap_or_default(), "own_tokens": c.tokens.is_some() })),
+        Err(reason) => Json(json!({ "authenticated": false, "reason": reason, "org": c.org.unwrap_or_default(), "own_tokens": c.tokens.is_some() })),
+    }
 }
 
 /// Encodage percent d'OAuth (RFC 3986, non réservés seulement).
@@ -196,74 +202,45 @@ fn parse_form(text: &str) -> std::collections::HashMap<String, String> {
     text.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.replace('+', " "))).collect()
 }
 
-/// Point d'entrée unique de la connexion : rend l'URL où envoyer
-/// l'utilisateur et le mode. Consumer de clever-tools : page `cli-oauth`
-/// de la console avec un `cli_token` aléatoire ; le serveur interroge
-/// `/v2/self/cli_tokens` (404 tant que la console n'a pas déposé les
-/// jetons, comme `clever login`) jusqu'à 2 min, puis ouvre la session.
-/// Consumer propre : même chose que `oauth_start`, sans redirection.
+#[derive(Deserialize)]
+struct OauthStart {
+    /// Où renvoyer l'utilisateur à la fin (mode `redirect`) : l'interface
+    /// (même origine, ou une origine `--cors`).
+    #[serde(rename = "return")]
+    return_to: Option<String>,
+}
+
+/// Début de la connexion d'un navigateur. Consumer de clever-tools :
+/// rend l'URL de la page `cli-oauth` de la console et le `cli_token` ;
+/// l'interface interroge ensuite `/api/session/login/{cli_token}` jusqu'à
+/// recevoir les jetons, qu'elle garde et envoie à chaque requête. Consumer
+/// propre : request token, URL d'autorisation ; le callback renvoie les
+/// jetons dans le fragment de l'URL de retour.
 async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
     let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
     if !s.oauth.builtin {
         let url = request_token_redirect(&s, q).await?;
         return Ok(Json(json!({ "mode": "redirect", "url": url })));
     }
-    let mut bytes = [0u8; 20];
-    getrandom::fill(&mut bytes).map_err(|e| internal(format!("aléa : {e}")))?;
-    use base64::Engine;
-    let cli_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    let url = format!("https://console.clever-cloud.com/cli-oauth?cli_version={}&cli_token={}", env!("CARGO_PKG_VERSION"), oauth_enc(&cli_token));
-    {
-        let mut c = s.console_login.lock().unwrap();
-        c.pending = true;
-        c.error = None;
+    let cli_token = crate::auth::cli_token().map_err(internal)?;
+    Ok(Json(json!({ "mode": "console", "url": crate::auth::console_login_url(&cli_token), "cli_token": cli_token })))
+}
+
+/// Un tour d'attente des jetons de `cli_token` : `{ready: false}` tant que
+/// la console ne les a pas déposés, sinon les jetons (vérifiés).
+async fn login_poll(AxState(s): AxState<Shared>, UrlPath(cli_token): UrlPath<String>) -> Result<Json<J>, ApiError> {
+    if cli_token.len() < 16 || !cli_token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(bad("cli_token invalide"));
     }
-    let state = s.clone();
-    tokio::spawn(async move {
-        let result = poll_cli_token(&state, &cli_token).await;
-        let mut c = state.console_login.lock().unwrap();
-        c.pending = false;
-        c.error = result.err();
-    });
-    Ok(Json(json!({ "mode": "console", "url": url })))
-}
-
-async fn poll_cli_token(s: &State, cli_token: &str) -> Result<(), String> {
-    let url = format!("{}/v2/self/cli_tokens?cli_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(cli_token));
-    let client = clevercloud_sdk::oauth10a::reqwest::Client::new();
-    for _ in 0..60 {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let resp = client.get(&url).send().await.map_err(|e| format!("cli_tokens : {e}"))?;
-        if resp.status() == StatusCode::NOT_FOUND {
-            continue;
+    match crate::auth::poll_cli_tokens(&cli_token, 1, |_| {}).await {
+        Ok(mut stored) => {
+            let api = crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+            let _ = api;
+            Ok(Json(json!({ "ready": true, "token": stored.token, "secret": stored.secret, "email": stored.email, "expiration_date": stored.expiration_date })))
         }
-        if !resp.status().is_success() {
-            return Err(format!("cli_tokens : {}", resp.status()));
-        }
-        let v: J = resp.json().await.map_err(|e| format!("cli_tokens : {e}"))?;
-        let (Some(token), Some(secret)) = (v["token"].as_str(), v["secret"].as_str()) else { return Err(format!("cli_tokens : réponse inattendue : {v}")) };
-        let creds = clevercloud_sdk::Credentials::OAuth1 { token: token.into(), secret: secret.into(), consumer_key: s.oauth.key.clone(), consumer_secret: s.oauth.secret.clone() };
-        let api = crate::exec::platform::Api::new(String::new(), creds);
-        api.organisations().await.map_err(|e| format!("jetons obtenus mais refusés par l'API : {e}"))?;
-        *s.session.write().unwrap() = Some(super::Session { api, org: String::new() });
-        return Ok(());
+        Err(e) if e.starts_with("connexion non terminée") => Ok(Json(json!({ "ready": false }))),
+        Err(e) => Err(internal(e)),
     }
-    Err("connexion non terminée dans la console en 2 minutes : recommencez".into())
-}
-
-#[derive(Deserialize)]
-struct OauthStart {
-    /// Où renvoyer l'utilisateur à la fin : l'interface (même origine, ou
-    /// une origine `--cors`).
-    #[serde(rename = "return")]
-    return_to: Option<String>,
-}
-
-/// Étape 1 de la danse : request token, puis redirection vers la page
-/// d'autorisation de Clever Cloud.
-async fn oauth_start(AxState(s): AxState<Shared>, Query(q): Query<OauthStart>) -> Result<Response, ApiError> {
-    let url = request_token_redirect(&s, q).await?;
-    Ok(axum::response::Redirect::temporary(&url).into_response())
 }
 
 /// Request token avec le consumer propre, puis l'URL d'autorisation.
@@ -282,7 +259,7 @@ async fn request_token_redirect(s: &State, q: OauthStart) -> Result<String, ApiE
     params.push(("oauth_callback".into(), format!("{}/api/session/oauth/callback", s.public_base)));
     let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
     let url = format!("{}/v2/oauth/request_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
-    let resp = clevercloud_sdk::oauth10a::reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("request_token : {e}")))?;
+    let resp = reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("request_token : {e}")))?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !status.is_success() {
@@ -300,7 +277,9 @@ struct OauthCallback {
     oauth_verifier: String,
 }
 
-/// Étape 3 : access token, session ouverte, retour à l'interface.
+/// Étape 3 (consumer propre) : access token, vérifié, puis retour à
+/// l'interface avec les jetons dans le fragment (`#token=…&secret=…`,
+/// jamais envoyé au serveur par le navigateur).
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
     let consumer = s.oauth.clone();
     let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
@@ -309,7 +288,7 @@ async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallba
     params.push(("oauth_verifier".into(), q.oauth_verifier.clone()));
     let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
     let url = format!("{}/v2/oauth/access_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
-    let resp = clevercloud_sdk::oauth10a::reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("access_token : {e}")))?;
+    let resp = reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("access_token : {e}")))?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !status.is_success() {
@@ -317,49 +296,36 @@ async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallba
     }
     let form = parse_form(&text);
     let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("access_token : réponse inattendue : {text}"))) };
-    let creds = clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key: consumer.key.clone(), consumer_secret: consumer.secret.clone() };
-    let api = crate::exec::platform::Api::new(String::new(), creds);
-    api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("jeton obtenu mais refusé par l'API : {e}")))?;
-    *s.session.write().unwrap() = Some(super::Session { api, org: String::new() });
-    Ok(axum::response::Redirect::temporary(&return_to).into_response())
+    let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), expiration_date: None, user_id: None, email: None };
+    crate::auth::verify(&mut stored, &consumer).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    Ok(axum::response::Redirect::temporary(&format!("{return_to}#token={}&secret={}", oauth_enc(token), oauth_enc(secret))).into_response())
 }
 
-async fn orgs(AxState(s): AxState<Shared>) -> Result<Json<J>, ApiError> {
-    let api = s.api().map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {
+    let (api, _) = s.api_for(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     let orgs = api.organisations().await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
     Ok(Json(json!({ "orgs": orgs })))
 }
 
-/// Organisation demandée par la requête (`X-CC-Org`, posé par la CLI en
-/// exécution distante) ; sinon celle de la session. La session est
-/// partagée par tous les clients du serveur, l'en-tête permet à chacun
-/// de viser la sienne sans la changer pour les autres.
-#[derive(Clone, Default)]
-pub struct ReqOrg(Option<String>);
-
-impl<S: Send + Sync> axum::extract::FromRequestParts<S> for ReqOrg {
-    type Rejection = std::convert::Infallible;
-    async fn from_request_parts(parts: &mut axum::http::request::Parts, _s: &S) -> Result<Self, Self::Rejection> {
-        Ok(ReqOrg(parts.headers.get("x-cc-org").and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)))
-    }
-}
-
-fn api_of(s: &State, org: &ReqOrg) -> Result<crate::exec::platform::Api, ApiError> {
-    let api = s.api().map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
-    let api = match &org.0 {
-        Some(o) => api.for_owner(o),
+/// L'API d'un client pour une organisation : ses jetons (ou ceux du
+/// serveur), l'organisation de `X-CC-Org` ou celle du serveur.
+async fn api_of(s: &State, c: &Client) -> Result<crate::exec::platform::Api, ApiError> {
+    let (api, _) = s.api_for(c.tokens.as_ref()).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    let org = c.org.clone().or_else(|| s.fallback.as_ref().map(|f| f.org.clone()).filter(|o| !o.is_empty() && c.tokens.is_none()));
+    let api = match org {
+        Some(o) => api.for_owner(&o),
         None => api,
     };
     if api.owner().is_empty() {
-        return Err(ApiError(StatusCode::BAD_REQUEST, "aucune organisation choisie (interface, ou en-tête X-CC-Org)".into()));
+        return Err(ApiError(StatusCode::BAD_REQUEST, "aucune organisation choisie (en-tête X-CC-Org)".into()));
     }
     Ok(api)
 }
 
 // ---------------------------------------------------------------- plateforme
 
-async fn platform_projects(AxState(s): AxState<Shared>, org: ReqOrg) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s, &org)?;
+async fn platform_projects(AxState(s): AxState<Shared>, org: Client) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s, &org).await?;
     let projects = crate::exec::inspect::projects(&api).await.map_err(internal)?;
     Ok(Json(json!({ "projects": projects })))
 }
@@ -367,8 +333,8 @@ async fn platform_projects(AxState(s): AxState<Shared>, org: ReqOrg) -> Result<J
 /// L'état d'un projet sur la plateforme, dans une forme prête pour le
 /// diagramme : applications (instances, dernier déploiement, domaines),
 /// addons, network groups et leurs membres.
-async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Result<Json<J>, ApiError> {
-    let api = api_of(&s, &org)?;
+async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Result<Json<J>, ApiError> {
+    let api = api_of(&s, &org).await?;
     let inv = crate::exec::inspect::discover(&project, &api).await.map_err(internal)?;
     let mut apps = Vec::new();
     for a in &inv.apps {
@@ -402,14 +368,14 @@ struct LogsQuery {
     limit: Option<usize>,
 }
 
-async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn logs(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, Query(q): Query<LogsQuery>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let opts = crate::exec::inspect::LogsOptions { services: q.services.map(|v| v.split(',').filter(|x| !x.is_empty()).map(str::to_string).collect()).unwrap_or_default(), since: q.since, follow: q.follow.unwrap_or(false), limit: q.limit };
-    stream_task(s, move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await })
+    stream_task(s, move |state, mut log| async move { crate::exec::inspect::logs(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await })
 }
 
 /// `ps` tel que la CLI l'affiche (exécution distante).
-async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).map_err(|e| e.1)?, &mut log).await })
+async fn ps(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::inspect::ps(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, &mut log).await })
 }
 
 #[derive(Deserialize, Default)]
@@ -420,17 +386,17 @@ struct DownBody {
     dry_run: bool,
 }
 
-async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn down(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client, body: Option<Json<DownBody>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let b = body.map(|Json(b)| b).unwrap_or_default();
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::down(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, b.dry_run, b.yes, &mut log).await })
 }
 
-async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).map_err(|e| e.1)?, false, &mut log).await })
+async fn stop(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, false, &mut log).await })
 }
 
-async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: ReqOrg) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).map_err(|e| e.1)?, true, &mut log).await })
+async fn start(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String>, org: Client) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    stream_task(s, move |state, mut log| async move { crate::exec::reconcile::stop_start(&project, &api_of(&state, &org).await.map_err(|e| e.1)?, true, &mut log).await })
 }
 
 /// Manifeste, plan et fichiers texte du bucket d'assets du projet.
@@ -651,7 +617,7 @@ struct UpBody {
     assets: bool,
 }
 
-async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: ReqOrg, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let b = body.map(|Json(b)| b).unwrap_or_default();
     Ok(stream_task(s, move |state, mut log| async move {
@@ -661,7 +627,7 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org
         }
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes, assets: b.assets };
-        crate::exec::reconcile::up(&plan, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
+        crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
 
@@ -678,7 +644,7 @@ struct SeedBody {
     no_wait: bool,
 }
 
-async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: ReqOrg, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, Json(b): Json<SeedBody>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let dir = project_dir(&s, &id)?;
     let dump = safe_file(&dir, &b.dump)?;
     Ok(stream_task(s, move |state, mut log| async move {
@@ -688,7 +654,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
         let resolver = crate::plan::registry::Registry::new()?;
         let plan = crate::plan::initdb::seed_plan(&plan, &b.service, &dump, &project_dir, &resolver, b.local)?;
         let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
-        crate::exec::reconcile::up(&plan, &api_of(&state, &org).map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
+        crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
 

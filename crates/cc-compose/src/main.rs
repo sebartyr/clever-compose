@@ -196,6 +196,14 @@ enum Command {
     },
     /// Organisations accessibles avec les identifiants (id et nom)
     Orgs,
+    /// Connexion à Clever Cloud par la console (comme `clever login`) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
+    Login {
+        /// N'ouvre pas le navigateur (l'URL est affichée)
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Oublie les jetons gardés par `login`
+    Logout,
     /// Interface web locale : diagramme des ressources, plan, up, down, logs, édition du compose
     #[cfg(feature = "ui")]
     Ui {
@@ -287,6 +295,18 @@ fn main() -> ExitCode {
         #[cfg(feature = "api")]
         Command::Api { org, listen, cors, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
+        Command::Login { no_open } => cmd_login(!no_open),
+        Command::Logout => match cc_compose::auth::remove() {
+            Ok(true) => {
+                cc_compose::ui::Ui::stderr().done(true, "jetons oubliés");
+                ExitCode::SUCCESS
+            }
+            Ok(false) => {
+                eprintln!("aucun jeton gardé ({})", cc_compose::auth::config_path().display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => fail(&e),
+        },
     }
 }
 
@@ -308,7 +328,38 @@ impl ProjectArgs {
 
 fn fail(msg: &str) -> ExitCode {
     cc_compose::ui::Ui::stderr().done(false, msg);
+    // Jetons refusés ou absents : proposer la connexion, tout de suite si
+    // un humain est au clavier.
+    if cc_compose::auth::looks_like_auth_failure(msg) {
+        if std::io::IsTerminal::is_terminal(&std::io::stdin()) && std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+            eprint!("Se connecter maintenant avec `clever-compose login` ? [O/n] ");
+            let mut line = String::new();
+            let _ = std::io::stdin().read_line(&mut line);
+            if matches!(line.trim().to_ascii_lowercase().as_str(), "" | "o" | "oui" | "y" | "yes") {
+                if cmd_login(true) == ExitCode::SUCCESS {
+                    eprintln!("relancez la commande.");
+                }
+                return ExitCode::from(1);
+            }
+        } else if !msg.contains("clever-compose login") {
+            eprintln!("  → `clever-compose login`, ou CLEVER_TOKEN et CLEVER_SECRET (CC_API_TOKEN) dans l'environnement");
+        }
+    }
     ExitCode::from(1)
+}
+
+fn cmd_login(open: bool) -> ExitCode {
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    match rt.block_on(cc_compose::auth::login(open)) {
+        Ok(s) => {
+            cc_compose::ui::Ui::stderr().done(true, &format!("connecté{} ; jetons gardés dans {}", s.email.map(|e| format!(" en tant que {e}")).unwrap_or_default(), cc_compose::auth::config_path().display()));
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            cc_compose::ui::Ui::stderr().done(false, &e);
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn resolver(images: &Option<PathBuf>) -> Result<Box<dyn cc_compose::plan::images::ImageResolver>, String> {
@@ -419,7 +470,7 @@ fn cmd_images(opts: compose::project::Options) -> ExitCode {
 }
 
 fn api(org: &str) -> Result<cc_compose::exec::platform::Api, String> {
-    let creds = cc_compose::exec::platform::credentials_from_env()?;
+    let (creds, _) = cc_compose::auth::credentials()?;
     Ok(cc_compose::exec::platform::Api::new(org.to_string(), creds))
 }
 
@@ -606,7 +657,11 @@ fn remote_dispatch(url: &str, key: Option<String>, opts: &compose::project::Opti
         Command::Orgs => (Op::Orgs, None),
         _ => return None,
     };
-    let remote = match cc_compose::remote::Remote::new(url, key, org) {
+    let tokens = match cc_compose::auth::credentials() {
+        Ok((c, _)) => Some(c),
+        Err(e) => return Some(fail(&e)),
+    };
+    let remote = match cc_compose::remote::Remote::new(url, key, org, tokens) {
         Ok(r) => r,
         Err(e) => return Some(fail(&e)),
     };
@@ -621,9 +676,9 @@ fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_comp
     // Identifiants de l'environnement, sinon connexion depuis l'interface :
     // consumer CLEVER_CONSUMER_KEY/SECRET (danse avec callback) ou, à
     // défaut, celui de clever-tools (par la console).
-    let session = match (cc_compose::exec::platform::credentials_from_env(), org) {
-        (Ok(creds), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
-        (Ok(creds), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
+    let session = match (cc_compose::auth::credentials(), org) {
+        (Ok((creds, _)), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
+        (Ok((creds, _)), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
         (Err(_), _) => None,
     };
     let oauth = cc_compose::web::OauthConsumer::from_env();
@@ -632,8 +687,8 @@ fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_comp
 }
 
 fn cmd_orgs() -> ExitCode {
-    let creds = match cc_compose::exec::platform::credentials_from_env() {
-        Ok(c) => c,
+    let creds = match cc_compose::auth::credentials() {
+        Ok((c, _)) => c,
         Err(e) => return fail(&e),
     };
     let api = cc_compose::exec::platform::Api::new(String::new(), creds);

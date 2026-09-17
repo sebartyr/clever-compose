@@ -333,6 +333,12 @@ impl Api {
     }
 
     /// L'espace personnel puis les organisations de l'utilisateur
+    /// L'utilisateur des identifiants (`/v2/self`) : id et email.
+    pub async fn whoami(&self) -> PResult<(Option<String>, Option<String>)> {
+        let me: J = self.client.get(&format!("{}/v2/self", self.base())).await.map_err(|e| Self::e("self", e))?;
+        Ok((me["id"].as_str().map(str::to_string), me["email"].as_str().map(str::to_string)))
+    }
+
     /// (`/v2/self`, `/v2/organisations`). Vérifie aussi les identifiants.
     pub async fn organisations(&self) -> PResult<Vec<OrgInfo>> {
         let me: J = self.client.get(&format!("{}/v2/self", self.base())).await.map_err(|e| Self::e("self", e))?;

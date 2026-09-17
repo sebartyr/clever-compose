@@ -14,7 +14,25 @@ let apiKey = '';
 try { apiKey = sessionStorage.getItem('clever-compose.api-key') || ''; } catch { /* stockage indisponible */ }
 export const hasApiKey = () => !!apiKey;
 export const setApiKey = (k) => { apiKey = k || ''; try { if (apiKey) sessionStorage.setItem('clever-compose.api-key', apiKey); else sessionStorage.removeItem('clever-compose.api-key'); } catch { /* stockage indisponible */ } };
-const headers = (body) => ({ ...(body ? { 'Content-Type': 'application/json' } : {}), ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}) });
+// Jetons Clever Cloud de l'utilisateur (danse OAuth faite par ce
+// navigateur), gardés pour l'onglet et envoyés à chaque requête : le
+// serveur agit en son nom. Sans jetons, le serveur utilise les siens s'il
+// en a (usage local). L'organisation choisie part en `X-CC-Org`.
+let tokens = null;
+try { tokens = JSON.parse(sessionStorage.getItem('clever-compose.tokens') || 'null'); } catch { /* stockage indisponible */ }
+export const hasTokens = () => !!(tokens && tokens.token && tokens.secret);
+export const setTokens = (t) => { tokens = t && t.token ? { token: t.token, secret: t.secret, email: t.email || '' } : null; try { if (tokens) sessionStorage.setItem('clever-compose.tokens', JSON.stringify(tokens)); else sessionStorage.removeItem('clever-compose.tokens'); } catch { /* stockage indisponible */ } };
+export const tokensEmail = () => (tokens && tokens.email) || '';
+let org = '';
+try { org = localStorage.getItem('clever-compose.org') || ''; } catch { /* stockage indisponible */ }
+export const currentOrg = () => org;
+export const setOrg = (o) => { org = o || ''; try { if (org) localStorage.setItem('clever-compose.org', org); else localStorage.removeItem('clever-compose.org'); } catch { /* stockage indisponible */ } };
+const headers = (body) => ({
+  ...(body ? { 'Content-Type': 'application/json' } : {}),
+  ...(apiKey ? { Authorization: 'Bearer ' + apiKey } : {}),
+  ...(hasTokens() ? { 'X-CC-Token': tokens.token, 'X-CC-Secret': tokens.secret } : {}),
+  ...(org ? { 'X-CC-Org': org } : {}),
+});
 
 async function json(method, url, body) {
   const res = await fetch(u(url), {
@@ -32,7 +50,7 @@ async function json(method, url, body) {
 export const api = {
   info: () => json('GET', '/api/info'),
   session: () => json('GET', '/api/session'),
-  setSession: (body) => json('POST', '/api/session', body),
+  loginPoll: (cliToken) => json('GET', `/api/session/login/${encodeURIComponent(cliToken)}`),
   orgs: () => json('GET', '/api/orgs'),
   platformProjects: () => json('GET', '/api/platform/projects'),
   inventory: (project) => json('GET', `/api/platform/projects/${encodeURIComponent(project)}/inventory`),

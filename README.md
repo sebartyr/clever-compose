@@ -31,7 +31,8 @@ l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
 ## Usage
 
 ```sh
-export CLEVER_TOKEN=… CLEVER_SECRET=…    # jeton OAuth 1.0 (ou CC_API_TOKEN)
+clever-compose login                     # comme `clever login` : page de la console, jetons gardés dans
+                                         # ~/.config/clever-cloud/clever-compose.json (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN)
 export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
@@ -101,22 +102,32 @@ ressources (network groups, applications, tâches, addons, dépendances) avec
 le détail au clic, `plan` et diagnostics, éditeur du compose (enregistrer
 replanifie), `up`/`seed`/`down` avec le journal en direct, `logs`, exports
 Terraform et script. Les projets déployés de l'organisation s'y retrouvent
-avec l'état des instances. Identifiants : ceux de l'environnement
-(`CLEVER_TOKEN`/`CLEVER_SECRET` ou `CC_API_TOKEN`) ; sinon l'interface
-n'affiche rien d'autre qu'un écran de connexion, qui démarre tout seul :
+avec l'état des instances.
 
-- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` (un consumer que
-  vous créez dans la console, base URL = adresse publique du serveur, par
-  ex. `http://127.0.0.1:7777`), danse OAuth 1.0 classique : la page part
-  vers l'autorisation Clever Cloud et revient par le callback ;
+Identifiants : **chaque client envoie les siens**, à chaque requête
+(`X-CC-Token`/`X-CC-Secret`, ou `X-CC-Api-Token`), et le serveur les
+vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes) avant
+d'agir en son nom ; le serveur ne garde aucune session. Un navigateur
+qui n'en a pas voit un écran de connexion, qui démarre tout seul :
+
+- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` sur le serveur
+  (un consumer que vous créez dans la console, base URL = adresse
+  publique du serveur), danse OAuth 1.0 classique : la page part vers
+  l'autorisation Clever Cloud et le callback ramène les jetons dans le
+  fragment de l'URL ;
 - sans, le consumer de clever-tools (constantes publiques du SDK) : ce
   consumer n'admet aucun callback, la connexion passe par la page
-  `cli-oauth` de la console, ouverte dans un autre onglet ; le serveur
-  récupère les jetons comme `clever login` (`/v2/self/cli_tokens`) et
-  l'interface continue dès que l'accès est autorisé (2 min au plus).
+  `cli-oauth` de la console, ouverte dans un autre onglet ; l'interface
+  interroge le serveur, qui relaie `/v2/self/cli_tokens` comme
+  `clever login`, jusqu'à recevoir les jetons.
 
-Rien n'est écrit sur le disque. L'organisation se choisit dans la liste
-(retenue dans le navigateur, comme les options). L'interface s'adapte aux
+Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
+les oublie. Des jetons refusés (expirés, révoqués) ramènent à l'écran de
+connexion avec la raison. Pour l'usage local, un serveur lancé avec des
+identifiants (`login` fait, ou variables d'environnement) les prête aux
+clients qui n'en envoient pas : `clever-compose ui` sur son poste ne
+demande rien. L'organisation se choisit dans la liste (retenue dans le
+navigateur, envoyée en `X-CC-Org`). L'interface s'adapte aux
 petits écrans (menu des projets en tiroir, détail sous le diagramme).
 
 Scalabilité : le détail d'une application du diagramme porte un formulaire
@@ -135,13 +146,19 @@ est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
 ### Exécution distante depuis la CLI
 
 Une CLI (même bâtie sans les features) peut confier les commandes
-plateforme à un serveur `clever-compose api`, avec les identifiants de ce
-serveur :
+plateforme à un serveur `clever-compose api`, avec **ses propres jetons**
+(ceux de `login` ou de l'environnement), envoyés à chaque requête :
 
 ```sh
-clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE"        # côté serveur (CLEVER_TOKEN/… ou consumer)
-CC_API_URL=https://api.exemple CC_API_KEY="$CLE" clever-compose up --yes   # côté poste (ou --api-url / --api-key)
+clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE"        # côté serveur, sans identifiants
+clever-compose login                                             # côté poste, une fois
+CC_API_URL=https://api.exemple CC_API_KEY="$CLE" clever-compose up --yes   # (ou --api-url / --api-key)
 ```
+
+Sans identifiants ou avec des jetons refusés, la CLI propose
+`clever-compose login` (et le lance sur réponse `o` dans un terminal).
+Une URL d'API en `http://` hors du poste fait partir les jetons en clair :
+mettez du TLS devant.
 
 `up`, `seed`, `down`, `stop`, `start`, `ps`, `logs`, `export` et `orgs`
 passent alors par le serveur : le projet est envoyé en `.tar.gz` (sans

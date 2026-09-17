@@ -10,3 +10,4 @@ pub mod ui;
 #[cfg(feature = "api")]
 pub mod web;
 pub mod remote;
+pub mod auth;

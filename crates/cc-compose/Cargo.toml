@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22"
-getrandom = { version = "0.3", optional = true }
+getrandom = "0.3"
 # La même version que celle d'oauth10a (client signé du SDK), avec
 # `multipart` pour l'envoi d'un projet à un serveur distant (`remote.rs`).
 reqwest = { version = "0.12", default-features = false, features = ["multipart", "json", "rustls-tls-webpki-roots"] }
@@ -52,7 +52,7 @@ quick-xml = "0.37"
 [features]
 default = ["ui"]
 # Serveur HTTP : commande `api`, routes JSON/SSE.
-api = ["dep:axum", "dep:tokio-stream", "dep:zip", "dep:getrandom"]
+api = ["dep:axum", "dep:tokio-stream", "dep:zip"]
 # Interface embarquée (sources ESM + CDN) : commande `ui`.
 ui = ["api", "dep:rust-embed", "dep:mime_guess"]
 # Interface empaquetée par Vite (`web/dist`, `npm run build`) au lieu des

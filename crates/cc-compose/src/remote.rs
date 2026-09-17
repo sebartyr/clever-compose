@@ -18,16 +18,22 @@ pub struct Remote {
     base: String,
     key: Option<String>,
     org: Option<String>,
+    /// Les jetons du poste, envoyés à chaque requête : le serveur agit en
+    /// notre nom, jamais avec les siens.
+    tokens: Option<clevercloud_sdk::Credentials>,
     http: reqwest::Client,
 }
 
 impl Remote {
-    pub fn new(url: &str, key: Option<String>, org: Option<String>) -> Result<Self, String> {
+    pub fn new(url: &str, key: Option<String>, org: Option<String>, tokens: Option<clevercloud_sdk::Credentials>) -> Result<Self, String> {
         let base = url.trim_end_matches('/').to_string();
         if !(base.starts_with("http://") || base.starts_with("https://")) {
             return Err(format!("--api-url `{url}` : URL http(s) attendue"));
         }
-        Ok(Remote { base, key, org: org.filter(|o| !o.is_empty()), http: reqwest::Client::new() })
+        if base.starts_with("http://") && !(base.starts_with("http://127.0.0.1") || base.starts_with("http://localhost") || base.starts_with("http://[::1]")) {
+            eprintln!("avertissement : {base} sans TLS, vos jetons partent en clair");
+        }
+        Ok(Remote { base, key, org: org.filter(|o| !o.is_empty()), tokens, http: reqwest::Client::new() })
     }
 
     fn req(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
@@ -37,6 +43,11 @@ impl Remote {
         }
         if let Some(o) = &self.org {
             r = r.header("X-CC-Org", o);
+        }
+        match &self.tokens {
+            Some(clevercloud_sdk::Credentials::OAuth1 { token, secret, .. }) => r = r.header("X-CC-Token", token).header("X-CC-Secret", secret),
+            Some(clevercloud_sdk::Credentials::Bearer { token }) => r = r.header("X-CC-Api-Token", token),
+            _ => {}
         }
         r
     }
