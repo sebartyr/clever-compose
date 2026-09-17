@@ -31,9 +31,9 @@ l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
 ## Usage
 
 ```sh
-export CLEVER_CONSUMER_KEY=… CLEVER_CONSUMER_SECRET=…   # votre consumer OAuth (console), base URL http://127.0.0.1:7777
-clever-compose login                     # danse OAuth 1.0 dans le navigateur, callback local ; jetons gardés dans
-                                         # ~/.config/clever-cloud/clever-compose.json (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN)
+clever-compose login                     # danse OAuth 1.0 dans le navigateur (consumer clever-compose, callback local
+                                         # 127.0.0.1:7777) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
+                                         # (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN ; CLEVER_CONSUMER_KEY/SECRET pour un autre consumer)
 export CC_ORG=orga_xxx                   # ou --org
 
 clever-compose plan   [--json]                    # ce qui serait créé, coût, diagnostics ; aucun appel à l'API
@@ -48,7 +48,7 @@ clever-compose export [all|terraform|script] -o DIR [--branches]
 clever-compose config --format json               # l'équivalent de `docker compose config`
 clever-compose orgs                               # organisations accessibles avec les identifiants
 clever-compose ui     [--listen 127.0.0.1:7777] [--no-open] [--public-url URL]   # interface web locale
-clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part ou CLI distante
+clever-compose api    [--listen 127.0.0.1:7777] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]  # API seule, interface déployée à part
 ```
 
 Options de projet, avant ou après la commande, comme `docker compose` :
@@ -106,17 +106,18 @@ Terraform et script. Les projets déployés de l'organisation s'y retrouvent
 avec l'état des instances.
 
 Identifiants : **chaque client envoie les siens**, à chaque requête
-(`X-CC-Token`/`X-CC-Secret` avec le consumer qui les a émis en
-`X-CC-Consumer-Key`/`X-CC-Consumer-Secret`, ou `X-CC-Api-Token`), et le
+(`X-CC-Token`/`X-CC-Secret`, ou `X-CC-Api-Token`), et le
 serveur les vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes)
-avant d'agir en son nom ; le serveur ne garde aucune session. **Aucun
-consumer n'est embarqué** : `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET`
-sont requis dans l'environnement du serveur (un consumer que vous créez
-dans la console, base URL = `--public-url`, callback
-`/api/session/oauth/callback`), sinon `ui`/`api` refusent de démarrer. Un
-navigateur sans jetons voit un écran de connexion qui démarre tout seul :
-la page part vers l'autorisation Clever Cloud et le callback ramène les
-jetons dans le fragment de l'URL.
+avant d'agir en son nom ; le serveur ne garde aucune session. Le consumer
+OAuth est celui de clever-compose, embarqué (base URL
+`http://127.0.0.1:7777/`, ce qui convient au poste) ; `CLEVER_CONSUMER_KEY`
+/ `CLEVER_CONSUMER_SECRET` dans l'environnement le remplacent toujours
+(un consumer que vous créez dans la console, base URL = `--public-url`,
+callback `/api/session/oauth/callback`, indispensable pour un serveur
+ailleurs que sur `127.0.0.1:7777`). Un navigateur sans jetons voit un
+écran de connexion qui démarre tout seul : la page part vers
+l'autorisation Clever Cloud et le callback ramène les jetons dans le
+fragment de l'URL.
 
 Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
 les oublie. Des jetons refusés (expirés, révoqués) ramènent à l'écran de
@@ -140,40 +141,13 @@ recréer ; un addon existant n'est jamais recréé, un changement de plan
 d'addon est signalé et reste manuel. Le `.env` du projet (ou `--env-file`)
 est lu pour l'interpolation, listé dans l'éditeur et poussé avec les assets.
 
-### Exécution distante depuis la CLI
+### Clé d'API
 
-Une CLI (même bâtie sans les features) peut confier les commandes
-plateforme à un serveur `clever-compose api`, avec **ses propres jetons**
-(ceux de `login` ou de l'environnement), envoyés à chaque requête :
-
-```sh
-CLEVER_CONSUMER_KEY=… CLEVER_CONSUMER_SECRET=… clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE" --public-url https://api.exemple
-clever-compose login --api-url https://api.exemple --api-key "$CLE"      # côté poste, une fois : la danse passe par le serveur
-CC_API_URL=https://api.exemple CC_API_KEY="$CLE" clever-compose up --yes   # (ou --api-url / --api-key)
-```
-
-Deux façons d'obtenir des jetons sur le poste : `login` seul fait la
-danse avec **votre** consumer (`CLEVER_CONSUMER_KEY`/`SECRET` dans
-l'environnement, base URL `http://127.0.0.1:7777`, `--callback-port` pour
-changer) et les jetons servent en local comme à distance ; `login
---api-url` la fait passer par le serveur (son consumer, son callback), la
-CLI vient chercher les jetons, qui ne valent alors qu'avec ce serveur.
-Sans identifiants ou avec des jetons refusés, la CLI propose
-`clever-compose login` (et le lance sur réponse `o` dans un terminal).
-Une URL d'API en `http://` hors du poste fait partir les jetons en clair :
-mettez du TLS devant.
-
-`up`, `seed`, `down`, `stop`, `start`, `ps`, `logs`, `export` et `orgs`
-passent alors par le serveur : le projet est envoyé en `.tar.gz` (sans
-`.git`, `node_modules`, `target`), extrait dans un répertoire temporaire
-du serveur et retiré après ; le journal revient en direct. `plan` et
-`config` restent locaux. L'organisation de la CLI (`--org`/`CC_ORG`) est
-transmise par requête (`X-CC-Org`), sans changer celle de l'interface.
-Limites : `seed --local` et `export --branches` agissent sur le poste,
-donc refusés à distance ; l'export distant ne rend que `main.tf` et
-`bootstrap.sh`, pas les dépôts synthétiques. `--api-key` protège tout
-`/api/*` (sauf `/api/info`) par `Authorization: Bearer` ; l'interface la
-demande une fois par onglet. Sans clé, le serveur est à réserver au poste.
+`--api-key CLÉ` (ou `CC_API_KEY`) sur `ui`/`api` exige `Authorization:
+Bearer CLÉ` sur tout `/api/*` sauf `/api/info` ; l'interface la demande une
+fois par onglet. Sans clé, le serveur est à réserver au poste. La CLI, elle,
+se suffit à elle-même : elle parle directement à Clever Cloud, jamais à un
+serveur `clever-compose api`.
 
 ### Interface déployée à part
 

@@ -17,9 +17,9 @@ path = "src/main.rs"
 [dependencies]
 base64 = "0.22"
 getrandom = "0.3"
-# La même version que celle d'oauth10a (client signé du SDK), avec
-# `multipart` pour l'envoi d'un projet à un serveur distant (`remote.rs`).
-reqwest = { version = "0.12", default-features = false, features = ["multipart", "json", "rustls-tls-webpki-roots"] }
+# La même version que celle d'oauth10a (client signé du SDK) ; appels
+# OAuth non signés de la danse (`auth.rs`).
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 cc-compose-model.workspace = true
 clevercloud-sdk = "1.0.1"
 git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }

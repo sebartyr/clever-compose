@@ -1,15 +1,15 @@
 //! Identifiants du poste et connexion (`clever-compose login`). Danse
-//! OAuth 1.0 à trois pattes avec **votre** consumer, obligatoire dans
-//! l'environnement (`CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET`,
-//! créé dans la console) : request token avec un callback local
-//! (`http://127.0.0.1:<port>/callback`, à déclarer comme base URL du
-//! consumer), autorisation dans le navigateur, access token. Les jetons
-//! sont gardés dans `$XDG_CONFIG_HOME/clever-cloud/clever-compose.json`
-//! (notre fichier, à côté de celui de clever-tools, jamais dedans).
+//! OAuth 1.0 à trois pattes avec le consumer de clever-compose (embarqué,
+//! base URL `http://127.0.0.1:7777/`), ou celui de l'environnement
+//! (`CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET`, qui prime toujours) :
+//! request token avec un callback local (`http://127.0.0.1:<port>/callback`),
+//! autorisation dans le navigateur, access token. Les jetons sont gardés
+//! dans `$XDG_CONFIG_HOME/clever-cloud/clever-compose.json` (notre
+//! fichier, à côté de celui de clever-tools, jamais dedans).
 //!
 //! Ordre de résolution des identifiants : `CC_API_TOKEN`, puis
-//! `CLEVER_TOKEN` + `CLEVER_SECRET` (signés avec le consumer de
-//! l'environnement), puis le fichier. Aucun consumer n'est embarqué.
+//! `CLEVER_TOKEN` + `CLEVER_SECRET` (signés avec le consumer courant),
+//! puis le fichier.
 
 use std::path::PathBuf;
 
@@ -25,12 +25,23 @@ pub struct Consumer {
     pub secret: String,
 }
 
-pub const CONSUMER_HINT: &str = "CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET requis dans l'environnement (consumer OAuth créé dans la console Clever Cloud)";
+/// Consumer OAuth « clever-compose » (console Clever Cloud, base URL
+/// `http://127.0.0.1:7777/`). Comme clever-tools embarque le sien : un
+/// consumer public identifie l'application, il ne donne accès à rien
+/// sans l'autorisation de l'utilisateur.
+pub const DEFAULT_CONSUMER_KEY: &str = "4cUX75GQHaKwJIBnjj63eXrKNiWlqe";
+/// À renseigner (secret du consumer ci-dessus). Vide : seul
+/// l'environnement peut fournir un consumer.
+pub const DEFAULT_CONSUMER_SECRET: &str = "";
+
+pub const CONSUMER_HINT: &str = "CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET requis dans l'environnement (consumer OAuth créé dans la console Clever Cloud) : aucun consumer par défaut dans cette compilation";
 
 impl Consumer {
+    /// L'environnement d'abord, sinon le consumer embarqué.
     pub fn from_env() -> Result<Self, String> {
         match (std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
             (Ok(key), Ok(secret)) if !key.is_empty() && !secret.is_empty() => Ok(Consumer { key, secret }),
+            _ if !DEFAULT_CONSUMER_SECRET.is_empty() => Ok(Consumer { key: DEFAULT_CONSUMER_KEY.into(), secret: DEFAULT_CONSUMER_SECRET.into() }),
             _ => Err(CONSUMER_HINT.into()),
         }
     }
@@ -44,11 +55,6 @@ pub struct Stored {
     /// Clé du consumer qui a émis ces jetons : ils ne valent qu'avec lui.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consumer_key: Option<String>,
-    /// Jetons obtenus par la danse d'un serveur `clever-compose api` : le
-    /// consumer est le sien, le poste n'en a pas le secret ; utilisables
-    /// avec `--api-url` sur ce serveur seulement.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -100,26 +106,6 @@ pub fn remove() -> Result<bool, String> {
 pub enum Source {
     Env,
     File(PathBuf),
-    /// Jetons obtenus via ce serveur (`login --api-url`) : utilisables
-    /// seulement à distance, avec lui.
-    Server(String),
-}
-
-/// Identifiants du poste pour une exécution locale (refuse ceux qui ne
-/// valent qu'avec un serveur).
-pub fn local_credentials() -> Result<Credentials, String> {
-    match credentials()? {
-        (_, Source::Server(url)) => Err(format!("les jetons de {} ont été obtenus via {url} : utilisables avec `--api-url {url}` seulement (ou `clever-compose login` avec votre consumer CLEVER_CONSUMER_KEY/SECRET)", config_path().display())),
-        (c, _) => Ok(c),
-    }
-}
-
-/// Identifiants du poste pour un serveur `--api-url` donné.
-pub fn remote_credentials(api_url: &str) -> Result<Credentials, String> {
-    match credentials()? {
-        (_, Source::Server(url)) if url != api_url.trim_end_matches('/') => Err(format!("les jetons de {} ont été obtenus via {url}, pas {api_url} : `clever-compose login --api-url {api_url}`", config_path().display())),
-        (c, _) => Ok(c),
-    }
 }
 
 /// Identifiants du poste : environnement, sinon fichier de `login`.
@@ -134,10 +120,6 @@ pub fn credentials() -> Result<(Credentials, Source), String> {
         return Ok((Credentials::OAuth1 { token, secret, consumer_key: consumer.key, consumer_secret: consumer.secret }, Source::Env));
     }
     if let Some(s) = load() {
-        if let Some(url) = &s.api_url {
-            // Le serveur signe avec son consumer : consumer vide côté poste.
-            return Ok((Credentials::OAuth1 { token: s.token, secret: s.secret, consumer_key: String::new(), consumer_secret: String::new() }, Source::Server(url.clone())));
-        }
         let consumer = Consumer::from_env()?;
         if s.consumer_key.as_deref().is_some_and(|k| k != consumer.key) {
             return Err(format!("les jetons de {} viennent d'un autre consumer que CLEVER_CONSUMER_KEY : `clever-compose login` avec celui-ci", config_path().display()));
@@ -239,51 +221,10 @@ pub async fn login(port: u16, open_browser: bool) -> Result<Stored, String> {
     }
     let verifier = tokio::time::timeout(std::time::Duration::from_secs(300), wait_callback(&listener, &token)).await.map_err(|_| "aucun retour du navigateur en 5 minutes : recommencez".to_string())??;
     let (t, s) = access_token(&consumer, &token, &request_secret, &verifier).await?;
-    let mut stored = Stored { token: t, secret: s, consumer_key: None, api_url: None, user_id: None, email: None };
+    let mut stored = Stored { token: t, secret: s, consumer_key: None, user_id: None, email: None };
     verify(&mut stored, &consumer).await?;
     save(&stored)?;
     Ok(stored)
-}
-
-/// La danse par un serveur `clever-compose api` (`login --api-url`) : le
-/// serveur fait le request token avec son consumer et son callback, la
-/// CLI affiche l'URL d'autorisation puis vient chercher les jetons.
-pub async fn login_via_server(url: &str, api_key: Option<&str>, open_browser: bool) -> Result<Stored, String> {
-    let base = url.trim_end_matches('/').to_string();
-    let http = reqwest::Client::new();
-    let auth = |r: reqwest::RequestBuilder| match api_key {
-        Some(k) => r.bearer_auth(k),
-        None => r,
-    };
-    let start = auth(http.post(format!("{base}/api/session/login")).json(&serde_json::json!({ "cli": true }))).send().await.map_err(|e| format!("{base} : {e}"))?;
-    if !start.status().is_success() {
-        return Err(format!("{base} : {} {}", start.status(), start.text().await.unwrap_or_default()));
-    }
-    let v: serde_json::Value = start.json().await.map_err(|e| e.to_string())?;
-    let (Some(authorize), Some(request_token)) = (v["url"].as_str(), v["request_token"].as_str()) else { return Err(format!("réponse inattendue du serveur : {v}")) };
-    eprintln!("Ouvrez cette page pour autoriser clever-compose (via {base}) :
-  {authorize}");
-    if open_browser {
-        let _ = std::process::Command::new("xdg-open").arg(authorize).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
-    }
-    for i in 0..150 {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        if i > 0 && i % 15 == 0 {
-            eprintln!("  en attente de l'autorisation dans le navigateur…");
-        }
-        let resp = auth(http.get(format!("{base}/api/session/login/{}", oauth_enc(request_token)))).send().await.map_err(|e| format!("{base} : {e}"))?;
-        if !resp.status().is_success() {
-            return Err(format!("{base} : {} {}", resp.status(), resp.text().await.unwrap_or_default()));
-        }
-        let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-        if v["ready"].as_bool() != Some(true) {
-            continue;
-        }
-        let stored = Stored { token: v["token"].as_str().unwrap_or_default().into(), secret: v["secret"].as_str().unwrap_or_default().into(), consumer_key: v["consumer_key"].as_str().map(str::to_string), api_url: Some(base.clone()), user_id: None, email: v["email"].as_str().map(str::to_string) };
-        save(&stored)?;
-        return Ok(stored);
-    }
-    Err("aucun retour du navigateur en 5 minutes : recommencez".into())
 }
 
 /// Une requête HTTP minimale sur le callback : `GET /callback?oauth_token=…&oauth_verifier=…`.

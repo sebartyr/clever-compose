@@ -52,12 +52,8 @@ pub struct State {
     /// Origines autorisées en CORS (interface servie ailleurs) ; aussi les
     /// seules destinations acceptées pour le retour après la danse OAuth.
     pub origins: Vec<String>,
-    /// Request tokens en attente d'autorisation → (secret, URL de retour ;
-    /// `None` pour une CLI, qui viendra chercher les jetons).
-    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, Option<String>)>>,
-    /// Jetons obtenus pour une CLI, à retirer dès qu'elle les a lus
-    /// (request token → jetons, instant).
-    pub cli_tokens: std::sync::Mutex<std::collections::HashMap<String, (crate::auth::Stored, std::time::Instant)>>,
+    /// Request tokens en attente d'autorisation → (secret, URL de retour).
+    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
     /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
     /// exposé au-delà du poste.
     pub api_key: Option<String>,
@@ -83,26 +79,21 @@ pub struct ServeOptions {
 /// Jetons envoyés par un client.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ClientTokens {
-    /// Un jeton OAuth 1.0 n'est valable qu'avec le consumer qui l'a
-    /// émis : le client envoie le sien (`X-CC-Consumer-Key`/`-Secret`) ;
-    /// sans, celui du serveur (jetons issus de sa propre danse).
-    OAuth1 { token: String, secret: String, consumer: Option<(String, String)> },
+    /// Jetons issus de la danse de ce serveur, signés avec son consumer.
+    OAuth1 { token: String, secret: String },
     Bearer(String),
 }
 
 impl ClientTokens {
     fn key(&self) -> String {
         match self {
-            ClientTokens::OAuth1 { token, secret, consumer } => format!("o:{token}:{secret}:{}", consumer.as_ref().map(|(k, _)| k.as_str()).unwrap_or("")),
+            ClientTokens::OAuth1 { token, secret } => format!("o:{token}:{secret}"),
             ClientTokens::Bearer(t) => format!("b:{t}"),
         }
     }
     fn credentials(&self, server: &OauthConsumer) -> clevercloud_sdk::Credentials {
         match self {
-            ClientTokens::OAuth1 { token, secret, consumer } => {
-                let (consumer_key, consumer_secret) = consumer.clone().unwrap_or_else(|| (server.key.clone(), server.secret.clone()));
-                clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key, consumer_secret }
-            }
+            ClientTokens::OAuth1 { token, secret } => clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key: server.key.clone(), consumer_secret: server.secret.clone() },
             ClientTokens::Bearer(t) => clevercloud_sdk::Credentials::Bearer { token: t.clone() },
         }
     }
@@ -156,7 +147,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
         None => eprintln!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer CLEVER_CONSUMER_KEY, base URL {public_base})"),
         Some(_) => eprintln!("identifiants du serveur utilisés pour les clients qui n'en envoient pas"),
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), cli_tokens: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };

@@ -30,13 +30,16 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
   en sous-processus et ne lit jamais `~/.config/clever-cloud/clever-tools.json`.
   Identifiants : `CC_API_TOKEN` (bearer), `CLEVER_TOKEN` + `CLEVER_SECRET`
   (OAuth 1.0), ou `clever-compose login` (`auth.rs` : danse OAuth 1.0
-  avec callback local `127.0.0.1:<port>`, ou via un serveur `--api-url` ;
-  jetons dans `~/.config/clever-cloud/clever-compose.json`, notre fichier
-  dans leur répertoire). **Aucun consumer embarqué** (décision du
-  17/09/2026) : `CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET` requis dans
-  l'environnement pour tout ce qui signe en OAuth 1.0 (`login`, `ui`,
-  `api`, `CLEVER_TOKEN`). La CLI clever sert seulement aux tests manuels
-  et au ménage.
+  avec callback local `127.0.0.1:<port>` ; jetons dans
+  `~/.config/clever-cloud/clever-compose.json`, notre fichier dans leur
+  répertoire). Consumer **de clever-compose embarqué** (`auth.rs`,
+  `DEFAULT_CONSUMER_*`, base URL `http://127.0.0.1:7777/` ; décision du
+  17/09/2026, comme clever-tools embarque le sien), toujours remplacé par
+  `CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET` si présents. **La CLI se
+  suffit à elle-même** : aucune exécution via un serveur distant (retirée
+  le 17/09/2026) ; seul le front peut viser une API ailleurs
+  (`VITE_API_URL`). La CLI clever sert seulement aux tests manuels et au
+  ménage.
 - **Le plan intermédiaire est le contrat.** Toute évolution qui le touche se
   discute avant d'être codée (les ajouts additifs avec valeur par défaut
   absente du JSON sont tolérés, et signalés).
@@ -105,15 +108,13 @@ mêmes commits déployés (vérifié en réel).
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
   locaux et archives ; **pas de session serveur** : chaque client envoie
-  ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` +
-  `X-CC-Consumer-Key`/`-Secret` du consumer émetteur, ou `X-CC-Api-Token`,
-  extracteur `Client`), validés chez Clever Cloud par
+  ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` issus de la
+  danse du serveur, ou `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
   pour un client sans jetons (usage local) ; connexion par
   `POST /api/session/login` (request token, callback du serveur) :
-  navigateur → jetons dans le fragment de l'URL de retour ; CLI
-  (`cli: true`) → `GET /api/session/login/{request_token}` jusqu'aux
-  jetons, rendus une fois ; jetons gardés en sessionStorage ; sans jetons
+  navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
+  en sessionStorage ; sans jetons
   valides, l'interface n'affiche que l'écran de connexion ; front Vue 3 + `@clevercloud/components` dans `web/` à la
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
@@ -310,13 +311,12 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
   orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ]
   api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ]
-  options globales : --api-url URL (CC_API_URL) --api-key CLÉ (CC_API_KEY) : exécution distante
+  login [--no-open] [--callback-port 7777] | logout
 ```
 Features : `ui` (défaut) ⊃ `api` ⊃ rien (CLI seule) ; `ui-bundled` ⊃ `ui`.
-`--api-url` (`remote.rs`) envoie le projet en `.tar.gz` à `/api/local/upload`
-et rejoue les routes SSE avec les jetons du poste en en-têtes ;
-l'organisation passe en `X-CC-Org`, la clé en `Authorization: Bearer`
-(middleware `require_key`, `/api/info` et le callback OAuth exemptés).
+Côté serveur, l'organisation passe en `X-CC-Org`, la clé en
+`Authorization: Bearer` (middleware `require_key`, `/api/info` et le
+callback OAuth exemptés).
 `login` / `logout` gèrent les jetons du poste ; un échec d'identifiants
 (`auth::looks_like_auth_failure`) propose `login`, interactivement dans un
 terminal.

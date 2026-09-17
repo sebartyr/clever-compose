@@ -14,23 +14,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 struct Cli {
     #[command(flatten)]
     project: ProjectArgs,
-    #[command(flatten)]
-    remote: RemoteArgs,
     #[command(subcommand)]
     command: Command,
-}
-
-/// Exécution distante : les commandes plateforme passent par un serveur
-/// `clever-compose api`, avec ses identifiants.
-#[derive(Args, Clone)]
-#[command(next_help_heading = "Exécution distante")]
-struct RemoteArgs {
-    /// URL d'un serveur `clever-compose api` ; up, seed, down, stop, start, ps, logs, export et orgs s'y exécutent (plan et config restent locaux)
-    #[arg(long, global = true, env = "CC_API_URL", value_name = "URL")]
-    api_url: Option<String>,
-    /// Clé exigée par ce serveur (son --api-key)
-    #[arg(long, global = true, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
-    api_key: Option<String>,
 }
 
 /// Options de lecture du compose, comme `docker compose`.
@@ -222,11 +207,11 @@ enum Command {
         /// Base publique du serveur si un proxy est devant (callback OAuth), ex. https://compose.exemple
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
-        /// Clé exigée des clients (CLI distante : CC_API_KEY) ; sinon aucune vérification
+        /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
         #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
     },
-    /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL) ou une CLI distante (--api-url)
+    /// API seule, sans interface : pour une interface déployée à part (front Vite bâti avec VITE_API_URL)
     #[cfg(feature = "api")]
     Api {
         /// Organisation initiale (sinon choisie dans l'interface)
@@ -241,7 +226,7 @@ enum Command {
         /// Base publique de l'API si un proxy est devant (callback OAuth), ex. https://api.exemple
         #[arg(long, value_name = "URL")]
         public_url: Option<String>,
-        /// Clé exigée des clients (CLI distante : CC_API_KEY) ; sinon aucune vérification
+        /// Clé exigée des clients de l'API (interface déployée à part) ; sinon aucune vérification
         #[arg(long, env = "CC_API_KEY", value_name = "CLÉ", hide_env_values = true)]
         api_key: Option<String>,
     },
@@ -276,11 +261,6 @@ fn build_version() -> &'static str {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let opts = cli.project.to_options();
-    if let Some(url) = cli.remote.api_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
-        if let Some(r) = remote_dispatch(url, cli.remote.api_key.clone(), &opts, &cli.command) {
-            return r;
-        }
-    }
     match cli.command {
         Command::Plan { plan, json } => cmd_plan(opts, &plan, json),
         Command::Config { format } => cmd_config(opts, format),
@@ -298,7 +278,7 @@ fn main() -> ExitCode {
         #[cfg(feature = "api")]
         Command::Api { org, listen, cors, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
-        Command::Login { no_open, callback_port } => cmd_login(callback_port, !no_open, cli.remote.api_url.as_deref().map(str::trim).filter(|u| !u.is_empty()), cli.remote.api_key.as_deref()),
+        Command::Login { no_open, callback_port } => cmd_login(callback_port, !no_open),
         Command::Logout => match cc_compose::auth::remove() {
             Ok(true) => {
                 cc_compose::ui::Ui::stderr().done(true, "jetons oubliés");
@@ -339,7 +319,7 @@ fn fail(msg: &str) -> ExitCode {
             let mut line = String::new();
             let _ = std::io::stdin().read_line(&mut line);
             if matches!(line.trim().to_ascii_lowercase().as_str(), "" | "o" | "oui" | "y" | "yes") {
-                if cmd_login(7777, true, std::env::var("CC_API_URL").ok().as_deref().filter(|u| !u.is_empty()), std::env::var("CC_API_KEY").ok().as_deref()) == ExitCode::SUCCESS {
+                if cmd_login(7777, true) == ExitCode::SUCCESS {
                     eprintln!("relancez la commande.");
                 }
                 return ExitCode::from(1);
@@ -351,16 +331,9 @@ fn fail(msg: &str) -> ExitCode {
     ExitCode::from(1)
 }
 
-/// Avec `--api-url`, la danse passe par le serveur (son consumer, son
-/// callback) ; sinon par le poste, avec CLEVER_CONSUMER_KEY/SECRET et un
-/// callback local.
-fn cmd_login(port: u16, open: bool, api_url: Option<&str>, api_key: Option<&str>) -> ExitCode {
+fn cmd_login(port: u16, open: bool) -> ExitCode {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-    let result = match api_url {
-        Some(url) => rt.block_on(cc_compose::auth::login_via_server(url, api_key, open)),
-        None => rt.block_on(cc_compose::auth::login(port, open)),
-    };
-    match result {
+    match rt.block_on(cc_compose::auth::login(port, open)) {
         Ok(s) => {
             cc_compose::ui::Ui::stderr().done(true, &format!("connecté{} ; jetons gardés dans {}", s.email.map(|e| format!(" en tant que {e}")).unwrap_or_default(), cc_compose::auth::config_path().display()));
             ExitCode::SUCCESS
@@ -480,7 +453,7 @@ fn cmd_images(opts: compose::project::Options) -> ExitCode {
 }
 
 fn api(org: &str) -> Result<cc_compose::exec::platform::Api, String> {
-    let creds = cc_compose::auth::local_credentials()?;
+    let (creds, _) = cc_compose::auth::credentials()?;
     Ok(cc_compose::exec::platform::Api::new(org.to_string(), creds))
 }
 
@@ -646,48 +619,13 @@ fn cmd_logs(opts: compose::project::Options, org: &str, lopts: cc_compose::exec:
     run_stateless(cc_compose::exec::inspect::logs(&project, &api, &lopts, &mut log))
 }
 
-/// Les commandes qui parlent à la plateforme passent par le serveur ;
-/// `None` pour celles qui restent locales (plan, config, images, ui, api).
-fn remote_dispatch(url: &str, key: Option<String>, opts: &compose::project::Options, command: &Command) -> Option<ExitCode> {
-    use cc_compose::remote::Op;
-    let (op, org) = match command {
-        Command::Up { org, plan, dry_run, yes, no_wait, assets } => (Op::Up { yes: *yes, dry_run: *dry_run, no_wait: *no_wait, allow_ephemeral: plan.allow_ephemeral, assets: *assets }, Some(org.org.clone())),
-        Command::Seed { org, service, file, local, yes, no_wait, .. } => (Op::Seed { service: service.clone(), dump: file.clone(), local: *local, yes: *yes, no_wait: *no_wait }, Some(org.org.clone())),
-        Command::Down { org, all, dry_run, yes } => (Op::Down { all: *all, dry_run: *dry_run, yes: *yes }, Some(org.org.clone())),
-        Command::Stop { org } => (Op::Stop, Some(org.org.clone())),
-        Command::Start { org } => (Op::Start, Some(org.org.clone())),
-        Command::Ps { org } => (Op::Ps, Some(org.org.clone())),
-        Command::Logs { org, services, since, limit, follow } => (Op::Logs { services: services.clone(), since: since.clone(), limit: *limit, follow: *follow }, Some(org.org.clone())),
-        Command::Export { plan, what, output, branches } => {
-            if *branches {
-                return Some(fail("export --branches écrit dans le dépôt du poste : incompatible avec --api-url"));
-            }
-            (Op::Export { terraform: !matches!(what, ExportWhat::Script), script: !matches!(what, ExportWhat::Terraform), allow_ephemeral: plan.allow_ephemeral, output: output.clone() }, None)
-        }
-        Command::Orgs => (Op::Orgs, None),
-        _ => return None,
-    };
-    let tokens = match cc_compose::auth::remote_credentials(url) {
-        Ok(c) => Some(c),
-        Err(e) => return Some(fail(&e)),
-    };
-    let remote = match cc_compose::remote::Remote::new(url, key, org, tokens) {
-        Ok(r) => r,
-        Err(e) => return Some(fail(&e)),
-    };
-    let project = project_name(opts);
-    let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
-    let mut log = ui_log(matches!(command, Command::Logs { .. }));
-    Some(run_stateless(cc_compose::remote::run(&remote, op, &project_dir, &project, &mut log)))
-}
-
 #[cfg(feature = "api")]
 fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_compose::web::ServeOptions) -> ExitCode {
     // Le consumer est obligatoire (danse des navigateurs, signature des
     // jetons sans consumer) ; les identifiants du serveur sont optionnels.
-    let session = match (cc_compose::auth::local_credentials(), org) {
-        (Ok(creds), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
-        (Ok(creds), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
+    let session = match (cc_compose::auth::credentials(), org) {
+        (Ok((creds, _)), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
+        (Ok((creds, _)), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
         (Err(_), _) => None,
     };
     let oauth = match cc_compose::web::OauthConsumer::from_env() {
@@ -699,8 +637,8 @@ fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_comp
 }
 
 fn cmd_orgs() -> ExitCode {
-    let creds = match cc_compose::auth::local_credentials() {
-        Ok(c) => c,
+    let creds = match cc_compose::auth::credentials() {
+        Ok((c, _)) => c,
         Err(e) => return fail(&e),
     };
     let api = cc_compose::exec::platform::Api::new(String::new(), creds);

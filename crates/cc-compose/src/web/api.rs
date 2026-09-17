@@ -41,7 +41,7 @@ pub async fn cors(AxState(s): AxState<Shared>, req: axum::extract::Request, next
             let h = r.headers_mut();
             h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_str(o).unwrap());
             h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
-            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type, Authorization, X-CC-Token, X-CC-Secret, X-CC-Consumer-Key, X-CC-Consumer-Secret, X-CC-Api-Token, X-CC-Org"));
+            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type, Authorization, X-CC-Token, X-CC-Secret, X-CC-Api-Token, X-CC-Org"));
             h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
         }
         return r;
@@ -65,7 +65,7 @@ pub async fn require_key(AxState(s): AxState<Shared>, req: axum::extract::Reques
         if !exempt {
             let given = req.headers().get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(str::trim);
             if given != Some(key.as_str()) {
-                return ApiError(StatusCode::UNAUTHORIZED, "clé d'API absente ou invalide (--api-key du serveur, CC_API_KEY côté client)".into()).into_response();
+                return ApiError(StatusCode::UNAUTHORIZED, "clé d'API absente ou invalide (--api-key du serveur)".into()).into_response();
             }
         }
     }
@@ -77,7 +77,6 @@ pub fn router(state: Shared) -> Router {
         .route("/api/info", get(info))
         .route("/api/session", get(session_get))
         .route("/api/session/login", post(login_start))
-        .route("/api/session/login/{request_token}", get(login_poll))
         .route("/api/session/oauth/callback", get(oauth_callback))
         .route("/api/orgs", get(orgs))
         .route("/api/platform/projects", get(platform_projects))
@@ -134,9 +133,8 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
 }
 
 /// Jetons et organisation de la requête. `X-CC-Token` + `X-CC-Secret`
-/// (OAuth 1.0, ceux de `login` ou de l'environnement du client, avec
-/// `X-CC-Consumer-Key`/`X-CC-Consumer-Secret` du consumer qui les a émis)
-/// ou `X-CC-Api-Token` (bearer) ; `X-CC-Org` pour l'organisation visée.
+/// (OAuth 1.0, issus de la danse de ce serveur) ou `X-CC-Api-Token`
+/// (bearer) ; `X-CC-Org` pour l'organisation visée.
 #[derive(Clone, Default)]
 pub struct Client {
     pub tokens: Option<super::ClientTokens>,
@@ -147,12 +145,8 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
     type Rejection = std::convert::Infallible;
     async fn from_request_parts(parts: &mut axum::http::request::Parts, _s: &S) -> Result<Self, Self::Rejection> {
         let h = |name: &str| parts.headers.get(name).and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
-        let consumer = match (h("x-cc-consumer-key"), h("x-cc-consumer-secret")) {
-            (Some(k), Some(s)) => Some((k, s)),
-            _ => None,
-        };
         let tokens = match (h("x-cc-token"), h("x-cc-secret"), h("x-cc-api-token")) {
-            (Some(token), Some(secret), _) => Some(super::ClientTokens::OAuth1 { token, secret, consumer }),
+            (Some(token), Some(secret), _) => Some(super::ClientTokens::OAuth1 { token, secret }),
             (_, _, Some(t)) => Some(super::ClientTokens::Bearer(t)),
             _ => None,
         };
@@ -178,42 +172,23 @@ struct OauthStart {
     /// (même origine, ou une origine `--cors`).
     #[serde(rename = "return")]
     return_to: Option<String>,
-    /// Une CLI : pas de retour, elle interroge `/api/session/login/{request_token}`.
-    #[serde(default)]
-    cli: bool,
 }
 
 /// Début de la connexion d'un navigateur : request token avec callback
 /// sur ce serveur, URL d'autorisation à ouvrir. Le callback renvoie les
 /// jetons dans le fragment de l'URL de retour.
 async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
-    let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None, cli: false });
-    let return_to = if q.cli {
-        None
-    } else {
-        Some(match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
-            None => "/".to_string(),
-            Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
-            Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
-            Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
-        })
+    let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
+    let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+        None => "/".to_string(),
+        Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
+        Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
+        Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
     };
     let callback = format!("{}/api/session/oauth/callback", s.public_base);
     let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
     s.pending.lock().unwrap().insert(token.clone(), (secret, return_to));
-    Ok(Json(json!({ "mode": "redirect", "url": url, "request_token": token })))
-}
-
-/// Une CLI vient chercher ses jetons : `{ready: false}` tant que le
-/// navigateur n'est pas passé par le callback ; rendus une seule fois.
-async fn login_poll(AxState(s): AxState<Shared>, UrlPath(request_token): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    let mut map = s.cli_tokens.lock().unwrap();
-    map.retain(|_, (_, at)| at.elapsed() < std::time::Duration::from_secs(600));
-    match map.remove(&request_token) {
-        Some((t, _)) => Ok(Json(json!({ "ready": true, "token": t.token, "secret": t.secret, "email": t.email, "consumer_key": s.oauth.key }))),
-        None if s.pending.lock().unwrap().contains_key(&request_token) => Ok(Json(json!({ "ready": false }))),
-        None => Err(ApiError(StatusCode::NOT_FOUND, "request token inconnu, expiré ou déjà consommé".into())),
-    }
+    Ok(Json(json!({ "mode": "redirect", "url": url })))
 }
 
 #[derive(Deserialize)]
@@ -228,15 +203,9 @@ struct OauthCallback {
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
     let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
     let (token, secret) = crate::auth::access_token(&s.oauth, &q.oauth_token, &request_secret, &q.oauth_verifier).await.map_err(internal)?;
-    let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), consumer_key: None, api_url: None, user_id: None, email: None };
+    let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), consumer_key: None, user_id: None, email: None };
     crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
-    match return_to {
-        Some(r) => Ok(axum::response::Redirect::temporary(&format!("{r}#token={}&secret={}", oauth_enc(&token), oauth_enc(&secret))).into_response()),
-        None => {
-            s.cli_tokens.lock().unwrap().insert(q.oauth_token.clone(), (stored, std::time::Instant::now()));
-            Ok(axum::response::Html("<!doctype html><meta charset=utf-8><title>clever-compose</title><p>Accès autorisé : vous pouvez fermer cet onglet et revenir au terminal.").into_response())
-        }
-    }
+    Ok(axum::response::Redirect::temporary(&format!("{return_to}#token={}&secret={}", oauth_enc(&token), oauth_enc(&secret))).into_response())
 }
 
 async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {

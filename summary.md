@@ -394,6 +394,23 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Consumer clever-compose embarqué, CLI autonome (17/09/2026)** : « pose
+  les consumers dédiés à clever compose dans le code par défaut », « on
+  override tjs avec les var d'env », « la cli se suffit à elle même,
+  retire la possibilité d'utiliser une api distante », « le front lui
+  peut se connecter à une api distante mais dans ce cas faut fournir
+  l'URL », « le front passe les user tokens à chaque requête », « le
+  login se fait via danse ». `auth::DEFAULT_CONSUMER_KEY` = consumer
+  « clever-compose » du propriétaire (`4cUX75…`, base URL
+  `http://127.0.0.1:7777/`) ; `DEFAULT_CONSUMER_SECRET` laissé vide dans
+  cette session (lecture du secret refusée par le classifieur d'auto
+  mode) : tant qu'il est vide, `Consumer::from_env` exige l'environnement
+  comme avant ; l'environnement prime toujours. Retiré : `remote.rs`,
+  `--api-url`/`--api-key` globaux, `login --api-url`, `Stored.api_url`,
+  route `GET /api/session/login/{request_token}`, en-têtes
+  `X-CC-Consumer-*`, feature `multipart` de reqwest. Le front garde
+  `VITE_API_URL`, les jetons par requête et la danse ; `--api-key` reste
+  pour une interface déployée à part.
 - **Plus de consumer embarqué (17/09/2026)** : « retire les tokens CLI
   par défaut, on demande de fournir obligatoirement ce qu'il faut dans
   l'env » ; « clever-compose login passe par l'API à quel moment ? ».
