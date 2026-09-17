@@ -556,17 +556,15 @@ fn cmd_logs(opts: compose::project::Options, org: &str, lopts: cc_compose::exec:
 }
 
 fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_compose::web::ServeOptions) -> ExitCode {
-    // Identifiants de l'environnement, sinon danse OAuth avec un consumer
-    // (CLEVER_CONSUMER_KEY / CLEVER_CONSUMER_SECRET) ; sinon refus.
+    // Identifiants de l'environnement, sinon connexion depuis l'interface :
+    // consumer CLEVER_CONSUMER_KEY/SECRET (danse avec callback) ou, à
+    // défaut, celui de clever-tools (par la console).
     let session = match (cc_compose::exec::platform::credentials_from_env(), org) {
         (Ok(creds), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
         (Ok(creds), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
         (Err(_), _) => None,
     };
-    let oauth = match (std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
-        (Ok(key), Ok(secret)) if !key.is_empty() && !secret.is_empty() => Some(cc_compose::web::OauthConsumer { key, secret }),
-        _ => None,
-    };
+    let oauth = cc_compose::web::OauthConsumer::from_env();
     serve.initial_dir = std::fs::canonicalize(&opts.project_dir).ok();
     run_stateless(cc_compose::web::serve(serve, session, oauth))
 }

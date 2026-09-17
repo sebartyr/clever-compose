@@ -26,19 +26,35 @@ pub struct Session {
     pub org: String,
 }
 
-/// Consumer OAuth 1.0 (créé par l'utilisateur dans la console, base URL =
-/// adresse d'écoute) : permet la danse OAuth quand aucun jeton n'est dans
-/// l'environnement.
+/// Consumer OAuth 1.0 pour la connexion depuis l'interface. Soit celui de
+/// l'utilisateur (`CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET`, créé
+/// dans la console avec la base URL du serveur : danse classique avec
+/// callback), soit, à défaut, celui de clever-tools (constantes publiques
+/// du SDK) : ce consumer refuse tout callback (« OAuth callback is
+/// invalid ») et se connecte par la page `cli-oauth` de la console, dont
+/// le serveur récupère les jetons sur `/v2/self/cli_tokens`.
 #[derive(Clone)]
 pub struct OauthConsumer {
     pub key: String,
     pub secret: String,
+    /// Consumer de clever-tools : connexion par la console.
+    pub builtin: bool,
+}
+
+impl OauthConsumer {
+    /// Le consumer de l'environnement, sinon celui de clever-tools.
+    pub fn from_env() -> Self {
+        match (std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
+            (Ok(key), Ok(secret)) if !key.is_empty() && !secret.is_empty() => OauthConsumer { key, secret, builtin: false },
+            _ => OauthConsumer { key: clevercloud_sdk::DEFAULT_CONSUMER_KEY.into(), secret: clevercloud_sdk::DEFAULT_CONSUMER_SECRET.into(), builtin: true },
+        }
+    }
 }
 
 pub struct State {
     pub session: RwLock<Option<Session>>,
     pub locals: local::Locals,
-    pub oauth: Option<OauthConsumer>,
+    pub oauth: OauthConsumer,
     /// Base publique du serveur (`http://<adresse d'écoute>` ou
     /// `--public-url`), base du `oauth_callback`.
     pub public_base: String,
@@ -47,6 +63,15 @@ pub struct State {
     pub origins: Vec<String>,
     /// Request tokens en attente d'autorisation → (secret, URL de retour).
     pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Connexion par la console en cours (`cli_token` attendu), ou son
+    /// dernier échec.
+    pub console_login: std::sync::Mutex<ConsoleLogin>,
+}
+
+#[derive(Default)]
+pub struct ConsoleLogin {
+    pub pending: bool,
+    pub error: Option<String>,
 }
 
 /// Ce que le serveur sert et d'où l'interface peut l'appeler.
@@ -72,10 +97,7 @@ impl State {
 
 /// Lance le serveur et bloque jusqu'à Ctrl-C. `session` peut être absente :
 /// l'interface demandera les identifiants.
-pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: Option<OauthConsumer>) -> Result<(), String> {
-    if session.is_none() && oauth.is_none() {
-        return Err("aucun identifiant : posez CLEVER_TOKEN et CLEVER_SECRET (ou CC_API_TOKEN), ou un consumer OAuth (CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET, base URL = adresse publique du serveur) pour vous connecter depuis l'interface".into());
-    }
+pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: OauthConsumer) -> Result<(), String> {
     let listen = o.listen;
     let origins: Vec<String> = o.origins.iter().map(|s| s.trim_end_matches('/').to_string()).collect();
     if let Some(bad) = origins.iter().find(|s| !(s.starts_with("http://") || s.starts_with("https://")) || s[s.find("://").unwrap() + 3..].contains('/')) {
@@ -88,7 +110,10 @@ pub async fn serve(o: ServeOptions, session: Option<Session>, oauth: Option<Oaut
             locals.add_dir(dir, false)?;
         }
     }
-    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default() });
+    if session.is_none() {
+        eprintln!("aucun identifiant dans l'environnement : l'interface demandera la connexion ({})", if oauth.builtin { "par la console Clever Cloud, consumer de clever-tools" } else { "danse OAuth avec le consumer CLEVER_CONSUMER_KEY" });
+    }
+    let state = Arc::new(State { session: RwLock::new(session), locals, oauth, public_base, origins, pending: Default::default(), console_login: Default::default() });
     let app = api::router(state.clone());
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "API seule : l'interface est servie ailleurs (clever-compose ui pour l'embarquer)") }) };
     let app = app.layer(axum::middleware::from_fn_with_state(state.clone(), api::cors));

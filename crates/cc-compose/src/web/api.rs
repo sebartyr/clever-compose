@@ -58,6 +58,7 @@ pub fn router(state: Shared) -> Router {
     Router::new()
         .route("/api/info", get(info))
         .route("/api/session", get(session_get).post(session_set))
+        .route("/api/session/login", post(login_start))
         .route("/api/session/oauth/start", get(oauth_start))
         .route("/api/session/oauth/callback", get(oauth_callback))
         .route("/api/orgs", get(orgs))
@@ -113,7 +114,18 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
 /// OAuth disponible ?
 async fn session_get(AxState(s): AxState<Shared>) -> Json<J> {
     let guard = s.session.read().unwrap();
-    Json(json!({ "authenticated": guard.is_some(), "org": guard.as_ref().map(|x| x.org.clone()).unwrap_or_default(), "oauth": s.oauth.is_some() }))
+    let console = s.console_login.lock().unwrap();
+    Json(json!({
+        "authenticated": guard.is_some(),
+        "org": guard.as_ref().map(|x| x.org.clone()).unwrap_or_default(),
+        "oauth": true,
+        // Comment l'interface se connecte : `console` (consumer de
+        // clever-tools, jetons récupérés par le serveur) ou `redirect`
+        // (danse avec callback vers ce serveur).
+        "login_mode": if s.oauth.builtin { "console" } else { "redirect" },
+        "login_pending": console.pending,
+        "login_error": console.error,
+    }))
 }
 
 #[derive(Deserialize, Default)]
@@ -165,6 +177,61 @@ fn parse_form(text: &str) -> std::collections::HashMap<String, String> {
     text.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.replace('+', " "))).collect()
 }
 
+/// Point d'entrée unique de la connexion : rend l'URL où envoyer
+/// l'utilisateur et le mode. Consumer de clever-tools : page `cli-oauth`
+/// de la console avec un `cli_token` aléatoire ; le serveur interroge
+/// `/v2/self/cli_tokens` (404 tant que la console n'a pas déposé les
+/// jetons, comme `clever login`) jusqu'à 2 min, puis ouvre la session.
+/// Consumer propre : même chose que `oauth_start`, sans redirection.
+async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
+    let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
+    if !s.oauth.builtin {
+        let url = request_token_redirect(&s, q).await?;
+        return Ok(Json(json!({ "mode": "redirect", "url": url })));
+    }
+    let mut bytes = [0u8; 20];
+    getrandom::fill(&mut bytes).map_err(|e| internal(format!("aléa : {e}")))?;
+    use base64::Engine;
+    let cli_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+    let url = format!("https://console.clever-cloud.com/cli-oauth?cli_version={}&cli_token={}", env!("CARGO_PKG_VERSION"), oauth_enc(&cli_token));
+    {
+        let mut c = s.console_login.lock().unwrap();
+        c.pending = true;
+        c.error = None;
+    }
+    let state = s.clone();
+    tokio::spawn(async move {
+        let result = poll_cli_token(&state, &cli_token).await;
+        let mut c = state.console_login.lock().unwrap();
+        c.pending = false;
+        c.error = result.err();
+    });
+    Ok(Json(json!({ "mode": "console", "url": url })))
+}
+
+async fn poll_cli_token(s: &State, cli_token: &str) -> Result<(), String> {
+    let url = format!("{}/v2/self/cli_tokens?cli_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(cli_token));
+    let client = clevercloud_sdk::oauth10a::reqwest::Client::new();
+    for _ in 0..60 {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let resp = client.get(&url).send().await.map_err(|e| format!("cli_tokens : {e}"))?;
+        if resp.status() == StatusCode::NOT_FOUND {
+            continue;
+        }
+        if !resp.status().is_success() {
+            return Err(format!("cli_tokens : {}", resp.status()));
+        }
+        let v: J = resp.json().await.map_err(|e| format!("cli_tokens : {e}"))?;
+        let (Some(token), Some(secret)) = (v["token"].as_str(), v["secret"].as_str()) else { return Err(format!("cli_tokens : réponse inattendue : {v}")) };
+        let creds = clevercloud_sdk::Credentials::OAuth1 { token: token.into(), secret: secret.into(), consumer_key: s.oauth.key.clone(), consumer_secret: s.oauth.secret.clone() };
+        let api = crate::exec::platform::Api::new(String::new(), creds);
+        api.organisations().await.map_err(|e| format!("jetons obtenus mais refusés par l'API : {e}"))?;
+        *s.session.write().unwrap() = Some(super::Session { api, org: String::new() });
+        return Ok(());
+    }
+    Err("connexion non terminée dans la console en 2 minutes : recommencez".into())
+}
+
 #[derive(Deserialize)]
 struct OauthStart {
     /// Où renvoyer l'utilisateur à la fin : l'interface (même origine, ou
@@ -176,7 +243,16 @@ struct OauthStart {
 /// Étape 1 de la danse : request token, puis redirection vers la page
 /// d'autorisation de Clever Cloud.
 async fn oauth_start(AxState(s): AxState<Shared>, Query(q): Query<OauthStart>) -> Result<Response, ApiError> {
-    let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré (CLEVER_CONSUMER_KEY / CLEVER_CONSUMER_SECRET)"))?;
+    let url = request_token_redirect(&s, q).await?;
+    Ok(axum::response::Redirect::temporary(&url).into_response())
+}
+
+/// Request token avec le consumer propre, puis l'URL d'autorisation.
+async fn request_token_redirect(s: &State, q: OauthStart) -> Result<String, ApiError> {
+    if s.oauth.builtin {
+        return Err(bad("le consumer de clever-tools n'admet pas de callback : connexion par la console (POST /api/session/login)"));
+    }
+    let consumer = s.oauth.clone();
     let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
         None => "/".to_string(),
         Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
@@ -196,7 +272,7 @@ async fn oauth_start(AxState(s): AxState<Shared>, Query(q): Query<OauthStart>) -
     let form = parse_form(&text);
     let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("request_token : réponse inattendue : {text}"))) };
     s.pending.lock().unwrap().insert(token.clone(), (secret.clone(), return_to));
-    Ok(axum::response::Redirect::temporary(&format!("{}/v2/oauth/authorize?oauth_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(token))).into_response())
+    Ok(format!("{}/v2/oauth/authorize?oauth_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(token)))
 }
 
 #[derive(Deserialize)]
@@ -207,7 +283,7 @@ struct OauthCallback {
 
 /// Étape 3 : access token, session ouverte, retour à l'interface.
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
-    let consumer = s.oauth.clone().ok_or_else(|| bad("pas de consumer OAuth configuré"))?;
+    let consumer = s.oauth.clone();
     let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
     let mut params = oauth_params(&consumer, &request_secret);
     params.push(("oauth_token".into(), q.oauth_token.clone()));

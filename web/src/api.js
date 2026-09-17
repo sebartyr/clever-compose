@@ -40,6 +40,8 @@ export const api = {
   flavors: () => json('GET', '/api/flavors'),
   setScaling: (id, body) => json('PUT', `/api/local/${encodeURIComponent(id)}/scaling`, body),
   syncAssets: (id, onLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/assets/sync`, null, onLog),
+  /** Connexion : rend { mode: 'redirect'|'console', url }. */
+  login: () => json('POST', '/api/session/login', { return: location.origin + location.pathname }),
   /** Début de la danse OAuth, avec retour sur cette interface. */
   oauthStart: () => u('/api/session/oauth/start?return=' + encodeURIComponent(location.origin + location.pathname)),
 

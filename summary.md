@@ -394,6 +394,28 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Consumer de repli et connexion obligatoire (17/09/2026)** : demandes
+  « renseigner des consumers en var d'env, fallback sur ceux de la CLI
+  clever qui peuvent être écrits en dur » et « si la danse OAuth est
+  active parce que pas de user tokens, rediriger systématiquement vers le
+  login avant d'afficher autre chose ». `OauthConsumer::from_env` :
+  `CLEVER_CONSUMER_KEY`/`SECRET`, sinon `clevercloud_sdk::DEFAULT_CONSUMER_*`
+  (ceux de clever-tools, `builtin`). Vérifié : ce consumer refuse tout
+  `oauth_callback` (« OAuth callback is invalid », 400) ; il se connecte
+  donc comme `clever login` (`src/commands/login/login.command.js` de
+  `~/clever-tools`) : `https://console.clever-cloud.com/cli-oauth?cli_version=&cli_token=`
+  (20 octets aléatoires, base64url) puis polling de
+  `GET /v2/self/cli_tokens?cli_token=` (404 jusqu'au dépôt des jetons,
+  2 s × 60). `POST /api/session/login` rend `{mode: console|redirect, url}`
+  ; en `console` le serveur interroge en tâche de fond et
+  `GET /api/session` expose `login_pending`/`login_error`. `ui`/`api` ne
+  refusent plus de démarrer sans identifiants. Front : sans session, seul
+  l'écran de connexion s'affiche et démarre de lui-même (redirection, ou
+  onglet console + polling de la session toutes les 2 s) ; le reste de
+  l'application n'est monté qu'après (`boot`). Mise en page mobile
+  (demande du même jour) : une colonne sous 900 px, menu des projets en
+  tiroir plein écran, détail sous le diagramme, options défilantes ;
+  vérifié en headless à 390 px.
 - **Shim compilé par `build.rs` (16/09/2026)** : le propriétaire découvrait
   un `target/release/cc-shim` (version hôte, glibc, inutile) à côté du shim
   musl de `target/x86_64-unknown-linux-musl/shim/` compilé à la main le

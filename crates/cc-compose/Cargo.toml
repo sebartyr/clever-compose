@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22"
+getrandom = "0.3"
 cc-compose-model.workspace = true
 clevercloud-sdk = "1.0.1"
 git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }

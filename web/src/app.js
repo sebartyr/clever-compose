@@ -13,7 +13,7 @@ const val = (e) => (e && e.detail !== undefined ? e.detail : e?.target?.value);
 const SessionPanel = defineComponent({
   name: 'SessionPanel',
   props: { session: Object, orgs: Array },
-  emits: ['changed'],
+  emits: ['changed', 'login'],
   setup(props, { emit }) {
     const busy = ref(false);
     const error = ref('');
@@ -27,18 +27,14 @@ const SessionPanel = defineComponent({
         emit('changed');
       } catch (err) { error.value = err.message; } finally { busy.value = false; }
     };
-    // La danse OAuth se fait par redirection : le serveur obtient le request
-    // token, Clever Cloud demande l'autorisation, le callback ouvre la session.
-    const login = () => { location.href = api.oauthStart(); };
-    return { busy, error, chooseOrg, login, val };
+    return { busy, error, chooseOrg, val };
   },
   template: `
     <div class="session">
       <template v-if="session?.authenticated">
         <cc-select label="Organisation" :hiddenLabel="true" :inline="true" :options="orgs.map(o => ({ label: o.name, value: o.id }))" :value="session.org" placeholder="Choisir une organisation" @cc-select="chooseOrg" :disabled="busy"></cc-select>
       </template>
-      <cc-button v-else-if="session?.oauth" :primary="true" title="Autorisation via Clever Cloud (consumer OAuth configuré au lancement)" @cc-click="login">Se connecter</cc-button>
-      <span v-else class="dim">Identifiants absents : lancez l'interface avec CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN, ou un consumer OAuth.</span>
+      <cc-button v-else :primary="true" title="Autorisation via Clever Cloud" @cc-click="$emit('login')">Se connecter</cc-button>
       <cc-notice v-if="error" intent="danger" :message="error"></cc-notice>
     </div>
   `,
@@ -227,6 +223,32 @@ export const App = defineComponent({
     const assetFile = ref('');
     const exportFile = ref('');
     const flavors = ref(null);
+    // Connexion : sans identifiants dans l'environnement, rien ne s'affiche
+    // avant la session. Mode `redirect` (consumer propre) : la page part
+    // vers Clever Cloud et revient par le callback. Mode `console`
+    // (consumer de clever-tools) : la page cli-oauth de la console s'ouvre
+    // dans un autre onglet, le serveur récupère les jetons et l'interface
+    // interroge la session jusqu'à ce qu'elle soit ouverte.
+    const login = reactive({ started: false, mode: '', url: '', error: '', opened: false });
+    let loginTimer = null;
+    const startLogin = async () => {
+      login.error = ''; login.started = true;
+      try {
+        const r = await api.login();
+        login.mode = r.mode; login.url = r.url;
+        if (r.mode === 'redirect') { location.href = r.url; return; }
+        login.opened = !!window.open(r.url, '_blank');
+        clearInterval(loginTimer);
+        loginTimer = setInterval(async () => {
+          try {
+            const s = await api.session();
+            if (s.authenticated) { clearInterval(loginTimer); loginTimer = null; await boot(); }
+            else if (s.login_error) { login.error = s.login_error; login.started = false; clearInterval(loginTimer); loginTimer = null; }
+          } catch { /* serveur injoignable : on réessaie */ }
+        }, 2000);
+      } catch (e) { login.error = e.message; login.started = false; }
+    };
+    const openLoginTab = () => { login.opened = !!window.open(login.url, '_blank'); };
     const selected = ref(null);
     const busy = ref(false);
     const status = ref('');
@@ -416,8 +438,11 @@ export const App = defineComponent({
     const removeLocal = async (p) => { await api.removeLocal(p.id); if (current.value?.id === p.id) current.value = null; await refreshLocals(); };
 
     watch(() => opts.allow_ephemeral, loadPlan);
-    onMounted(async () => {
-      await loadInfo(); await refreshSession(); await refreshLocals();
+    // Ce qui s'affiche une fois la session ouverte.
+    const boot = async () => {
+      await refreshSession();
+      if (!session.value.authenticated) { await startLogin(); return; }
+      await refreshLocals();
       // Liens directs : ?project=<nom> (plateforme) ou ?local=<id>.
       const q = new URLSearchParams(location.search);
       const last = remembered('current', {});
@@ -429,18 +454,44 @@ export const App = defineComponent({
       else if (locals.value.length) await openLocal(locals.value[0]);
       const t = remembered('tab', {}).tab;
       if (t && current.value && ['diagram', 'compose', 'diagnostics'].includes(t)) tab.value = t;
-    });
+    };
+    onMounted(async () => { await loadInfo(); await boot(); });
+    // Menu latéral replié sur petit écran.
+    const sideOpen = ref(false);
+    watch(current, () => { sideOpen.value = false; });
 
-    return { flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { login, startLogin, openLoginTab, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
-    <div class="layout">
+    <div v-if="!session.authenticated" class="login">
+      <cc-block>
+        <div slot="header-title">Connexion à Clever Cloud</div>
+        <div slot="content" class="login-body">
+          <p v-if="login.mode === 'console'">
+            {{ login.opened ? 'La page de connexion de la console Clever Cloud est ouverte dans un autre onglet.' : 'Ouvrez la page de connexion de la console Clever Cloud.' }}
+            Une fois l'accès autorisé, cette page continue toute seule.
+          </p>
+          <p v-else-if="login.started && !login.error">Redirection vers Clever Cloud…</p>
+          <p v-else>Aucun identifiant dans l'environnement du serveur : autorisez l'accès depuis votre compte Clever Cloud.</p>
+          <cc-notice v-if="login.error" intent="danger" :message="login.error"></cc-notice>
+          <p>
+            <cc-button v-if="login.mode === 'console'" :primary="true" title="Ouvre la page cli-oauth de la console dans un nouvel onglet" @cc-click="openLoginTab">Ouvrir la page de connexion</cc-button>
+            <cc-button v-else :primary="true" :waiting="login.started && !login.error" title="Autorisation via Clever Cloud" @cc-click="startLogin">Se connecter</cc-button>
+            <cc-button v-if="login.mode === 'console'" :outlined="true" title="Repart de zéro avec un nouveau jeton" @cc-click="startLogin">Recommencer</cc-button>
+          </p>
+          <p v-if="login.mode === 'console'" class="dim">Attente de l'autorisation… Si l'onglet ne s'ouvre pas : <a :href="login.url" target="_blank" rel="noopener">{{ login.url }}</a></p>
+        </div>
+      </cc-block>
+    </div>
+    <div v-else class="layout" :class="{ 'side-open': sideOpen }">
       <header class="top">
+        <cc-button class="menu" :outlined="true" :hideText="true" title="Projets" @cc-click="sideOpen = !sideOpen">Projets</cc-button>
         <h1>clever-compose <small class="dim" :title="'build ' + (info.built || '') + (info.bundled ? ', interface empaquetée' : ', interface via CDN')">{{ info.version }}{{ info.commit ? ' · ' + info.commit : '' }}</small></h1>
         <span class="grow"></span>
-        <session-panel :session="session" :orgs="orgs" @changed="refreshSession"></session-panel>
+        <session-panel :session="session" :orgs="orgs" @changed="refreshSession" @login="startLogin"></session-panel>
       </header>
       <nav class="side">
+        <cc-button class="close-side" :outlined="true" title="Ferme le menu des projets" @cc-click="sideOpen = false">Fermer</cc-button>
         <h2>Projets locaux</h2>
         <ul>
           <li v-for="p in locals" :key="p.id" :class="{ active: current?.id === p.id }">

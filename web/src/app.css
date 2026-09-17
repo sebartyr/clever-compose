@@ -83,3 +83,32 @@ body { margin: 0; }
 cc-dialog cc-input-text { display: block; margin-bottom: .6em; }
 .detail .scaling { display: grid; grid-template-columns: 1fr 1fr; gap: .5em .8em; margin: .3em 0 .8em; }
 .detail .scaling cc-button { grid-column: 1 / -1; justify-self: start; }
+
+/* Connexion : seul écran visible sans session. */
+.login { min-height: 100vh; display: grid; place-items: center; padding: 1em; }
+.login cc-block { width: min(480px, 100%); }
+.login-body { display: flex; flex-direction: column; gap: .8em; }
+.login-body p { margin: 0; }
+
+/* Petits écrans : une colonne, menu latéral en tiroir, détail sous le
+   diagramme, barres d'outils qui passent à la ligne. */
+.top .menu, .side .close-side { display: none; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); height: auto; min-height: 100vh; }
+  .top { grid-column: 1; position: sticky; top: 0; z-index: 3; flex-wrap: wrap; gap: .5em; }
+  .top .menu { display: inline-block; }
+  .top h1 small { display: none; }
+  .side { display: none; position: fixed; inset: 0; z-index: 4; background: #fff; border-right: 0; }
+  .side-open .side { display: flex; }
+  .side .close-side { display: inline-block; align-self: flex-end; }
+  .main { padding: .6em; }
+  .content { flex-direction: column; }
+  .detail { width: auto; }
+  .files { width: auto; max-height: 30vh; }
+  .editor textarea { min-height: 40vh; }
+  .canvas { min-height: 220px; }
+  .canvas svg { max-width: 100%; height: auto; }
+  .toolbar h2 { font-size: 1em; }
+  .toolbar cc-toggle { max-width: 100%; overflow-x: auto; }
+  .session { max-width: 100%; }
+}

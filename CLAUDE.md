@@ -29,7 +29,10 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
 - **Indépendant de la CLI clever.** L'outil final n'appelle jamais `clever`
   en sous-processus et ne lit jamais `~/.config/clever-cloud/clever-tools.json`.
   Identifiants : `CC_API_TOKEN` (bearer) ou `CLEVER_TOKEN` + `CLEVER_SECRET`
-  (OAuth 1.0). La CLI sert seulement aux tests manuels et au ménage.
+  (OAuth 1.0). Le consumer public de clever-tools (constantes du SDK) sert
+  de repli pour la connexion depuis l'interface (décision du 17/09/2026) :
+  c'est une constante, pas une dépendance. La CLI sert seulement aux tests
+  manuels et au ménage.
 - **Le plan intermédiaire est le contrat.** Toute évolution qui le touche se
   discute avant d'être codée (les ajouts additifs avec valeur par défaut
   absente du JSON sont tolérés, et signalés).
@@ -97,9 +100,13 @@ mêmes commits déployés (vérifié en réel).
 - `cc-compose` : parsing (`compose/`), plan (`plan/`), exécuteur (`exec/`),
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
-  locaux et archives, session par identifiants d'environnement ou danse
-  OAuth 1.0 avec un consumer `CLEVER_CONSUMER_KEY`/`SECRET` — jamais de
-  jetons saisis ; front Vue 3 + `@clevercloud/components` dans `web/` à la
+  locaux et archives, session par identifiants d'environnement ou
+  connexion depuis l'interface — jamais de jetons saisis : consumer
+  `CLEVER_CONSUMER_KEY`/`SECRET` (danse OAuth 1.0 avec callback) ou, à
+  défaut, consumer de clever-tools (`clevercloud_sdk::DEFAULT_CONSUMER_*`,
+  callback refusé par l'API : page `cli-oauth` de la console + polling de
+  `/v2/self/cli_tokens`, comme `clever login`) ; sans session, l'interface
+  n'affiche que l'écran de connexion, démarré automatiquement ; front Vue 3 + `@clevercloud/components` dans `web/` à la
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur

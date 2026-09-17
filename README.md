@@ -95,13 +95,22 @@ le détail au clic, `plan` et diagnostics, éditeur du compose (enregistrer
 replanifie), `up`/`seed`/`down` avec le journal en direct, `logs`, exports
 Terraform et script. Les projets déployés de l'organisation s'y retrouvent
 avec l'état des instances. Identifiants : ceux de l'environnement
-(`CLEVER_TOKEN`/`CLEVER_SECRET` ou `CC_API_TOKEN`), ou la danse OAuth 1.0
-avec un consumer que vous créez dans la console (base URL = adresse
-d'écoute, par ex. `http://127.0.0.1:7777`) et passez par
-`CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` : « Se connecter » ouvre la
-page d'autorisation Clever Cloud et le retour ouvre la session. Sans l'un ni
-l'autre, `ui` refuse de démarrer. L'organisation se choisit dans la liste
-(retenue dans le navigateur, comme les options).
+(`CLEVER_TOKEN`/`CLEVER_SECRET` ou `CC_API_TOKEN`) ; sinon l'interface
+n'affiche rien d'autre qu'un écran de connexion, qui démarre tout seul :
+
+- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` (un consumer que
+  vous créez dans la console, base URL = adresse publique du serveur, par
+  ex. `http://127.0.0.1:7777`), danse OAuth 1.0 classique : la page part
+  vers l'autorisation Clever Cloud et revient par le callback ;
+- sans, le consumer de clever-tools (constantes publiques du SDK) : ce
+  consumer n'admet aucun callback, la connexion passe par la page
+  `cli-oauth` de la console, ouverte dans un autre onglet ; le serveur
+  récupère les jetons comme `clever login` (`/v2/self/cli_tokens`) et
+  l'interface continue dès que l'accès est autorisé (2 min au plus).
+
+Rien n'est écrit sur le disque. L'organisation se choisit dans la liste
+(retenue dans le navigateur, comme les options). L'interface s'adapte aux
+petits écrans (menu des projets en tiroir, détail sous le diagramme).
 
 Scalabilité : le détail d'une application du diagramme porte un formulaire
 (flavor minimale et maximale, instances minimales et maximales) ;
