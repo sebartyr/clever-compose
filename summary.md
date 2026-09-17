@@ -394,6 +394,14 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Consumer du client (17/09/2026)** : « et pour filer des consumers
+  spécifiques à l'api ? » — `CLEVER_CONSUMER_KEY/SECRET` sur le serveur
+  ; en relisant, un jeton OAuth 1.0 n'est valable qu'avec son consumer
+  émetteur et le serveur signait avec le sien : une CLI connectée par
+  `login` (consumer clever-tools) contre un serveur à consumer propre
+  aurait été refusée. La CLI envoie donc aussi `X-CC-Consumer-Key`/
+  `X-CC-Consumer-Secret` ; le serveur signe avec, et n'emploie le sien
+  que pour des jetons sans consumer (issus de sa propre danse).
 - **Jetons du client, pas de session serveur (17/09/2026)** : « faut que
   ce soit le client qui envoie ses tokens ou qu'il fasse la danse. Une
   session par utilisateur » ; « la cli doit permettre de faire la danse

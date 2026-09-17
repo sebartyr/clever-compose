@@ -79,20 +79,26 @@ pub struct ServeOptions {
 /// Jetons envoyés par un client.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ClientTokens {
-    OAuth1 { token: String, secret: String },
+    /// Un jeton OAuth 1.0 n'est valable qu'avec le consumer qui l'a
+    /// émis : le client envoie le sien (`X-CC-Consumer-Key`/`-Secret`) ;
+    /// sans, celui du serveur (jetons issus de sa propre danse).
+    OAuth1 { token: String, secret: String, consumer: Option<(String, String)> },
     Bearer(String),
 }
 
 impl ClientTokens {
     fn key(&self) -> String {
         match self {
-            ClientTokens::OAuth1 { token, secret } => format!("o:{token}:{secret}"),
+            ClientTokens::OAuth1 { token, secret, consumer } => format!("o:{token}:{secret}:{}", consumer.as_ref().map(|(k, _)| k.as_str()).unwrap_or("")),
             ClientTokens::Bearer(t) => format!("b:{t}"),
         }
     }
-    fn credentials(&self, consumer: &OauthConsumer) -> clevercloud_sdk::Credentials {
+    fn credentials(&self, server: &OauthConsumer) -> clevercloud_sdk::Credentials {
         match self {
-            ClientTokens::OAuth1 { token, secret } => clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key: consumer.key.clone(), consumer_secret: consumer.secret.clone() },
+            ClientTokens::OAuth1 { token, secret, consumer } => {
+                let (consumer_key, consumer_secret) = consumer.clone().unwrap_or_else(|| (server.key.clone(), server.secret.clone()));
+                clevercloud_sdk::Credentials::OAuth1 { token: token.clone(), secret: secret.clone(), consumer_key, consumer_secret }
+            }
             ClientTokens::Bearer(t) => clevercloud_sdk::Credentials::Bearer { token: t.clone() },
         }
     }

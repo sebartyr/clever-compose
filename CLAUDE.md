@@ -104,8 +104,9 @@ mêmes commits déployés (vérifié en réel).
   émetteurs (`emit/`), CLI (`main.rs`), interface web (`src/web/` : serveur
   axum, API JSON + SSE qui appellent les mêmes fonctions que la CLI, projets
   locaux et archives ; **pas de session serveur** : chaque client envoie
-  ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` ou
-  `X-CC-Api-Token`, extracteur `Client`), validés chez Clever Cloud par
+  ses jetons à chaque requête (`X-CC-Token`/`X-CC-Secret` +
+  `X-CC-Consumer-Key`/`-Secret` du consumer émetteur, ou `X-CC-Api-Token`,
+  extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
   pour un client sans jetons (usage local) ; connexion du navigateur par
   `POST /api/session/login` + `GET /api/session/login/{cli_token}`

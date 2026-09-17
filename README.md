@@ -105,14 +105,16 @@ Terraform et script. Les projets déployés de l'organisation s'y retrouvent
 avec l'état des instances.
 
 Identifiants : **chaque client envoie les siens**, à chaque requête
-(`X-CC-Token`/`X-CC-Secret`, ou `X-CC-Api-Token`), et le serveur les
+(`X-CC-Token`/`X-CC-Secret` avec le consumer qui les a émis en
+`X-CC-Consumer-Key`/`X-CC-Consumer-Secret`, ou `X-CC-Api-Token`), et le serveur les
 vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes) avant
 d'agir en son nom ; le serveur ne garde aucune session. Un navigateur
 qui n'en a pas voit un écran de connexion, qui démarre tout seul :
 
-- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` sur le serveur
-  (un consumer que vous créez dans la console, base URL = adresse
-  publique du serveur), danse OAuth 1.0 classique : la page part vers
+- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` dans
+  l'environnement du serveur (un consumer que vous créez dans la
+  console, base URL = `--public-url`, callback
+  `/api/session/oauth/callback`), danse OAuth 1.0 classique : la page part vers
   l'autorisation Clever Cloud et le callback ramène les jetons dans le
   fragment de l'URL ;
 - sans, le consumer de clever-tools (constantes publiques du SDK) : ce

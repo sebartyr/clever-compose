@@ -41,7 +41,7 @@ pub async fn cors(AxState(s): AxState<Shared>, req: axum::extract::Request, next
             let h = r.headers_mut();
             h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_str(o).unwrap());
             h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
-            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type, Authorization, X-CC-Token, X-CC-Secret, X-CC-Api-Token, X-CC-Org"));
+            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type, Authorization, X-CC-Token, X-CC-Secret, X-CC-Consumer-Key, X-CC-Consumer-Secret, X-CC-Api-Token, X-CC-Org"));
             h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
         }
         return r;
@@ -138,8 +138,9 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
 }
 
 /// Jetons et organisation de la requête. `X-CC-Token` + `X-CC-Secret`
-/// (OAuth 1.0, ceux de `login` ou de l'environnement du client) ou
-/// `X-CC-Api-Token` (bearer) ; `X-CC-Org` pour l'organisation visée.
+/// (OAuth 1.0, ceux de `login` ou de l'environnement du client, avec
+/// `X-CC-Consumer-Key`/`X-CC-Consumer-Secret` du consumer qui les a émis)
+/// ou `X-CC-Api-Token` (bearer) ; `X-CC-Org` pour l'organisation visée.
 #[derive(Clone, Default)]
 pub struct Client {
     pub tokens: Option<super::ClientTokens>,
@@ -150,8 +151,12 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Client {
     type Rejection = std::convert::Infallible;
     async fn from_request_parts(parts: &mut axum::http::request::Parts, _s: &S) -> Result<Self, Self::Rejection> {
         let h = |name: &str| parts.headers.get(name).and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let consumer = match (h("x-cc-consumer-key"), h("x-cc-consumer-secret")) {
+            (Some(k), Some(s)) => Some((k, s)),
+            _ => None,
+        };
         let tokens = match (h("x-cc-token"), h("x-cc-secret"), h("x-cc-api-token")) {
-            (Some(token), Some(secret), _) => Some(super::ClientTokens::OAuth1 { token, secret }),
+            (Some(token), Some(secret), _) => Some(super::ClientTokens::OAuth1 { token, secret, consumer }),
             (_, _, Some(t)) => Some(super::ClientTokens::Bearer(t)),
             _ => None,
         };
