@@ -226,7 +226,7 @@ export const App = defineComponent({
     // (consumer de clever-tools) : la page cli-oauth de la console s'ouvre
     // dans un autre onglet, le serveur récupère les jetons et l'interface
     // interroge la session jusqu'à ce qu'elle soit ouverte.
-    const login = reactive({ started: false, mode: '', url: '', error: '', opened: false });
+    const login = reactive({ started: false, url: '', error: '' });
     // Clé d'API du serveur (`--api-key`) : demandée avant tout le reste
     // quand /api/info la dit requise et qu'aucune n'est en sessionStorage.
     const key = reactive({ needed: false, value: '', error: '' });
@@ -240,22 +240,13 @@ export const App = defineComponent({
       login.error = ''; login.started = true;
       try {
         const r = await api.login();
-        login.mode = r.mode; login.url = r.url;
-        if (r.mode === 'redirect') { location.href = r.url; return; }
-        login.opened = !!window.open(r.url, '_blank');
-        clearInterval(loginTimer);
-        let tries = 0;
-        loginTimer = setInterval(async () => {
-          try {
-            const p = await api.loginPoll(r.cli_token);
-            if (p.ready) { clearInterval(loginTimer); loginTimer = null; setTokens(p); await boot(); }
-            else if (++tries > 90) { login.error = 'connexion non terminée en 3 minutes : recommencez'; login.started = false; clearInterval(loginTimer); loginTimer = null; }
-          } catch (e) { login.error = e.message; login.started = false; clearInterval(loginTimer); loginTimer = null; }
-        }, 2000);
+        login.url = r.url;
+        // La page part vers l'autorisation Clever Cloud ; le callback du
+        // serveur ramène les jetons dans le fragment de l'URL de retour.
+        location.href = r.url;
       } catch (e) { login.error = e.message; login.started = false; }
     };
     const logout = async () => { setTokens(null); await boot(); };
-    const openLoginTab = () => { login.opened = !!window.open(login.url, '_blank'); };
     const selected = ref(null);
     const busy = ref(false);
     const status = ref('');
@@ -476,7 +467,7 @@ export const App = defineComponent({
     const sideOpen = ref(false);
     watch(current, () => { sideOpen.value = false; });
 
-    return { key, submitKey, login, startLogin, logout, openLoginTab, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
+    return { key, submitKey, login, startLogin, logout, sideOpen, flavors, setScaling, downloadFile, doAssetsSync, assets, assetFile, openFromAssets, opRunning, status, info, session, orgs, locals, platformProjects, current, tab, plan, diagnostics, inventory, viewPlatform, files, file, exportResult, exportFile, selected, selectedNode, busy, error, logs, opts, seed, logQuery, dialog, graph, errors, onPlatform, refreshSession, refreshLocals, refreshPlatform, openLocal, openPlatform, openFile, saveFile, loadPlan, loadInventory, doUp, doDown, doStop, doStart, doSeed, uploadDump, doLogs, doExport, upload, addDir, removeLocal, val };
   },
   template: `
     <div v-if="key.needed" class="login">
@@ -495,19 +486,10 @@ export const App = defineComponent({
         <div slot="header-title">Connexion à Clever Cloud</div>
         <div slot="content" class="login-body">
           <p v-if="session.own_tokens && session.reason" class="dim">Jetons précédents refusés : {{ session.reason }}</p>
-          <p v-if="login.mode === 'console'">
-            {{ login.opened ? 'La page de connexion de la console Clever Cloud est ouverte dans un autre onglet.' : 'Ouvrez la page de connexion de la console Clever Cloud.' }}
-            Une fois l'accès autorisé, cette page continue toute seule.
-          </p>
-          <p v-else-if="login.started && !login.error">Redirection vers Clever Cloud…</p>
+          <p v-if="login.started && !login.error">Redirection vers Clever Cloud…</p>
           <p v-else>{{ session.own_tokens ? 'Vos jetons ne sont plus acceptés (' + session.reason + ') :' : 'Ce serveur n’a pas d’identifiants :' }} autorisez l'accès depuis votre compte Clever Cloud. Les jetons restent dans cet onglet et le serveur agit en votre nom.</p>
           <cc-notice v-if="login.error" intent="danger" :message="login.error"></cc-notice>
-          <p>
-            <cc-button v-if="login.mode === 'console'" :primary="true" title="Ouvre la page cli-oauth de la console dans un nouvel onglet" @cc-click="openLoginTab">Ouvrir la page de connexion</cc-button>
-            <cc-button v-else :primary="true" :waiting="login.started && !login.error" title="Autorisation via Clever Cloud" @cc-click="startLogin">Se connecter</cc-button>
-            <cc-button v-if="login.mode === 'console'" :outlined="true" title="Repart de zéro avec un nouveau jeton" @cc-click="startLogin">Recommencer</cc-button>
-          </p>
-          <p v-if="login.mode === 'console'" class="dim">Attente de l'autorisation… Si l'onglet ne s'ouvre pas : <a :href="login.url" target="_blank" rel="noopener">{{ login.url }}</a></p>
+          <p><cc-button :primary="true" :waiting="login.started && !login.error" title="Autorisation via Clever Cloud" @cc-click="startLogin">Se connecter</cc-button></p>
         </div>
       </cc-block>
     </div>

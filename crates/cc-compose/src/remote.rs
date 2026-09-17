@@ -45,7 +45,13 @@ impl Remote {
             r = r.header("X-CC-Org", o);
         }
         match &self.tokens {
-            Some(clevercloud_sdk::Credentials::OAuth1 { token, secret, consumer_key, consumer_secret }) => r = r.header("X-CC-Token", token).header("X-CC-Secret", secret).header("X-CC-Consumer-Key", consumer_key).header("X-CC-Consumer-Secret", consumer_secret),
+            Some(clevercloud_sdk::Credentials::OAuth1 { token, secret, consumer_key, consumer_secret }) => {
+                r = r.header("X-CC-Token", token).header("X-CC-Secret", secret);
+                // Jetons issus de la danse du serveur : il signe avec son consumer.
+                if !consumer_key.is_empty() {
+                    r = r.header("X-CC-Consumer-Key", consumer_key).header("X-CC-Consumer-Secret", consumer_secret);
+                }
+            }
             Some(clevercloud_sdk::Credentials::Bearer { token }) => r = r.header("X-CC-Api-Token", token),
             _ => {}
         }

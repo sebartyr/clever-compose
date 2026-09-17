@@ -196,11 +196,14 @@ enum Command {
     },
     /// Organisations accessibles avec les identifiants (id et nom)
     Orgs,
-    /// Connexion à Clever Cloud par la console (comme `clever login`) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
+    /// Connexion à Clever Cloud (danse OAuth 1.0 avec votre consumer CLEVER_CONSUMER_KEY/SECRET) ; jetons gardés dans ~/.config/clever-cloud/clever-compose.json
     Login {
         /// N'ouvre pas le navigateur (l'URL est affichée)
         #[arg(long)]
         no_open: bool,
+        /// Port local du callback OAuth ; la base URL du consumer doit être http://127.0.0.1:<port>
+        #[arg(long, default_value_t = 7777, value_name = "PORT")]
+        callback_port: u16,
     },
     /// Oublie les jetons gardés par `login`
     Logout,
@@ -295,7 +298,7 @@ fn main() -> ExitCode {
         #[cfg(feature = "api")]
         Command::Api { org, listen, cors, public_url, api_key } => cmd_ui(opts, org.as_deref(), cc_compose::web::ServeOptions { listen, ui: false, origins: cors, public_url, api_key, initial_dir: None, open_browser: false }),
         Command::Orgs => cmd_orgs(),
-        Command::Login { no_open } => cmd_login(!no_open),
+        Command::Login { no_open, callback_port } => cmd_login(callback_port, !no_open, cli.remote.api_url.as_deref().map(str::trim).filter(|u| !u.is_empty()), cli.remote.api_key.as_deref()),
         Command::Logout => match cc_compose::auth::remove() {
             Ok(true) => {
                 cc_compose::ui::Ui::stderr().done(true, "jetons oubliés");
@@ -336,7 +339,7 @@ fn fail(msg: &str) -> ExitCode {
             let mut line = String::new();
             let _ = std::io::stdin().read_line(&mut line);
             if matches!(line.trim().to_ascii_lowercase().as_str(), "" | "o" | "oui" | "y" | "yes") {
-                if cmd_login(true) == ExitCode::SUCCESS {
+                if cmd_login(7777, true, std::env::var("CC_API_URL").ok().as_deref().filter(|u| !u.is_empty()), std::env::var("CC_API_KEY").ok().as_deref()) == ExitCode::SUCCESS {
                     eprintln!("relancez la commande.");
                 }
                 return ExitCode::from(1);
@@ -348,9 +351,16 @@ fn fail(msg: &str) -> ExitCode {
     ExitCode::from(1)
 }
 
-fn cmd_login(open: bool) -> ExitCode {
+/// Avec `--api-url`, la danse passe par le serveur (son consumer, son
+/// callback) ; sinon par le poste, avec CLEVER_CONSUMER_KEY/SECRET et un
+/// callback local.
+fn cmd_login(port: u16, open: bool, api_url: Option<&str>, api_key: Option<&str>) -> ExitCode {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-    match rt.block_on(cc_compose::auth::login(open)) {
+    let result = match api_url {
+        Some(url) => rt.block_on(cc_compose::auth::login_via_server(url, api_key, open)),
+        None => rt.block_on(cc_compose::auth::login(port, open)),
+    };
+    match result {
         Ok(s) => {
             cc_compose::ui::Ui::stderr().done(true, &format!("connecté{} ; jetons gardés dans {}", s.email.map(|e| format!(" en tant que {e}")).unwrap_or_default(), cc_compose::auth::config_path().display()));
             ExitCode::SUCCESS
@@ -470,7 +480,7 @@ fn cmd_images(opts: compose::project::Options) -> ExitCode {
 }
 
 fn api(org: &str) -> Result<cc_compose::exec::platform::Api, String> {
-    let (creds, _) = cc_compose::auth::credentials()?;
+    let creds = cc_compose::auth::local_credentials()?;
     Ok(cc_compose::exec::platform::Api::new(org.to_string(), creds))
 }
 
@@ -657,8 +667,8 @@ fn remote_dispatch(url: &str, key: Option<String>, opts: &compose::project::Opti
         Command::Orgs => (Op::Orgs, None),
         _ => return None,
     };
-    let tokens = match cc_compose::auth::credentials() {
-        Ok((c, _)) => Some(c),
+    let tokens = match cc_compose::auth::remote_credentials(url) {
+        Ok(c) => Some(c),
         Err(e) => return Some(fail(&e)),
     };
     let remote = match cc_compose::remote::Remote::new(url, key, org, tokens) {
@@ -673,22 +683,24 @@ fn remote_dispatch(url: &str, key: Option<String>, opts: &compose::project::Opti
 
 #[cfg(feature = "api")]
 fn cmd_ui(opts: compose::project::Options, org: Option<&str>, mut serve: cc_compose::web::ServeOptions) -> ExitCode {
-    // Identifiants de l'environnement, sinon connexion depuis l'interface :
-    // consumer CLEVER_CONSUMER_KEY/SECRET (danse avec callback) ou, à
-    // défaut, celui de clever-tools (par la console).
-    let session = match (cc_compose::auth::credentials(), org) {
-        (Ok((creds, _)), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
-        (Ok((creds, _)), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
+    // Le consumer est obligatoire (danse des navigateurs, signature des
+    // jetons sans consumer) ; les identifiants du serveur sont optionnels.
+    let session = match (cc_compose::auth::local_credentials(), org) {
+        (Ok(creds), Some(org)) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(org.to_string(), creds), org: org.to_string() }),
+        (Ok(creds), None) => Some(cc_compose::web::Session { api: cc_compose::exec::platform::Api::new(String::new(), creds), org: String::new() }),
         (Err(_), _) => None,
     };
-    let oauth = cc_compose::web::OauthConsumer::from_env();
+    let oauth = match cc_compose::web::OauthConsumer::from_env() {
+        Ok(c) => c,
+        Err(e) => return fail(&e),
+    };
     serve.initial_dir = std::fs::canonicalize(&opts.project_dir).ok();
     run_stateless(cc_compose::web::serve(serve, session, oauth))
 }
 
 fn cmd_orgs() -> ExitCode {
-    let creds = match cc_compose::auth::credentials() {
-        Ok((c, _)) => c,
+    let creds = match cc_compose::auth::local_credentials() {
+        Ok(c) => c,
         Err(e) => return fail(&e),
     };
     let api = cc_compose::exec::platform::Api::new(String::new(), creds);

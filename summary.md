@@ -394,6 +394,29 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   l'interface (options, logs, seed local, dernier projet, onglet,
   organisation) en `localStorage`. `cc-toggle` rétabli pour les options.
   Vérifié ensuite par le propriétaire de bout en bout (« ok ça marche »).
+- **Plus de consumer embarqué (17/09/2026)** : « retire les tokens CLI
+  par défaut, on demande de fournir obligatoirement ce qu'il faut dans
+  l'env » ; « clever-compose login passe par l'API à quel moment ? ».
+  Les constantes `DEFAULT_CONSUMER_*` du SDK ne sont plus utilisées ;
+  `Consumer::from_env()` échoue sans `CLEVER_CONSUMER_KEY`/`SECRET`, et
+  avec lui `login`, `ui`, `api`, et `CLEVER_TOKEN`/`SECRET` (le consumer
+  émetteur est requis). Le mode « console » (`cli-oauth`,
+  `/v2/self/cli_tokens`) disparaît partout : la danse est la classique à
+  trois pattes (`auth::request_token`/`access_token`, PLAINTEXT,
+  helpers partagés CLI/serveur). `login` seul : callback local
+  `http://127.0.0.1:<port>/callback` (`--callback-port`, 7777 par défaut
+  pour partager le consumer avec `ui`), page « vous pouvez fermer »,
+  jetons signables en local. `login --api-url` : la danse passe par le
+  serveur (`POST /api/session/login {cli: true}` → `request_token`, le
+  callback garde les jetons 10 min, `GET /api/session/login/{request_token}`
+  les rend une fois) ; `Stored.api_url` marque ces jetons comme valables
+  seulement avec ce serveur (`local_credentials`/`remote_credentials`
+  refusent le reste, consumer vide côté poste, le serveur signe avec le
+  sien). Front : seul le mode redirection reste. Vérifié : refus clairs
+  sans consumer (api, login, CLEVER_TOKEN), request_token refusé avec un
+  secret faux (400 « OAuth signature is invalid »), consumer inconnu via
+  le serveur (404 « OAuth consumer not found ») ; la danse complète reste
+  à faire par le propriétaire avec son consumer.
 - **Consumer du client (17/09/2026)** : « et pour filer des consumers
   spécifiques à l'api ? » — `CLEVER_CONSUMER_KEY/SECRET` sur le serveur
   ; en relisant, un jeton OAuth 1.0 n'est valable qu'avec son consumer

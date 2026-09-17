@@ -77,7 +77,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/info", get(info))
         .route("/api/session", get(session_get))
         .route("/api/session/login", post(login_start))
-        .route("/api/session/login/{cli_token}", get(login_poll))
+        .route("/api/session/login/{request_token}", get(login_poll))
         .route("/api/session/oauth/callback", get(oauth_callback))
         .route("/api/orgs", get(orgs))
         .route("/api/platform/projects", get(platform_projects))
@@ -130,10 +130,6 @@ async fn info(AxState(s): AxState<Shared>) -> Json<J> {
         "bundled": cfg!(feature = "ui-bundled"), "assets_bucket": std::env::var(crate::exec::assets::ENV_BUCKET).ok(), "api_key": s.api_key.is_some(),
         // Le serveur a-t-il ses propres identifiants (clients sans jetons servis) ?
         "server_credentials": s.fallback.is_some(),
-        // Comment un navigateur se connecte : `console` (consumer de
-        // clever-tools, jetons rendus par le serveur) ou `redirect` (danse
-        // avec callback vers ce serveur).
-        "login_mode": if s.oauth.builtin { "console" } else { "redirect" },
     }))
 }
 
@@ -174,38 +170,7 @@ async fn session_get(AxState(s): AxState<Shared>, c: Client) -> Json<J> {
     }
 }
 
-/// Encodage percent d'OAuth (RFC 3986, non réservés seulement).
-fn oauth_enc(s: &str) -> String {
-    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
-}
-
-fn oauth_nonce() -> String {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
-    format!("{:x}{:x}{:x}", t.as_nanos(), std::process::id(), rand_u64())
-}
-
-fn rand_u64() -> u64 {
-    use std::hash::{BuildHasher, Hasher};
-    std::collections::hash_map::RandomState::new().build_hasher().finish()
-}
-
-/// Paramètres OAuth communs, signature `PLAINTEXT` (le transport est TLS ;
-/// la doc de l'API l'admet).
-fn oauth_params(consumer: &super::OauthConsumer, token_secret: &str) -> Vec<(String, String)> {
-    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    vec![
-        ("oauth_consumer_key".into(), consumer.key.clone()),
-        ("oauth_signature_method".into(), "PLAINTEXT".into()),
-        ("oauth_signature".into(), format!("{}&{}", oauth_enc(&consumer.secret), oauth_enc(token_secret))),
-        ("oauth_timestamp".into(), ts.to_string()),
-        ("oauth_nonce".into(), oauth_nonce()),
-        ("oauth_version".into(), "1.0".into()),
-    ]
-}
-
-fn parse_form(text: &str) -> std::collections::HashMap<String, String> {
-    text.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.replace('+', " "))).collect()
-}
+use crate::auth::oauth_enc;
 
 #[derive(Deserialize)]
 struct OauthStart {
@@ -213,67 +178,42 @@ struct OauthStart {
     /// (même origine, ou une origine `--cors`).
     #[serde(rename = "return")]
     return_to: Option<String>,
+    /// Une CLI : pas de retour, elle interroge `/api/session/login/{request_token}`.
+    #[serde(default)]
+    cli: bool,
 }
 
-/// Début de la connexion d'un navigateur. Consumer de clever-tools :
-/// rend l'URL de la page `cli-oauth` de la console et le `cli_token` ;
-/// l'interface interroge ensuite `/api/session/login/{cli_token}` jusqu'à
-/// recevoir les jetons, qu'elle garde et envoie à chaque requête. Consumer
-/// propre : request token, URL d'autorisation ; le callback renvoie les
+/// Début de la connexion d'un navigateur : request token avec callback
+/// sur ce serveur, URL d'autorisation à ouvrir. Le callback renvoie les
 /// jetons dans le fragment de l'URL de retour.
 async fn login_start(AxState(s): AxState<Shared>, body: Option<Json<OauthStart>>) -> Result<Json<J>, ApiError> {
-    let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None });
-    if !s.oauth.builtin {
-        let url = request_token_redirect(&s, q).await?;
-        return Ok(Json(json!({ "mode": "redirect", "url": url })));
-    }
-    let cli_token = crate::auth::cli_token().map_err(internal)?;
-    Ok(Json(json!({ "mode": "console", "url": crate::auth::console_login_url(&cli_token), "cli_token": cli_token })))
-}
-
-/// Un tour d'attente des jetons de `cli_token` : `{ready: false}` tant que
-/// la console ne les a pas déposés, sinon les jetons (vérifiés).
-async fn login_poll(AxState(s): AxState<Shared>, UrlPath(cli_token): UrlPath<String>) -> Result<Json<J>, ApiError> {
-    if cli_token.len() < 16 || !cli_token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(bad("cli_token invalide"));
-    }
-    match crate::auth::poll_cli_tokens(&cli_token, 1, |_| {}).await {
-        Ok(mut stored) => {
-            let api = crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
-            let _ = api;
-            Ok(Json(json!({ "ready": true, "token": stored.token, "secret": stored.secret, "email": stored.email, "expiration_date": stored.expiration_date })))
-        }
-        Err(e) if e.starts_with("connexion non terminée") => Ok(Json(json!({ "ready": false }))),
-        Err(e) => Err(internal(e)),
-    }
-}
-
-/// Request token avec le consumer propre, puis l'URL d'autorisation.
-async fn request_token_redirect(s: &State, q: OauthStart) -> Result<String, ApiError> {
-    if s.oauth.builtin {
-        return Err(bad("le consumer de clever-tools n'admet pas de callback : connexion par la console (POST /api/session/login)"));
-    }
-    let consumer = s.oauth.clone();
-    let return_to = match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
-        None => "/".to_string(),
-        Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
-        Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
-        Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
+    let q = body.map(|Json(b)| b).unwrap_or(OauthStart { return_to: None, cli: false });
+    let return_to = if q.cli {
+        None
+    } else {
+        Some(match q.return_to.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+            None => "/".to_string(),
+            Some(r) if r.starts_with('/') && !r.starts_with("//") => r.to_string(),
+            Some(r) if s.origins.iter().chain(std::iter::once(&s.public_base)).any(|o| r == o || r.starts_with(&format!("{o}/"))) => r.to_string(),
+            Some(r) => return Err(bad(format!("`return={r}` : ni un chemin de ce serveur ni une origine passée en --cors"))),
+        })
     };
-    let mut params = oauth_params(&consumer, "");
-    params.push(("oauth_callback".into(), format!("{}/api/session/oauth/callback", s.public_base)));
-    let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
-    let url = format!("{}/v2/oauth/request_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
-    let resp = reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("request_token : {e}")))?;
-    let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(internal(format!("request_token : {status} {text}")));
+    let callback = format!("{}/api/session/oauth/callback", s.public_base);
+    let (token, secret, url) = crate::auth::request_token(&s.oauth, &callback).await.map_err(internal)?;
+    s.pending.lock().unwrap().insert(token.clone(), (secret, return_to));
+    Ok(Json(json!({ "mode": "redirect", "url": url, "request_token": token })))
+}
+
+/// Une CLI vient chercher ses jetons : `{ready: false}` tant que le
+/// navigateur n'est pas passé par le callback ; rendus une seule fois.
+async fn login_poll(AxState(s): AxState<Shared>, UrlPath(request_token): UrlPath<String>) -> Result<Json<J>, ApiError> {
+    let mut map = s.cli_tokens.lock().unwrap();
+    map.retain(|_, (_, at)| at.elapsed() < std::time::Duration::from_secs(600));
+    match map.remove(&request_token) {
+        Some((t, _)) => Ok(Json(json!({ "ready": true, "token": t.token, "secret": t.secret, "email": t.email, "consumer_key": s.oauth.key }))),
+        None if s.pending.lock().unwrap().contains_key(&request_token) => Ok(Json(json!({ "ready": false }))),
+        None => Err(ApiError(StatusCode::NOT_FOUND, "request token inconnu, expiré ou déjà consommé".into())),
     }
-    let form = parse_form(&text);
-    let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("request_token : réponse inattendue : {text}"))) };
-    s.pending.lock().unwrap().insert(token.clone(), (secret.clone(), return_to));
-    Ok(format!("{}/v2/oauth/authorize?oauth_token={}", clevercloud_sdk::PUBLIC_ENDPOINT, oauth_enc(token)))
 }
 
 #[derive(Deserialize)]
@@ -282,28 +222,21 @@ struct OauthCallback {
     oauth_verifier: String,
 }
 
-/// Étape 3 (consumer propre) : access token, vérifié, puis retour à
-/// l'interface avec les jetons dans le fragment (`#token=…&secret=…`,
-/// jamais envoyé au serveur par le navigateur).
+/// Étape 3 : access token, vérifié, puis retour à l'interface avec les
+/// jetons dans le fragment (`#token=…&secret=…`, jamais envoyé au serveur
+/// par le navigateur).
 async fn oauth_callback(AxState(s): AxState<Shared>, Query(q): Query<OauthCallback>) -> Result<Response, ApiError> {
-    let consumer = s.oauth.clone();
     let (request_secret, return_to) = s.pending.lock().unwrap().remove(&q.oauth_token).ok_or_else(|| bad("request token inconnu ou déjà utilisé : recommencez la connexion"))?;
-    let mut params = oauth_params(&consumer, &request_secret);
-    params.push(("oauth_token".into(), q.oauth_token.clone()));
-    params.push(("oauth_verifier".into(), q.oauth_verifier.clone()));
-    let qs: String = params.iter().map(|(k, v)| format!("{k}={}", oauth_enc(v))).collect::<Vec<_>>().join("&");
-    let url = format!("{}/v2/oauth/access_token_query?{qs}", clevercloud_sdk::PUBLIC_ENDPOINT);
-    let resp = reqwest::Client::new().post(&url).send().await.map_err(|e| internal(format!("access_token : {e}")))?;
-    let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(internal(format!("access_token : {status} {text}")));
+    let (token, secret) = crate::auth::access_token(&s.oauth, &q.oauth_token, &request_secret, &q.oauth_verifier).await.map_err(internal)?;
+    let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), consumer_key: None, api_url: None, user_id: None, email: None };
+    crate::auth::verify(&mut stored, &s.oauth).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
+    match return_to {
+        Some(r) => Ok(axum::response::Redirect::temporary(&format!("{r}#token={}&secret={}", oauth_enc(&token), oauth_enc(&secret))).into_response()),
+        None => {
+            s.cli_tokens.lock().unwrap().insert(q.oauth_token.clone(), (stored, std::time::Instant::now()));
+            Ok(axum::response::Html("<!doctype html><meta charset=utf-8><title>clever-compose</title><p>Accès autorisé : vous pouvez fermer cet onglet et revenir au terminal.").into_response())
+        }
     }
-    let form = parse_form(&text);
-    let (Some(token), Some(secret)) = (form.get("oauth_token"), form.get("oauth_token_secret")) else { return Err(internal(format!("access_token : réponse inattendue : {text}"))) };
-    let mut stored = crate::auth::Stored { token: token.clone(), secret: secret.clone(), expiration_date: None, user_id: None, email: None };
-    crate::auth::verify(&mut stored, &consumer).await.map_err(|e| ApiError(StatusCode::UNAUTHORIZED, e))?;
-    Ok(axum::response::Redirect::temporary(&format!("{return_to}#token={}&secret={}", oauth_enc(token), oauth_enc(secret))).into_response())
 }
 
 async fn orgs(AxState(s): AxState<Shared>, c: Client) -> Result<Json<J>, ApiError> {

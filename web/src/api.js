@@ -50,7 +50,6 @@ async function json(method, url, body) {
 export const api = {
   info: () => json('GET', '/api/info'),
   session: () => json('GET', '/api/session'),
-  loginPoll: (cliToken) => json('GET', `/api/session/login/${encodeURIComponent(cliToken)}`),
   orgs: () => json('GET', '/api/orgs'),
   platformProjects: () => json('GET', '/api/platform/projects'),
   inventory: (project) => json('GET', `/api/platform/projects/${encodeURIComponent(project)}/inventory`),

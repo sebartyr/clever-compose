@@ -29,13 +29,14 @@ clés est refusée avec un diagnostic clair plutôt qu'approximée.
 - **Indépendant de la CLI clever.** L'outil final n'appelle jamais `clever`
   en sous-processus et ne lit jamais `~/.config/clever-cloud/clever-tools.json`.
   Identifiants : `CC_API_TOKEN` (bearer), `CLEVER_TOKEN` + `CLEVER_SECRET`
-  (OAuth 1.0), ou `clever-compose login` (`auth.rs`, même danse que
-  `clever login` : page `cli-oauth` de la console + `/v2/self/cli_tokens`,
+  (OAuth 1.0), ou `clever-compose login` (`auth.rs` : danse OAuth 1.0
+  avec callback local `127.0.0.1:<port>`, ou via un serveur `--api-url` ;
   jetons dans `~/.config/clever-cloud/clever-compose.json`, notre fichier
-  dans leur répertoire). Le consumer public de clever-tools (constantes
-  du SDK) est le consumer par défaut (décision du 17/09/2026) : une
-  constante, pas une dépendance. La CLI clever sert seulement aux tests
-  manuels et au ménage.
+  dans leur répertoire). **Aucun consumer embarqué** (décision du
+  17/09/2026) : `CLEVER_CONSUMER_KEY`/`CLEVER_CONSUMER_SECRET` requis dans
+  l'environnement pour tout ce qui signe en OAuth 1.0 (`login`, `ui`,
+  `api`, `CLEVER_TOKEN`). La CLI clever sert seulement aux tests manuels
+  et au ménage.
 - **Le plan intermédiaire est le contrat.** Toute évolution qui le touche se
   discute avant d'être codée (les ajouts additifs avec valeur par défaut
   absente du JSON sont tolérés, et signalés).
@@ -108,11 +109,11 @@ mêmes commits déployés (vérifié en réel).
   `X-CC-Consumer-Key`/`-Secret` du consumer émetteur, ou `X-CC-Api-Token`,
   extracteur `Client`), validés chez Clever Cloud par
   `State::api_for` (cache 5 min), repli sur les identifiants du serveur
-  pour un client sans jetons (usage local) ; connexion du navigateur par
-  `POST /api/session/login` + `GET /api/session/login/{cli_token}`
-  (consumer de clever-tools, page `cli-oauth`) ou danse avec callback
-  (consumer `CLEVER_CONSUMER_KEY`/`SECRET`, jetons rendus dans le fragment
-  de l'URL de retour) ; jetons gardés en sessionStorage ; sans jetons
+  pour un client sans jetons (usage local) ; connexion par
+  `POST /api/session/login` (request token, callback du serveur) :
+  navigateur → jetons dans le fragment de l'URL de retour ; CLI
+  (`cli: true`) → `GET /api/session/login/{request_token}` jusqu'aux
+  jetons, rendus une fois ; jetons gardés en sessionStorage ; sans jetons
   valides, l'interface n'affiche que l'écran de connexion ; front Vue 3 + `@clevercloud/components` dans `web/` à la
   racine, sans SFC pour tourner sans build ; embarqué soit en sources ESM +
   import map CDN, soit en `dist/` Vite avec la feature `ui-bundled`).

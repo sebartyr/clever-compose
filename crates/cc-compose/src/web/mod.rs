@@ -52,8 +52,12 @@ pub struct State {
     /// Origines autorisées en CORS (interface servie ailleurs) ; aussi les
     /// seules destinations acceptées pour le retour après la danse OAuth.
     pub origins: Vec<String>,
-    /// Request tokens en attente d'autorisation → (secret, URL de retour).
-    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Request tokens en attente d'autorisation → (secret, URL de retour ;
+    /// `None` pour une CLI, qui viendra chercher les jetons).
+    pub pending: std::sync::Mutex<std::collections::HashMap<String, (String, Option<String>)>>,
+    /// Jetons obtenus pour une CLI, à retirer dès qu'elle les a lus
+    /// (request token → jetons, instant).
+    pub cli_tokens: std::sync::Mutex<std::collections::HashMap<String, (crate::auth::Stored, std::time::Instant)>>,
     /// Clé exigée des clients (`Authorization: Bearer`), pour un serveur
     /// exposé au-delà du poste.
     pub api_key: Option<String>,
@@ -149,10 +153,10 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
         }
     }
     match &fallback {
-        None => eprintln!("aucun identifiant sur le serveur : chaque client envoie les siens ({})", if oauth.builtin { "connexion par la console Clever Cloud, consumer de clever-tools" } else { "danse OAuth avec le consumer CLEVER_CONSUMER_KEY" }),
+        None => eprintln!("aucun identifiant sur le serveur : chaque client envoie les siens (danse OAuth avec le consumer CLEVER_CONSUMER_KEY, base URL {public_base})"),
         Some(_) => eprintln!("identifiants du serveur utilisés pour les clients qui n'en envoient pas"),
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, origins, pending: Default::default(), cli_tokens: Default::default(), api_key: o.api_key.clone(), validated: Default::default() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };

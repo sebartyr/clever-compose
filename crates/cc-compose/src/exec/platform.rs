@@ -285,13 +285,9 @@ pub fn credentials_from_env() -> PResult<Credentials> {
     if let Ok(token) = std::env::var("CC_API_TOKEN") {
         return Ok(Credentials::Bearer { token });
     }
-    match (std::env::var("CLEVER_TOKEN"), std::env::var("CLEVER_SECRET")) {
-        (Ok(token), Ok(secret)) => Ok(Credentials::OAuth1 {
-            token,
-            secret,
-            consumer_key: std::env::var("CLEVER_CONSUMER_KEY").unwrap_or_else(|_| clevercloud_sdk::DEFAULT_CONSUMER_KEY.into()),
-            consumer_secret: std::env::var("CLEVER_CONSUMER_SECRET").unwrap_or_else(|_| clevercloud_sdk::DEFAULT_CONSUMER_SECRET.into()),
-        }),
+    match (std::env::var("CLEVER_TOKEN"), std::env::var("CLEVER_SECRET"), std::env::var("CLEVER_CONSUMER_KEY"), std::env::var("CLEVER_CONSUMER_SECRET")) {
+        (Ok(token), Ok(secret), Ok(consumer_key), Ok(consumer_secret)) if !consumer_key.is_empty() && !consumer_secret.is_empty() => Ok(Credentials::OAuth1 { token, secret, consumer_key, consumer_secret }),
+        (Ok(_), Ok(_), _, _) => Err("CLEVER_TOKEN et CLEVER_SECRET sans CLEVER_CONSUMER_KEY et CLEVER_CONSUMER_SECRET : le consumer qui les a émis est requis".into()),
         _ => Err("identifiants absents : CC_API_TOKEN, ou CLEVER_TOKEN et CLEVER_SECRET (jeton OAuth 1.0)".into()),
     }
 }

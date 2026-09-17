@@ -31,7 +31,8 @@ l'usage ; `CC_SHIM_BIN` au build embarque un shim déjà compilé.
 ## Usage
 
 ```sh
-clever-compose login                     # comme `clever login` : page de la console, jetons gardés dans
+export CLEVER_CONSUMER_KEY=… CLEVER_CONSUMER_SECRET=…   # votre consumer OAuth (console), base URL http://127.0.0.1:7777
+clever-compose login                     # danse OAuth 1.0 dans le navigateur, callback local ; jetons gardés dans
                                          # ~/.config/clever-cloud/clever-compose.json (ou CLEVER_TOKEN/CLEVER_SECRET, CC_API_TOKEN)
 export CC_ORG=orga_xxx                   # ou --org
 
@@ -106,22 +107,16 @@ avec l'état des instances.
 
 Identifiants : **chaque client envoie les siens**, à chaque requête
 (`X-CC-Token`/`X-CC-Secret` avec le consumer qui les a émis en
-`X-CC-Consumer-Key`/`X-CC-Consumer-Secret`, ou `X-CC-Api-Token`), et le serveur les
-vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes) avant
-d'agir en son nom ; le serveur ne garde aucune session. Un navigateur
-qui n'en a pas voit un écran de connexion, qui démarre tout seul :
-
-- avec `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET` dans
-  l'environnement du serveur (un consumer que vous créez dans la
-  console, base URL = `--public-url`, callback
-  `/api/session/oauth/callback`), danse OAuth 1.0 classique : la page part vers
-  l'autorisation Clever Cloud et le callback ramène les jetons dans le
-  fragment de l'URL ;
-- sans, le consumer de clever-tools (constantes publiques du SDK) : ce
-  consumer n'admet aucun callback, la connexion passe par la page
-  `cli-oauth` de la console, ouverte dans un autre onglet ; l'interface
-  interroge le serveur, qui relaie `/v2/self/cli_tokens` comme
-  `clever login`, jusqu'à recevoir les jetons.
+`X-CC-Consumer-Key`/`X-CC-Consumer-Secret`, ou `X-CC-Api-Token`), et le
+serveur les vérifie chez Clever Cloud (`/v2/self`, cache de cinq minutes)
+avant d'agir en son nom ; le serveur ne garde aucune session. **Aucun
+consumer n'est embarqué** : `CLEVER_CONSUMER_KEY` / `CLEVER_CONSUMER_SECRET`
+sont requis dans l'environnement du serveur (un consumer que vous créez
+dans la console, base URL = `--public-url`, callback
+`/api/session/oauth/callback`), sinon `ui`/`api` refusent de démarrer. Un
+navigateur sans jetons voit un écran de connexion qui démarre tout seul :
+la page part vers l'autorisation Clever Cloud et le callback ramène les
+jetons dans le fragment de l'URL.
 
 Les jetons restent dans l'onglet (sessionStorage) ; « Se déconnecter »
 les oublie. Des jetons refusés (expirés, révoqués) ramènent à l'écran de
@@ -152,11 +147,17 @@ plateforme à un serveur `clever-compose api`, avec **ses propres jetons**
 (ceux de `login` ou de l'environnement), envoyés à chaque requête :
 
 ```sh
-clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE"        # côté serveur, sans identifiants
-clever-compose login                                             # côté poste, une fois
+CLEVER_CONSUMER_KEY=… CLEVER_CONSUMER_SECRET=… clever-compose api --listen 0.0.0.0:7777 --api-key "$CLE" --public-url https://api.exemple
+clever-compose login --api-url https://api.exemple --api-key "$CLE"      # côté poste, une fois : la danse passe par le serveur
 CC_API_URL=https://api.exemple CC_API_KEY="$CLE" clever-compose up --yes   # (ou --api-url / --api-key)
 ```
 
+Deux façons d'obtenir des jetons sur le poste : `login` seul fait la
+danse avec **votre** consumer (`CLEVER_CONSUMER_KEY`/`SECRET` dans
+l'environnement, base URL `http://127.0.0.1:7777`, `--callback-port` pour
+changer) et les jetons servent en local comme à distance ; `login
+--api-url` la fait passer par le serveur (son consumer, son callback), la
+CLI vient chercher les jetons, qui ne valent alors qu'avec ce serveur.
 Sans identifiants ou avec des jetons refusés, la CLI propose
 `clever-compose login` (et le lance sur réponse `o` dans un terminal).
 Une URL d'API en `http://` hors du poste fait partir les jetons en clair :
