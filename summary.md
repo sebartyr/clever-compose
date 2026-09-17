@@ -561,6 +561,16 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   (demande du même jour) : une colonne sous 900 px, menu des projets en
   tiroir plein écran, détail sous le diagramme, options défilantes ;
   vérifié en headless à 390 px.
+- **Archives bornées, extraction en flux hors du runtime (17/09/2026)** :
+  audit #12, S8. Corps de 256 Mio en mémoire, chaque entrée lue en
+  mémoire sans plafond de taille décompressée (zip bomb), le tout dans le
+  handler async. `ARCHIVE_LIMIT` 64 Mio (corps par défaut),
+  `SEED_UPLOAD_LIMIT` 1 Gio sur la seule route du dump ; `Budget`
+  d'extraction : 512 Mio décompressés, 64 Mio par fichier, 20 000
+  entrées, copie en flux (`take` + sonde d'un octet), fichier partiel et
+  racine retirés en cas de refus ; `add_archive` dans `spawn_blocking` ;
+  dump de seed écrit en flux (`tokio::fs`, `field.chunk()`). Tests :
+  zip de 64 Mio + 1 refusé et nettoyé, tar de 20 001 entrées refusé.
 - **Nom de projet validé, répertoires temporaires neufs (17/09/2026)** :
   audit #12, S9. `{project}` des routes plateforme entrait tel quel
   (percent-décodé par axum) dans les clés S3, `temp_dir().join(project)`

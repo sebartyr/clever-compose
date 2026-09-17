@@ -165,14 +165,21 @@ pub fn router(state: Shared) -> Router {
         .route("/api/local/{id}/plan", get(local_plan))
         .route("/api/local/{id}/up", post(local_up))
         .route("/api/local/{id}/seed", post(local_seed))
-        .route("/api/local/{id}/seed/upload", post(local_seed_upload))
+        .route("/api/local/{id}/seed/upload", post(local_seed_upload).layer(axum::extract::DefaultBodyLimit::max(SEED_UPLOAD_LIMIT)))
         .route("/api/local/{id}/export", post(local_export))
         .route("/api/local/{id}/scaling", axum::routing::put(local_scaling))
         .route("/api/local/{id}/assets/sync", post(local_assets_sync))
         .route("/api/flavors", get(flavors))
-        .layer(axum::extract::DefaultBodyLimit::max(256 * 1024 * 1024))
+        // Corps JSON et archives : 64 Mio ; un dump de seed peut être plus
+        // gros (route à sa propre limite, `SEED_UPLOAD_LIMIT`).
+        .layer(axum::extract::DefaultBodyLimit::max(ARCHIVE_LIMIT))
         .with_state(state)
 }
+
+/// Taille maximale d'une archive de projet (et de tout corps JSON).
+const ARCHIVE_LIMIT: usize = 64 * 1024 * 1024;
+/// Taille maximale d'un dump de seed envoyé par l'interface.
+const SEED_UPLOAD_LIMIT: usize = 1024 * 1024 * 1024;
 
 struct ApiError(StatusCode, String);
 
@@ -514,8 +521,12 @@ async fn local_upload(AxState(s): AxState<Shared>, c: Client, mut multipart: Mul
     let Some(field) = multipart.next_field().await.map_err(|e| bad(e.to_string()))? else { return Err(bad("aucun fichier reçu")) };
     let name = field.file_name().map(str::to_string).unwrap_or_else(|| "archive.zip".into());
     let bytes = field.bytes().await.map_err(|e| bad(e.to_string()))?;
-    let id = s.locals.add_archive(&name, &bytes, o.as_deref()).map_err(bad)?;
-    super::slog(&format!("projet reçu : {name} ({} octets) → {id}{}", bytes.len(), o.map(|u| format!(" (de {u})")).unwrap_or_default()));
+    let size = bytes.len();
+    // Extraction (décompression, écritures) hors du runtime.
+    let locals = s.clone();
+    let (n2, o2) = (name.clone(), o.clone());
+    let id = tokio::task::spawn_blocking(move || locals.locals.add_archive(&n2, &bytes, o2.as_deref())).await.map_err(|e| internal(e.to_string()))?.map_err(bad)?;
+    super::slog(&format!("projet reçu : {name} ({size} octets) → {id}{}", o.map(|u| format!(" (de {u})")).unwrap_or_default()));
     Ok(Json(json!({ "id": id })))
 }
 
@@ -757,12 +768,19 @@ async fn local_seed_upload(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<Str
     let Some(field) = multipart.next_field().await.map_err(|e| bad(e.to_string()))? else { return Err(bad("aucun fichier reçu")) };
     let name = field.file_name().map(str::to_string).unwrap_or_else(|| "dump".into());
     let name = Path::new(&name).file_name().and_then(|n| n.to_str()).unwrap_or("dump").to_string();
-    let bytes = field.bytes().await.map_err(|e| bad(e.to_string()))?;
     let rel = format!(".clever-compose/seed/{name}");
     let path = dir.join(&rel);
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| internal(e.to_string()))?;
-    std::fs::write(&path, &bytes).map_err(|e| internal(format!("{rel} : {e}")))?;
-    Ok(Json(json!({ "path": rel, "size": bytes.len() })))
+    tokio::fs::create_dir_all(path.parent().unwrap()).await.map_err(|e| internal(e.to_string()))?;
+    // En flux vers le fichier : un dump peut peser des centaines de Mio.
+    let mut out = tokio::fs::File::create(&path).await.map_err(|e| internal(format!("{rel} : {e}")))?;
+    let mut size: u64 = 0;
+    let mut field = field;
+    while let Some(chunk) = field.chunk().await.map_err(|e| bad(e.to_string()))? {
+        tokio::io::AsyncWriteExt::write_all(&mut out, &chunk).await.map_err(|e| internal(format!("{rel} : {e}")))?;
+        size += chunk.len() as u64;
+    }
+    tokio::io::AsyncWriteExt::flush(&mut out).await.map_err(|e| internal(format!("{rel} : {e}")))?;
+    Ok(Json(json!({ "path": rel, "size": size })))
 }
 
 /// Flavors Docker de la plateforme (catalogue embarqué).
