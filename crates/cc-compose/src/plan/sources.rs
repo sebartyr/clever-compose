@@ -71,7 +71,10 @@ pub fn dockerfile(app: &App, project_dir: &FsPath) -> Result<String, String> {
     for (i, g) in generated.iter().enumerate() {
         out.push_str(&format!("COPY cc-generated/{i} {}\n", g.target));
     }
-    out.push_str("USER root\n");
+    // Uid numérique : une image `FROM scratch` (Vikunja) n'a pas de
+    // `/etc/passwd`, et Docker refuse de lancer un `USER root` qu'il ne
+    // peut pas résoudre (« unable to find user root »).
+    out.push_str("USER 0:0\n");
     if let Some(user) = app.shim.user.as_deref().filter(|u| cc_compose_model::shim::Ids::from_numeric(u).is_none()) {
         // Résolution du nom en uid/gid au build, avec la libc de l'image
         // (getpwnam n'est pas fiable en musl statique, CLAUDE.md §8). Un
