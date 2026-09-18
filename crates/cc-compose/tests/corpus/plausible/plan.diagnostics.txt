@@ -1,3 +1,5 @@
+compose.yaml:54:9: avertissement [interpolation-unset] services.plausible.environment[1]: `${BASE_URL}` : variable absente de l'environnement et du `.env`, remplacée par une chaîne vide (`${BASE_URL:?message}` pour l'exiger, `${BASE_URL:-défaut}` pour un défaut)
+compose.yaml:55:9: avertissement [interpolation-unset] services.plausible.environment[2]: `${SECRET_KEY_BASE}` : variable absente de l'environnement et du `.env`, remplacée par une chaîne vide (`${SECRET_KEY_BASE:?message}` pour l'exiger, `${SECRET_KEY_BASE:-défaut}` pour un défaut)
 compose.yaml:37:5: avertissement [port-assumed-http] services.plausible: `plausible` : le port 8000 est supposé HTTP et servira le contrôle de santé sur 8080 ; `x-clever.protocol: tcp` s'il ne l'est pas
 compose.yaml:66:9: avertissement [environment-unset] services.plausible.environment.CLICKHOUSE_DATABASE_URL: `CLICKHOUSE_DATABASE_URL` est déclarée sans valeur et absente de l'environnement : ignorée
 compose.yaml:65:9: avertissement [environment-unset] services.plausible.environment.DATABASE_URL: `DATABASE_URL` est déclarée sans valeur et absente de l'environnement : ignorée

@@ -15,13 +15,17 @@ pub fn interpolate(node: Node, lookup: Lookup<'_>, diags: &mut Vec<Diagnostic>) 
 fn at(node: Node, p: &Path, lookup: Lookup<'_>, diags: &mut Vec<Diagnostic>) -> Node {
     match node.value {
         Value::Str(s) => {
-            let value = match template::substitute(&s, lookup) {
+            let mut unset = Vec::new();
+            let value = match template::substitute_tracking(&s, lookup, &mut unset) {
                 Ok(v) => v,
                 Err(e) => {
                     diags.push(Diagnostic::error("interpolation", format!("{p} : {e}")).at(p, node.span));
                     return Node { span: node.span, tag: node.tag, value: Value::Str(s) };
                 }
             };
+            for name in unset {
+                diags.push(Diagnostic::warning("interpolation-unset", format!("`${{{name}}}` : variable absente de l'environnement et du `.env`, remplacée par une chaîne vide (`${{{name}:?message}}` pour l'exiger, `${{{name}:-défaut}}` pour un défaut)")).at(p, node.span));
+            }
             let value = match cast_for(p) {
                 None => Value::Str(value),
                 Some(cast) => match cast(&value) {

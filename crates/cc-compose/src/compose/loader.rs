@@ -27,6 +27,9 @@ pub struct Config {
 
 pub struct Loader<'a> {
     pub files: &'a mut Files,
+    /// Avertissements du chargement (interpolation à vide), rendus avec
+    /// ceux du plan.
+    pub warnings: Vec<Diagnostic>,
     /// Répertoire du projet, pour afficher les fichiers relativement.
     root: PathBuf,
     /// Bases `extends` déjà chargées, par fichier.
@@ -37,7 +40,7 @@ type LoadResult<T> = Result<T, Diagnostic>;
 
 impl<'a> Loader<'a> {
     pub fn new(files: &'a mut Files, root: PathBuf) -> Self {
-        Loader { files, root, extends_cache: HashMap::new() }
+        Loader { files, root, extends_cache: HashMap::new(), warnings: Vec::new() }
     }
 
     /// `loadYamlModel` : tous les fichiers de `config`, fusionnés.
@@ -89,8 +92,10 @@ impl<'a> Loader<'a> {
             return Err(Diagnostic::error("root-not-mapping", format!("{display} : la racine doit être un mapping")).at(&Path::root(), raw.span));
         }
         let lookup = |k: &str| env.get(k).cloned();
-        let mut errs = Vec::new();
-        let node = interpolate::interpolate(raw, &lookup, &mut errs);
+        let mut diags = Vec::new();
+        let node = interpolate::interpolate(raw, &lookup, &mut diags);
+        let (errs, warns): (Vec<_>, Vec<_>) = diags.into_iter().partition(|d| d.severity == crate::diagnostic::Severity::Error);
+        self.warnings.extend(warns);
         if let Some(first) = errs.into_iter().next() {
             return Err(first);
         }

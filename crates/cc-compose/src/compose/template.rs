@@ -62,6 +62,13 @@ fn closing_brace(s: &[u8]) -> Option<usize> {
 }
 
 pub fn substitute(template: &str, lookup: Lookup<'_>) -> Result<String, TemplateError> {
+    substitute_tracking(template, lookup, &mut Vec::new())
+}
+
+/// Comme [`substitute`], en notant dans `unset` les variables absentes
+/// remplacées par une chaîne vide (`$X`, `${X}` sans opérateur) : Compose
+/// avertit dans ce cas, le chargeur aussi.
+pub fn substitute_tracking(template: &str, lookup: Lookup<'_>, unset: &mut Vec<String>) -> Result<String, TemplateError> {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(pos) = rest.find('$') {
@@ -83,7 +90,10 @@ pub fn substitute(template: &str, lookup: Lookup<'_>) -> Result<String, Template
             }
             let (name, op_and_arg) = inner.split_at(n);
             let value = if op_and_arg.is_empty() {
-                lookup(name).unwrap_or_default()
+                lookup(name).unwrap_or_else(|| {
+                    unset.push(name.to_string());
+                    String::new()
+                })
             } else {
                 braced(name, op_and_arg, lookup, template)?
             };
@@ -98,7 +108,11 @@ pub fn substitute(template: &str, lookup: Lookup<'_>) -> Result<String, Template
             rest = after;
             continue;
         }
-        out.push_str(&lookup(&after[..n]).unwrap_or_default());
+        let name = &after[..n];
+        out.push_str(&lookup(name).unwrap_or_else(|| {
+            unset.push(name.to_string());
+            String::new()
+        }));
         rest = &after[n..];
     }
     out.push_str(rest);

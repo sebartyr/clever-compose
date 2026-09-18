@@ -266,6 +266,8 @@ utilisable en local.
 `addon-credential-ambiguous` (même valeur chez plusieurs addons : valeurs
 distinctes ou `x-clever.environment`, jamais le premier venu),
 `addon-ng-vars-collision`, `environment-override-invalid`,
+`interpolation-unset` (variable `${X}` absente : chaîne vide, comme Compose
+qui avertit aussi ; `.env` à côté du compose ou `--env-file`),
 `addon-no-superuser`, `addon-connections`, `addon-documentdb-shared`,
 `addon-documentdb-version`, `terraform-addon-options`, `addon-private-shared`,
 `addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,

@@ -67,11 +67,12 @@ fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic,
     };
 
     let config = Config { working_dir: working_dir.clone(), files: paths, env: env.clone(), confine: opts.confine.then(|| working_dir.clone()) };
-    let tree = {
+    let (tree, load_warnings) = {
         let mut loader = Loader::new(&mut files, working_dir.clone());
-        loader.load_model(&config, &[])
-    }
-    .map_err(|d| fail(d, &files))?;
+        let tree = loader.load_model(&config, &[]);
+        (tree, std::mem::take(&mut loader.warnings))
+    };
+    let tree = tree.map_err(|d| fail(d, &files))?;
     if tree.as_map().is_some_and(|m| m.is_empty()) {
         return Err(fail(Diagnostic::error("empty-compose-file", "fichier compose vide"), &files));
     }
@@ -84,7 +85,7 @@ fn load_inner(opts: &Options) -> Result<(Project, Vec<Diagnostic>), (Diagnostic,
     if let Some(d) = errs.into_iter().next() {
         return Err(fail(d, &files));
     }
-    let mut warnings = Vec::new();
+    let mut warnings = load_warnings;
     apply_profiles(&mut tree, &profiles, &mut warnings).map_err(|d| fail(d, &files))?;
     typed::prune_unused(&mut tree);
     let mut tree = typed::omit_zero(tree);
