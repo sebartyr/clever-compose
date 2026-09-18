@@ -52,12 +52,80 @@
               "type": "string"
             }
           },
-          "description": "CleverCloud provider allow you to interact with CleverCloud platform.\n\n## Dedicated OAuth consumer\n\nIf you want to use a dedicated OAuth consumer and the acording user tokens, \nbe sure the next rights are granted\n\n```\n# EN\nAccess my personal information\nAccess my organizations\nManage my organizations\nManage my organizations's applications\nManage my organizations's add-ons\n\n# FR\nAcc\u00e9der \u00e0 mes informations personnelles\nAcc\u00e9der \u00e0 mes organisations\nG\u00e9rer mes organisations\nG\u00e9rer les applications de mes organisations\nG\u00e9rer les add-ons de mes organisations\n```\n\n## Applications: deployment and the commit attribute\n\nThe `deployment` block drives how Terraform deploys your application, and its `commit` attribute reflects the commit currently running on it.\n\n| configuration | behaviour |\n|---|---|\n| no `deployment` block | you deploy outside of Terraform (CLI, console, CI...), the provider never reconciles anything deployment-related and never shows a diff |\n| block without `commit` | the repository HEAD is deployed on create/update; `commit` is computed with the running hash, and a deployment done outside of Terraform silently updates it on the next refresh |\n| `commit = \"<hash>\"` | the commit is pinned: a deployment done outside of Terraform shows up as a diff and the next apply re-deploys the pinned hash |\n| `commit = \"refs/heads/...\"` | the reference is resolved and deployed; the value is kept as-is in the state |\n| `commit = \"github_hook\"` | deployments are delegated to GitHub, the provider never pushes nor reconciles the running commit |\n\n### Known limitations\n\n- **Import**: `terraform import` does not populate the `deployment` block (the provider cannot tell whether you want to manage deployments with Terraform). Add the block to your configuration to start tracking the running commit \u2014 be aware that the first apply then triggers a deployment.\n- **Git references**: when `commit` holds a reference (`refs/heads/...`), the running commit is not reported and deployments done outside of Terraform are not detected (a local reference cannot be compared to the running hash without cloning the repository).\n- **Switching from a reference to the computed commit**: removing `commit = \"refs/heads/...\"` from the configuration keeps the reference in the state; re-create the resource (or set an explicit hash once) to switch to the computed behaviour.\n- **Repository HEAD moves, nothing else changes**: `terraform plan` does not clone the repository, so a new commit on your branch does not show up as a diff by itself; the push happens on the next apply that carries a change.\n- **State freshness on update**: when an update deploys a new HEAD while `commit` is not configured, the state reports the new hash after the next refresh (Terraform requires the applied value to match the planned one).\n\n## Applications: private repository deployment\n\nTo deploy from a private GitHub repository, you need to generate a Personal Access Token (PAT) that will be used for authentication.\n\n### Creating a GitHub Personal Access Token\n\n1. Navigate to GitHub Settings \u2192 Developer settings \u2192 [Personal access tokens](https://github.com/settings/tokens)\n2. [Create a fine-grained token](https://github.com/settings/personal-access-tokens/new) with read access to repository contents\n3. **Best practice**: Limit the token to only the specific repositories you want to deploy (use \"Only select repositories\" instead of \"All repositories\")\n\n![Example PAT configuration](./pat_example.png)\n\nFor detailed instructions, refer to [GitHub's documentation on creating a fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)\n\n### Using the Token in Terraform\n\nOnce the token is generated, add the `authentication_basic` attribute to the `deployment` block of your application resource:\n\n```hcl\nresource \"clevercloud_nodejs\" \"my_app\" {\n  # ... other configuration ...\n\n  deployment {\n    repository = \"https://github.com/OWNER/REPO.git\"\n    authentication_basic = \"USER:PAT_TOKEN\"\n  }\n}\n```\n\nWhere:\n- `USER` is the GitHub username of the person who created the token\n- `PAT_TOKEN` is the Personal Access Token generated in the previous step\n\n## Store the Terraform state on Cellar\n\nA [Cellar](https://www.clever.cloud/developers/doc/addons/cellar/) bucket can store your Terraform state through the [S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3). The backend must exist before `terraform init`, so use a Cellar add-on and a bucket created beforehand (from the [Console](https://console.clever-cloud.com/) or the CLI):\n\n```terraform\nterraform {\n  backend \"s3\" {\n    bucket = \"my-terraform-state-bucket\"\n    key    = \"my-project.tfstate\"\n    region = \"us-east-1\"\n    endpoints = {\n      s3 = \"https://cellar-c2.services.clever-cloud.com\"\n    }\n\n    use_path_style              = true\n    skip_region_validation      = true\n    skip_credentials_validation = true\n    skip_metadata_api_check     = true\n    skip_requesting_account_id  = true\n  }\n}\n```\n\nCredentials are read from the standard AWS environment variables, filled with the Cellar add-on ones:\n\n```bash\nexport AWS_ACCESS_KEY_ID=\"$CELLAR_ADDON_KEY_ID\"\nexport AWS_SECRET_ACCESS_KEY=\"$CELLAR_ADDON_KEY_SECRET\"\n```\n\n~> Recent Terraform versions upload the state with a trailing checksum\n(`x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER`), a feature Cellar does not support yet:\nevery state write fails with `Error: Failed to save state [...] api error XAmzContentSHA256Mismatch`\n(reads are not affected). The `skip_s3_checksum` backend option has no effect on this behaviour.\nUntil Cellar supports trailing checksums, disable them through the AWS SDK environment variable:\n\n```bash\nexport AWS_REQUEST_CHECKSUM_CALCULATION=when_required\n```",
+          "description": "CleverCloud provider allow you to interact with CleverCloud platform.\n\n## Dedicated OAuth consumer\n\nIf you want to use a dedicated OAuth consumer and the acording user tokens, \nbe sure the next rights are granted\n\n```\n# EN\nAccess my personal information\nAccess my organizations\nManage my organizations\nManage my organizations's applications\nManage my organizations's add-ons\n\n# FR\nAccéder à mes informations personnelles\nAccéder à mes organisations\nGérer mes organisations\nGérer les applications de mes organisations\nGérer les add-ons de mes organisations\n```\n\n## Applications: deployment and the commit attribute\n\nThe `deployment` block drives how Terraform deploys your application, and its `commit` attribute reflects the commit currently running on it.\n\n| configuration | behaviour |\n|---|---|\n| no `deployment` block | you deploy outside of Terraform (CLI, console, CI...), the provider never reconciles anything deployment-related and never shows a diff |\n| block without `commit` | the repository HEAD is deployed on create/update; `commit` is computed with the running hash, and a deployment done outside of Terraform silently updates it on the next refresh |\n| `commit = \"<hash>\"` | the commit is pinned: a deployment done outside of Terraform shows up as a diff and the next apply re-deploys the pinned hash |\n| `commit = \"refs/heads/...\"` | the reference is resolved and deployed; the value is kept as-is in the state |\n| `commit = \"github_hook\"` | deployments are delegated to GitHub, the provider never pushes nor reconciles the running commit |\n\n### Known limitations\n\n- **Import**: `terraform import` does not populate the `deployment` block (the provider cannot tell whether you want to manage deployments with Terraform). Add the block to your configuration to start tracking the running commit — be aware that the first apply then triggers a deployment.\n- **Git references**: when `commit` holds a reference (`refs/heads/...`), the running commit is not reported and deployments done outside of Terraform are not detected (a local reference cannot be compared to the running hash without cloning the repository).\n- **Switching from a reference to the computed commit**: removing `commit = \"refs/heads/...\"` from the configuration keeps the reference in the state; re-create the resource (or set an explicit hash once) to switch to the computed behaviour.\n- **Repository HEAD moves, nothing else changes**: `terraform plan` does not clone the repository, so a new commit on your branch does not show up as a diff by itself; the push happens on the next apply that carries a change.\n- **State freshness on update**: when an update deploys a new HEAD while `commit` is not configured, the state reports the new hash after the next refresh (Terraform requires the applied value to match the planned one).\n\n## Applications: private repository deployment\n\nTo deploy from a private GitHub repository, you need to generate a Personal Access Token (PAT) that will be used for authentication.\n\n### Creating a GitHub Personal Access Token\n\n1. Navigate to GitHub Settings → Developer settings → [Personal access tokens](https://github.com/settings/tokens)\n2. [Create a fine-grained token](https://github.com/settings/personal-access-tokens/new) with read access to repository contents\n3. **Best practice**: Limit the token to only the specific repositories you want to deploy (use \"Only select repositories\" instead of \"All repositories\")\n\n![Example PAT configuration](./pat_example.png)\n\nFor detailed instructions, refer to [GitHub's documentation on creating a fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)\n\n### Using the Token in Terraform\n\nOnce the token is generated, add the `authentication_basic` attribute to the `deployment` block of your application resource:\n\n```hcl\nresource \"clevercloud_nodejs\" \"my_app\" {\n  # ... other configuration ...\n\n  deployment {\n    repository = \"https://github.com/OWNER/REPO.git\"\n    authentication_basic = \"USER:PAT_TOKEN\"\n  }\n}\n```\n\nWhere:\n- `USER` is the GitHub username of the person who created the token\n- `PAT_TOKEN` is the Personal Access Token generated in the previous step\n\n## Store the Terraform state on Cellar\n\nA [Cellar](https://www.clever.cloud/developers/doc/addons/cellar/) bucket can store your Terraform state through the [S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3). The backend must exist before `terraform init`, so use a Cellar add-on and a bucket created beforehand (from the [Console](https://console.clever-cloud.com/) or the CLI):\n\n```terraform\nterraform {\n  backend \"s3\" {\n    bucket = \"my-terraform-state-bucket\"\n    key    = \"my-project.tfstate\"\n    region = \"us-east-1\"\n    endpoints = {\n      s3 = \"https://cellar-c2.services.clever-cloud.com\"\n    }\n\n    use_path_style              = true\n    skip_region_validation      = true\n    skip_credentials_validation = true\n    skip_metadata_api_check     = true\n    skip_requesting_account_id  = true\n  }\n}\n```\n\nCredentials are read from the standard AWS environment variables, filled with the Cellar add-on ones:\n\n```bash\nexport AWS_ACCESS_KEY_ID=\"$CELLAR_ADDON_KEY_ID\"\nexport AWS_SECRET_ACCESS_KEY=\"$CELLAR_ADDON_KEY_SECRET\"\n```\n\n~> Recent Terraform versions upload the state with a trailing checksum\n(`x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER`), a feature Cellar does not support yet:\nevery state write fails with `Error: Failed to save state [...] api error XAmzContentSHA256Mismatch`\n(reads are not affected). The `skip_s3_checksum` backend option has no effect on this behaviour.\nUntil Cellar supports trailing checksums, disable them through the AWS SDK environment variable:\n\n```bash\nexport AWS_REQUEST_CHECKSUM_CALCULATION=when_required\n```",
           "description_kind": "markdown"
         },
         "version": 0
       },
       "resource_schemas": {
+        "clevercloud_cellar": {
+          "version": 0,
+          "block": {
+            "attributes": {
+              "host": {
+                "type": "string",
+                "description": "S3 compatible Cellar endpoint",
+                "description_kind": "markdown",
+                "computed": true
+              },
+              "id": {
+                "type": "string",
+                "description": "Generated unique identifier",
+                "description_kind": "markdown",
+                "computed": true
+              },
+              "key_id": {
+                "type": "string",
+                "description": "Key ID used to authenticate",
+                "description_kind": "markdown",
+                "computed": true
+              },
+              "key_secret": {
+                "type": "string",
+                "description": "Key secret used to authenticate",
+                "description_kind": "markdown",
+                "computed": true,
+                "sensitive": true
+              },
+              "name": {
+                "type": "string",
+                "description": "Name of the Cellar",
+                "description_kind": "markdown",
+                "required": true
+              },
+              "region": {
+                "type": "string",
+                "description": "Geographical region where the data will be stored",
+                "description_kind": "markdown",
+                "optional": true,
+                "computed": true
+              }
+            },
+            "description": "Manage [Cellar](https://www.clever.cloud/developers/doc/addons/cellar/) product.\n\nSee [Cellar product specification](https://www.clever.cloud/developers/doc/addons/cellar/).\n",
+            "description_kind": "markdown"
+          }
+        },
+        "clevercloud_cellar_bucket": {
+          "version": 0,
+          "block": {
+            "attributes": {
+              "cellar_id": {
+                "type": "string",
+                "description": "Cellar's reference",
+                "description_kind": "markdown",
+                "required": true
+              },
+              "id": {
+                "type": "string",
+                "description": "Name of the bucket",
+                "description_kind": "markdown",
+                "required": true
+              }
+            },
+            "description": "Manage [Cellar Buckets](https://www.clever.cloud/developers/doc/addons/cellar/).\n\nSee [Cellar product specification](https://www.clever.cloud/developers/doc/addons/cellar/).\n",
+            "description_kind": "markdown"
+          }
+        },
         "clevercloud_configprovider": {
           "block": {
             "attributes": {
@@ -434,7 +502,7 @@
                 "type": "string"
               },
               "registry_url": {
-                "description": "The server of your private registry (optional).\tDocker\u2019s public registry",
+                "description": "The server of your private registry (optional).\tDocker’s public registry",
                 "description_kind": "markdown",
                 "optional": true,
                 "type": "string"

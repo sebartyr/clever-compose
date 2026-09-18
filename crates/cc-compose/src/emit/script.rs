@@ -79,8 +79,20 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
         for a in &addons {
             let version = a.version.as_ref().map(|v| format!(" --addon-version {}", sq(v))).unwrap_or_default();
             let options: String = a.options.iter().map(|(k, v)| format!(" --option {}", sq(&format!("{k}={v}")))).collect();
-            let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version, options);
+            if a.external {
+                let _ = writeln!(s, "# addon existant {} : réutilisé, jamais créé ni supprimé ici", sq(&a.name));
+            } else {
+                let _ = writeln!(s, "clever addon create {} {} --plan {} --region {}{}{} -o \"$ORG\"", sq(&a.provider), sq(&a.name), sq(&a.plan), sq(&a.region), version, options);
+            }
             let _ = writeln!(s, "ADDON_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .addonId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
+            if !a.buckets.is_empty() {
+                // Les clés de l'addon, puis un `mb` idempotent par bucket
+                // (s3cmd, le client S3 le plus courant sur le poste).
+                let _ = writeln!(s, "eval \"$(clever addon env \"$ADDON_{}\" -o \"$ORG\" -F shell)\"", ident(&a.service));
+                for b in &a.buckets {
+                    let _ = writeln!(s, "s3cmd --host \"$CELLAR_ADDON_HOST\" --host-bucket \"$CELLAR_ADDON_HOST\" --access_key \"$CELLAR_ADDON_KEY_ID\" --secret_key \"$CELLAR_ADDON_KEY_SECRET\" mb {} || true  # existant : sans effet", sq(&format!("s3://{b}")));
+                }
+            }
             if a.private {
                 let _ = writeln!(s, "ADDON_REAL_{}=\"$(clever addon list -o \"$ORG\" -F json | jq -r '.[] | select(.name == {}) | .realId')\"", ident(&a.service), sq(&a.name).replace('\'', "\""));
             }

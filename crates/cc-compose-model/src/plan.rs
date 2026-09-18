@@ -310,6 +310,15 @@ pub struct Addon {
     /// PostgreSQL dédié : endpoint compatible MongoDB).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub options: std::collections::BTreeMap<String, String>,
+    /// Cellar : buckets créés s'ils manquent (S3 `CreateBucket` avec les
+    /// clés de l'addon), jamais supprimés. Ajout additif du 18/09/2026.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub buckets: Vec<String>,
+    /// Addon désigné par son nom réel (`x-clever.cellar.<n>.name`) : lié
+    /// s'il existe, créé sinon, mais jamais supprimé par `down` (il n'est
+    /// pas au nom du projet). Ajout additif du 18/09/2026.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub external: bool,
 }
 
 /// Port sur lequel un addon membre d'un network group sert son protocole

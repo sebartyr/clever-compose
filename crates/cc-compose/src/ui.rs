@@ -198,7 +198,12 @@ impl Ui {
                     monthly += price;
                     let engine = a.options.get("documentdb").map(|_| " + DocumentDB").unwrap_or("");
                     let access = if a.private { "network group" } else { "hôte public" };
-                    rows.push(([a.service.clone(), "addon".into(), format!("{}{engine} {} plan {} ({price} €/mois HT), {access}", a.provider.trim_end_matches("-addon"), a.version.clone().unwrap_or_default(), a.plan)], Vec::new()));
+                    let detail = if a.provider == "cellar-addon" {
+                        format!("cellar `{}` ({}), bucket(s) : {}", a.name, if a.external { "existant".to_string() } else { format!("plan {} {price} €/mois HT", a.plan) }, if a.buckets.is_empty() { "aucun".to_string() } else { a.buckets.join(", ") })
+                    } else {
+                        format!("{}{engine} {} plan {} ({price} €/mois HT), {access}", a.provider.trim_end_matches("-addon"), a.version.clone().unwrap_or_default(), a.plan)
+                    };
+                    rows.push(([a.service.clone(), "addon".into(), detail], Vec::new()));
                 }
                 Resource::NetworkGroup(ng) => {
                     let members: Vec<String> = plan.resources.iter().filter_map(|x| match x {

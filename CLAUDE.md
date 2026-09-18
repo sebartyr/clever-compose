@@ -146,8 +146,12 @@ mêmes commits déployés (vérifié en réel).
   Assets (`exec/assets.rs`) : bucket Cellar fourni par l'utilisateur
   (`CLEVER_COMPOSE_ASSETS_BUCKET` + `CELLAR_ADDON_*`), un préfixe
   `<propriétaire>/<projet>/` (lecture authentifiée, sous l'organisation du
-  client ; fichiers `secrets.*.file` jamais poussés) ; l'outil
-  ne crée ni addon ni bucket (décision du 16/09/2026).
+  client ; fichiers `secrets.*.file` jamais poussés) ; pour les
+  **assets**, l'outil ne crée ni addon ni bucket (décision du 16/09/2026).
+  Un Cellar **déclaré par l'utilisateur** (`x-clever.cellar`, 18/09/2026)
+  est une ressource du plan comme un PostgreSQL : addon retrouvé par son
+  nom ou créé, buckets créés s'ils manquent (S3 `CreateBucket`, jamais
+  supprimés par `up`), lié aux services qui le déclarent.
 
 Architecture figée à amd64.
 
@@ -259,7 +263,12 @@ valeur (décision du 18/09/2026). Un addon privé joint par le groupe
 injecte `<PRÉFIXE>_NG_HOST`/`_NG_PORT` (FQDN de membre, port du groupe) à
 côté des variables de la liaison, sauf deux addons du même fournisseur
 (`addon-ng-vars-collision`). Niveau projet : `network_groups` (`per-network` | `single` |
-`none`). Les clés `x-*` sont ignorées par Compose : le fichier reste
+`none`), `cellar` (`{ <nom>: { buckets: [...], name?: <addon existant> } }`) ;
+niveau service : `cellar: [<nom>...]` (liaison, `CELLAR_ADDON_*` +
+`CELLAR_ADDON_BUCKET`, références `{{n.host}}`, `{{n.key_id}}`,
+`{{n.key_secret}}`, `{{n.bucket}}` / `{{n.bucket.<b>}}`). Un Cellar
+`name:` explicite est `external` : lié, jamais supprimé par `down`
+(pas au nom du projet) ; en Terraform, variable `addon_<n>_id`. Les clés `x-*` sont ignorées par Compose : le fichier reste
 utilisable en local.
 
 ### Diagnostics à connaître
@@ -270,6 +279,8 @@ utilisable en local.
 `addon-credential-ambiguous` (même valeur chez plusieurs addons : valeurs
 distinctes ou `x-clever.environment`, jamais le premier venu),
 `addon-ng-vars-collision`, `environment-override-invalid`,
+`cellar-addon`, `cellar-unknown`, `cellar-multiple`, `cellar-name-conflict`,
+`cellar-bucket-name`, `terraform-addon-existing`,
 `interpolation-unset` (variable `${X}` absente : chaîne vide, comme Compose
 qui avertit aussi ; `.env` à côté du compose ou `--env-file`),
 `addon-no-superuser`, `addon-connections`, `addon-documentdb-shared`,
@@ -290,7 +301,10 @@ aucune variable d'environnement ni identifiant Docker du serveur,
 Sans état local : apps nommées `<projet>-<service>`, tags `compose-project`,
 `compose-service`, `compose-spec`. Seul l'espace `compose-*` est géré : un
 tag posé par l'utilisateur survit au `up` (`reconcile::merge_tags`,
-18/09/2026). L'état se reconstruit depuis l'API
+18/09/2026). Même principe pour l'environnement : `CLEVER_COMPOSE_MANAGED`
+liste les variables posées par l'outil ; au `up` suivant, seules celles-là
+sont retirées si le compose ne les pose plus, une variable ajoutée dans la
+console survit (`reconcile::merge_env`, 18/09/2026). L'état se reconstruit depuis l'API
 (`exec/inspect::discover`), ce qui sert à `up`, `down`, `ps`, `logs`.
 
 Ordre du `up` : addons, groupes, apps sans déploiement, liaisons, variables
@@ -308,7 +322,8 @@ sans tag (créées par Terraform) sont laissées à `terraform destroy`.
 ## 7. Exports
 
 Terraform : `main.tf.json` (validé) et `hcl/main.tf` rendu depuis la même
-structure. Chaque application reçoit `networkgroups` (`fqdn` alias
+structure. Cellar : `clevercloud_cellar` (nom seul) et
+`clevercloud_cellar_bucket` (`id` = nom du bucket, `cellar_id`). Chaque application reçoit `networkgroups` (`fqdn` alias
 `<service>.m.<ng>.cc-ng.cloud`, validé par le provider contre `cc-ng.cloud`),
 `deployment { repository = var.repository, commit = "refs/heads/clever-compose/<service>" }`
 (`repository` accepte `file://` : dépôt local ouvert sur place),

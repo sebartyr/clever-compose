@@ -60,6 +60,13 @@ pub struct XClever {
     /// d'initialisation. `task` (défaut : une Clever Task) ou `local`
     /// (depuis le poste qui lance `up`).
     pub init: Option<String>,
+    /// Cellar (S3 managé), pris en compte sur Clever Cloud seulement.
+    /// Niveau projet : les ressources, par nom logique (`buckets` créés
+    /// s'ils manquent, `name` pour réutiliser un addon existant). Niveau
+    /// service : les noms logiques à lier (variables `CELLAR_ADDON_*`,
+    /// `CELLAR_ADDON_BUCKET`, références `{{n.host|key_id|key_secret|bucket}}`).
+    #[serde(default)]
+    pub cellar: Option<CellarField>,
     /// Niveau projet : conserver les fichiers du projet et le plan dans un
     /// bucket Cellar de l'organisation (relecture depuis la plateforme).
     pub assets: Option<bool>,
@@ -70,7 +77,43 @@ pub struct XClever {
     pub network_groups: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum CellarField {
+    /// Niveau service : `cellar: [files]`.
+    Refs(Vec<String>),
+    /// Niveau projet : `cellar: { files: { buckets: [...] } }`.
+    Decls(indexmap::IndexMap<String, CellarDecl>),
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CellarDecl {
+    #[serde(default)]
+    pub buckets: Vec<String>,
+    /// Nom réel d'un addon Cellar de l'organisation à réutiliser ; sinon
+    /// `<projet>-<nom logique>`, créé au besoin.
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 impl XClever {
+    /// Les Cellar déclarés (niveau projet).
+    pub fn cellar_decls(&self) -> indexmap::IndexMap<String, CellarDecl> {
+        match &self.cellar {
+            Some(CellarField::Decls(d)) => d.clone(),
+            _ => Default::default(),
+        }
+    }
+
+    /// Les Cellar liés (niveau service).
+    pub fn cellar_refs(&self) -> Vec<String> {
+        match &self.cellar {
+            Some(CellarField::Refs(r)) => r.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn project(project: &Project, diags: &mut Diagnostics) -> XClever {
         match project.extra.get("x-clever") {
             Some(v) => parse(v, &Path::root().child("x-clever"), diags),

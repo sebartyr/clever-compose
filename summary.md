@@ -107,6 +107,24 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
   en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
   Docker ne sait pas y résoudre `root`.
+- **Cellar déclaré** (18/09/2026, demande du propriétaire) : `x-clever.cellar`
+  niveau projet (buckets, `name` d'un addon existant), `cellar: [n]` niveau
+  service. Plan : ressource `Addon` `cellar-addon` avec champs additifs
+  `buckets` et `external`. Exécuteur : addon retrouvé par nom (mécanisme
+  existant) ou créé (plan S, `--yes`), attente des clés, `HeadBucket` puis
+  `CreateBucket` (`assets::Cellar::create_bucket`, rusty-s3), liaison par
+  `depends_on`. `down` : découverte par préfixe de nom, donc un addon
+  `external` n'est jamais touché ; un Cellar au nom du projet part avec ses
+  buckets sous `--yes`. Exports : `clevercloud_cellar` +
+  `clevercloud_cellar_bucket` (schéma 2.2.0 régénéré et épinglé),
+  `s3cmd mb` dans le script ; addon existant → variable `addon_<n>_id`.
+  `CELLAR_ADDON_BUCKET` injectée ; rôles `key_id`, `key_secret`, `bucket`.
+  Le dépôt local du provider Terraform n'est plus sur le poste.
+- **Variables de la console préservées** (18/09/2026) : `PUT /env` remplace
+  tout ; `CLEVER_COMPOSE_MANAGED` liste ce que l'outil pose, seules ces
+  variables sont retirées quand le compose ne les pose plus
+  (`reconcile::merge_env`, tests unitaires). Une application d'avant ce
+  marqueur ne perd rien au premier `up`.
 - **Dialectes en données, override explicite, interpolation** (18/09/2026,
   demande du propriétaire en trois points) : (1) `data/addon-images.json`
   porte la reconnaissance des images et la lecture de leurs identifiants

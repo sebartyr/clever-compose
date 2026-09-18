@@ -13,10 +13,12 @@ fichier. Régénérer avec la même requête ; ne pas éditer à la main.
 Sortie de `terraform providers schema -json` (Terraform 1.16.2) pour le
 provider `CleverCloud/clevercloud` **2.2.0**, le 16/09/2026, réduite aux
 ressources utilisées (`clevercloud_docker`, `clevercloud_networkgroup`, les
-addons `postgresql`, `mysql`, `redis`, `mongodb`, `elasticsearch`, et
-`configprovider`). Les sources du provider sont en local dans
-`~/cc-compose/terraform-provider-clevercloud` pour lire le comportement
-derrière le schéma (`pkg/resources/application/git.go` pour `deployment`,
+addons `postgresql`, `mysql`, `redis`, `mongodb`, `elasticsearch`,
+`configprovider`, et depuis le 18/09/2026 `cellar` et `cellar_bucket`,
+relus dans le schéma régénéré du même provider 2.2.0). Les sources du provider étaient en local dans
+`~/cc-compose/terraform-provider-clevercloud` (absentes du poste le
+18/09/2026 : les recloner pour lire le comportement derrière le schéma,
+`pkg/resources/application/git.go` pour `deployment`,
 `pkg/resources/ng.go` pour `networkgroups`, `dependencies.go`).
 
 Sert à l'émetteur Terraform pour les noms de ressources et d'attributs

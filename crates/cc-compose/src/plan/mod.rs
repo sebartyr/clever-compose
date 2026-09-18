@@ -162,7 +162,7 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             private = false;
         }
         let declared = addons::declared(&rec, s);
-        addons.insert(name.clone(), env::AddonRef { provider: rec.provider, private });
+        addons.insert(name.clone(), env::AddonRef { provider: rec.provider, private, buckets: Vec::new() });
         addon_infos.insert(name.clone(), (rec, declared));
     }
 
@@ -380,6 +380,56 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
             tags: tags(name),
             private,
             options: if documentdb { std::collections::BTreeMap::from([("documentdb".to_string(), "true".to_string())]) } else { Default::default() },
+            buckets: Vec::new(),
+            external: false,
+        }));
+    }
+
+    // Cellar déclarés en `x-clever.cellar` (niveau projet) : addons sans
+    // service Compose, pris en compte sur Clever Cloud seulement. Buckets
+    // créés s'ils manquent, addon existant réutilisé par son nom.
+    let cellar_decls = project_x.cellar_decls();
+    for (logical, decl) in &cellar_decls {
+        let cp = Path::root().child("x-clever").child("cellar").child(logical);
+        if project.services.contains_key(logical) || addons.contains_key(logical) {
+            diags.push(Diagnostic::error("cellar-name-conflict", format!("le Cellar `{logical}` porte le nom d'un service : choisissez un autre nom logique")).with_path(&cp));
+            continue;
+        }
+        let region = project_x.region.clone().unwrap_or_else(|| "par".into());
+        let Some(provider) = addons::catalog().providers.get("cellar-addon") else {
+            diags.push(Diagnostic::error("cellar-catalog", "le catalogue embarqué ne connaît pas `cellar-addon`").with_path(&cp));
+            continue;
+        };
+        let plan = match addons::choose_plan(provider, &region, None, false) {
+            Ok(p) => p,
+            Err(e) => {
+                diags.push(Diagnostic::error("cellar-plan", format!("Cellar `{logical}` : {e}")).with_path(&cp));
+                continue;
+            }
+        };
+        for b in &decl.buckets {
+            // Nommage S3 : minuscules, chiffres, `-` et `.`, 3 à 63 caractères.
+            if b.len() < 3 || b.len() > 63 || !b.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.') || b.starts_with('-') || b.ends_with('-') {
+                diags.push(Diagnostic::error("cellar-bucket-name", format!("Cellar `{logical}` : `{b}` n'est pas un nom de bucket S3 valide (3 à 63 caractères, minuscules, chiffres, `-`, `.`)")).with_path(&cp.child("buckets")));
+            }
+        }
+        let external = decl.name.is_some();
+        let name = decl.name.clone().unwrap_or_else(|| format!("{}-{logical}", project.name));
+        diags.push(Diagnostic::warning("cellar-addon", format!("Cellar `{logical}` : addon `{name}` ({}{}){} ; lié aux services qui le déclarent, `CELLAR_ADDON_*` et `CELLAR_ADDON_BUCKET` injectées", if external { "existant, ou créé" } else { "créé s'il manque, plan " }, if external { String::new() } else { format!("`{}` {} €/mois HT", plan.slug, plan.price) }, if decl.buckets.is_empty() { String::new() } else { format!(", bucket(s) {} créé(s) s'il(s) manque(nt) (supprimés avec l'addon par `down --yes` seulement s'il est au nom du projet)", decl.buckets.iter().map(|b| format!("`{b}`")).collect::<Vec<_>>().join(", ")) })).with_path(&cp));
+        addons.insert(logical.clone(), env::AddonRef { provider: "cellar-addon", private: false, buckets: decl.buckets.clone() });
+        resources.push(Resource::Addon(Addon {
+            id: ResourceId(format!("addon/{logical}")),
+            service: logical.clone(),
+            name,
+            provider: "cellar-addon".into(),
+            plan: plan.slug.clone(),
+            region,
+            version: None,
+            tags: tags(logical),
+            private: false,
+            options: Default::default(),
+            buckets: decl.buckets.clone(),
+            external,
         }));
     }
     if diags.has_errors() {
@@ -777,6 +827,32 @@ fn plan_service(
             other => diags.push(Diagnostic::warning("depends-on-condition", format!("condition `{other}` inconnue, traitée comme `service_started`")).with_path(&dp)),
         }
         depends_on.push(ResourceId(format!("app/{dep}")));
+    }
+
+    // Cellar liés (`x-clever.cellar: [n]`) : dépendance (liaison avant le
+    // déploiement) et `CELLAR_ADDON_BUCKET` si un seul Cellar avec bucket.
+    let cellar_refs = x.cellar_refs();
+    for c in &cellar_refs {
+        let cp = p.child("x-clever").child("cellar");
+        match addons.get(c) {
+            Some(a) if a.provider == "cellar-addon" => {
+                let id = ResourceId(format!("addon/{c}"));
+                if !depends_on.contains(&id) {
+                    depends_on.push(id);
+                }
+            }
+            _ => diags.push(Diagnostic::error("cellar-unknown", format!("`{name}` : Cellar `{c}` non déclaré au niveau projet (`x-clever.cellar.{c}`)")).with_path(&cp)),
+        }
+    }
+    if cellar_refs.len() > 1 {
+        diags.push(Diagnostic::warning("cellar-multiple", format!("`{name}` : {} Cellar liés, leurs variables `CELLAR_ADDON_*` se recouvrent ; désignez chacun par `{{{{n.host}}}}`, `{{{{n.key_id}}}}`… dans `x-clever.environment`", cellar_refs.len())).with_path(&p.child("x-clever").child("cellar")));
+    } else if let Some(c) = cellar_refs.first() {
+        if let Some(b) = addons.get(c).and_then(|a| a.buckets.first()) {
+            if !env.iter().any(|e| e.key == "CELLAR_ADDON_BUCKET") {
+                env.push(EnvVar { key: "CELLAR_ADDON_BUCKET".into(), value: Template::literal(b.clone()) });
+                env.sort_by(|a, b| a.key.cmp(&b.key));
+            }
+        }
     }
 
     Some((App {

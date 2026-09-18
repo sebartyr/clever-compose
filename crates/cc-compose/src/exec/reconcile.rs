@@ -89,6 +89,35 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                     state.addon_real_ids.insert(a.service.clone(), created.real_id);
                 }
             }
+            // Cellar : buckets créés s'ils manquent, avec les clés de l'addon
+            // (qui apparaissent quelques secondes après la création).
+            if !a.buckets.is_empty() {
+                if opts.dry_run {
+                    log(&format!("addon {} : bucket(s) {} à créer s'ils manquent", a.name, a.buckets.join(", ")));
+                } else if let Some(id) = state.addon_ids.get(&a.service) {
+                    let started = std::time::Instant::now();
+                    let env = loop {
+                        let env = platform.addon_env(id).await?;
+                        if env.iter().any(|e| e.name == "CELLAR_ADDON_KEY_SECRET") {
+                            break env;
+                        }
+                        if started.elapsed() > Duration::from_secs(120) {
+                            return Err(format!("addon {} : les clés Cellar (CELLAR_ADDON_KEY_*) ne sont pas apparues en 2 minutes", a.name));
+                        }
+                        log(&format!("{}addon {} : attente des clés Cellar ({}s)", crate::ui::PROGRESS, a.name, started.elapsed().as_secs()));
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                    };
+                    for b in &a.buckets {
+                        let cellar = super::assets::Cellar::from_env(&env, b)?;
+                        if cellar.bucket_exists().await? {
+                            log(&format!("addon {} : bucket {b} existe", a.name));
+                        } else {
+                            cellar.create_bucket().await?;
+                            log(&format!("addon {} : bucket {b} créé", a.name));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -273,9 +302,10 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                 None => log(&format!("application {} : registre privé {host} sans identifiants dans la configuration Docker du poste ; `docker login {host}` d'abord, sinon le build échouera", app.name)),
             }
         }
-        wanted.sort_by(|a, b| a.name.cmp(&b.name));
         let mut current = platform.get_env(app_id).await?;
         current.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut wanted = merge_env(&current, wanted);
+        wanted.sort_by(|a, b| a.name.cmp(&b.name));
         if current != wanted {
             platform.set_env(app_id, &wanted).await?;
             log(&format!("application {} : environnement mis à jour ({} variables)", app.name, wanted.len()));
@@ -658,6 +688,29 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
     Ok(())
 }
 
+/// Variable qui liste ce que l'outil gère dans l'environnement d'une
+/// application, pour distinguer au `up` suivant une variable retirée du
+/// compose (à supprimer) d'une variable ajoutée par l'utilisateur dans la
+/// console (à garder). Sans état local (CLAUDE.md §6), 18/09/2026.
+pub const MANAGED_VAR: &str = "CLEVER_COMPOSE_MANAGED";
+
+/// Environnement visé : celui du plan, plus les variables de `current`
+/// que l'outil ne gérait pas au `up` précédent (posées par l'utilisateur),
+/// et [`MANAGED_VAR`] qui liste les nôtres.
+pub fn merge_env(current: &[PEnv], mut planned: Vec<PEnv>) -> Vec<PEnv> {
+    let previously: std::collections::BTreeSet<&str> = current.iter().find(|e| e.name == MANAGED_VAR).map(|e| e.value.split(',').filter(|s| !s.is_empty()).collect()).unwrap_or_default();
+    let mut managed: Vec<String> = planned.iter().map(|e| e.name.clone()).collect();
+    managed.sort();
+    for e in current {
+        // Jamais gérée par nous, absente du plan : à l'utilisateur.
+        if e.name != MANAGED_VAR && !previously.contains(e.name.as_str()) && !planned.iter().any(|p| p.name == e.name) {
+            planned.push(e.clone());
+        }
+    }
+    planned.push(PEnv { name: MANAGED_VAR.into(), value: managed.join(",") });
+    planned
+}
+
 /// Tags visés pour une application existante : ceux du plan, plus les tags
 /// de `current` hors de l'espace `compose-` (posés par l'utilisateur).
 pub fn merge_tags(current: &[String], planned: &[String]) -> Vec<String> {
@@ -668,6 +721,40 @@ pub fn merge_tags(current: &[String], planned: &[String]) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod env_tests {
+    use super::*;
+    fn v(n: &str, val: &str) -> PEnv {
+        PEnv { name: n.into(), value: val.into() }
+    }
+
+    #[test]
+    fn user_vars_survive_and_removed_managed_vars_go() {
+        // Au `up` précédent l'outil gérait A et B ; l'utilisateur a ajouté
+        // MINE dans la console ; le compose ne pose plus que A.
+        let current = vec![v("A", "1"), v("B", "2"), v("MINE", "x"), v(MANAGED_VAR, "A,B")];
+        let out = merge_env(&current, vec![v("A", "1")]);
+        let names: Vec<&str> = out.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["A", "MINE", MANAGED_VAR]);
+        assert_eq!(out.iter().find(|e| e.name == MANAGED_VAR).unwrap().value, "A");
+    }
+
+    #[test]
+    fn first_up_without_marker_keeps_everything_foreign() {
+        // Application créée avant ce mécanisme : rien n'est supprimé.
+        let current = vec![v("OLD", "1")];
+        let out = merge_env(&current, vec![v("A", "1")]);
+        assert!(out.iter().any(|e| e.name == "OLD"));
+    }
+
+    #[test]
+    fn plan_value_wins_over_console_edit() {
+        let current = vec![v("A", "console"), v(MANAGED_VAR, "A")];
+        let out = merge_env(&current, vec![v("A", "plan")]);
+        assert_eq!(out.iter().find(|e| e.name == "A").unwrap().value, "plan");
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,30 @@
+x-clever:
+  cellar:
+    files:
+      buckets: [vikunja-files]
+
+services:
+  vikunja:
+    image: vikunja/vikunja:2.6.0
+    environment:
+      VIKUNJA_DATABASE_HOST: db:8080
+      VIKUNJA_DATABASE_PASSWORD: changeme
+      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_FILES_TYPE: s3
+      VIKUNJA_FILES_S3_REGION: us-east-1
+      VIKUNJA_FILES_S3_USEPATHSTYLE: "true"
+    ports: ["3456:3456"]
+    x-clever:
+      cellar: [files]
+      environment:
+        VIKUNJA_FILES_S3_ENDPOINT: "https://{{files.host}}"
+        VIKUNJA_FILES_S3_BUCKET: "{{files.bucket}}"
+        VIKUNJA_FILES_S3_ACCESSKEY: "{{files.key_id}}"
+        VIKUNJA_FILES_S3_SECRETKEY: "{{files.key_secret}}"
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja

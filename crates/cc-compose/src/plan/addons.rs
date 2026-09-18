@@ -233,6 +233,9 @@ pub enum Role {
     Password,
     Database,
     Uri,
+    /// Cellar.
+    KeyId,
+    KeySecret,
 }
 
 pub fn addon_var(provider: &str, role: Role) -> Option<&'static str> {
@@ -269,6 +272,9 @@ pub fn addon_var(provider: &str, role: Role) -> Option<&'static str> {
         ("es-addon", Role::User) => "ES_ADDON_USER",
         ("es-addon", Role::Password) => "ES_ADDON_PASSWORD",
         ("es-addon", Role::Uri) => "ES_ADDON_URI",
+        ("cellar-addon", Role::Host) => "CELLAR_ADDON_HOST",
+        ("cellar-addon", Role::KeyId) => "CELLAR_ADDON_KEY_ID",
+        ("cellar-addon", Role::KeySecret) => "CELLAR_ADDON_KEY_SECRET",
         _ => return None,
     })
 }

@@ -1,0 +1,302 @@
+{
+  "project": "cellar",
+  "spec_hash": "69a56c6d4bb8e54a150822a30e3bf3b2",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "cellar-default",
+      "tags": [
+        "compose-project=cellar",
+        "compose-network=default",
+        "compose-spec=69a56c6d4bb8e54a150822a30e3bf3b2"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/db",
+      "service": "db",
+      "name": "cellar-db",
+      "provider": "postgresql-addon",
+      "plan": "xxs_sml",
+      "region": "par",
+      "version": "18",
+      "tags": [
+        "compose-project=cellar",
+        "compose-service=db",
+        "compose-spec=69a56c6d4bb8e54a150822a30e3bf3b2"
+      ],
+      "private": true
+    },
+    {
+      "resource": "addon",
+      "id": "addon/files",
+      "service": "files",
+      "name": "cellar-files",
+      "provider": "cellar-addon",
+      "plan": "S",
+      "region": "par",
+      "version": null,
+      "tags": [
+        "compose-project=cellar",
+        "compose-service=files",
+        "compose-spec=69a56c6d4bb8e54a150822a30e3bf3b2"
+      ],
+      "private": false,
+      "buckets": [
+        "vikunja-files"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/vikunja",
+      "service": "vikunja",
+      "name": "cellar-vikunja",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "vikunja/vikunja:2.6.0",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/app/vikunja/vikunja"
+        ],
+        "cmd": [],
+        "user": "1000",
+        "workdir": "/app/vikunja",
+        "exposed_ports": [
+          3456
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/app/vikunja/vikunja"
+        ],
+        "workdir": "/app/vikunja",
+        "user": "1000",
+        "port": {
+          "mode": "forward",
+          "target_port": 3456
+        }
+      },
+      "env": [
+        {
+          "key": "CELLAR_ADDON_BUCKET",
+          "value": [
+            {
+              "literal": "vikunja-files"
+            }
+          ]
+        },
+        {
+          "key": "CLEVER_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "CLEVER_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "VIKUNJA_FILES_S3_ENDPOINT,VIKUNJA_FILES_S3_ACCESSKEY,VIKUNJA_FILES_S3_SECRETKEY,VIKUNJA_DATABASE_PASSWORD,VIKUNJA_DATABASE_USER,VIKUNJA_DATABASE_DATABASE"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRESQL_ADDON_NG_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "POSTGRESQL_ADDON_NG_PORT",
+          "value": [
+            {
+              "literal": "8080"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_DATABASE_DATABASE",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_DATABASE_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            },
+            {
+              "literal": ":8080"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_DATABASE_PASSWORD",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_DATABASE_TYPE",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_DATABASE_USER",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_ACCESSKEY",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/files",
+                "var": "CELLAR_ADDON_KEY_ID"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_BUCKET",
+          "value": [
+            {
+              "literal": "vikunja-files"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_ENDPOINT",
+          "value": [
+            {
+              "literal": "https://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/files",
+                "var": "CELLAR_ADDON_HOST"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_REGION",
+          "value": [
+            {
+              "literal": "us-east-1"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_SECRETKEY",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/files",
+                "var": "CELLAR_ADDON_KEY_SECRET"
+              }
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_S3_USEPATHSTYLE",
+          "value": [
+            {
+              "literal": "true"
+            }
+          ]
+        },
+        {
+          "key": "VIKUNJA_FILES_TYPE",
+          "value": [
+            {
+              "literal": "s3"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/db",
+        "addon/files"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=cellar",
+        "compose-service=vikunja",
+        "compose-spec=69a56c6d4bb8e54a150822a30e3bf3b2"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/vikunja@default",
+      "member": "app/vikunja",
+      "group": "ng/default",
+      "aliases": [
+        "vikunja"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db@default",
+      "member": "addon/db",
+      "group": "ng/default",
+      "aliases": [
+        "db"
+      ]
+    }
+  ]
+}

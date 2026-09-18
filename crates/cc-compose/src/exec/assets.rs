@@ -108,6 +108,16 @@ impl Cellar {
         Err(format!("Cellar {what} : {status} {}", text.chars().take(300).collect::<String>()))
     }
 
+    /// Crée le bucket ; idempotent (existant → rien).
+    pub async fn create_bucket(&self) -> Result<(), String> {
+        if self.bucket_exists().await? {
+            return Ok(());
+        }
+        let url = self.bucket.create_bucket(&self.creds).sign(EXPIRES);
+        let resp = self.http.put(url).send().await.map_err(|e| format!("Cellar : {e}"))?;
+        self.check(&format!("création du bucket {}", self.bucket.name()), resp).await.map(|_| ())
+    }
+
     pub async fn bucket_exists(&self) -> Result<bool, String> {
         let url = self.bucket.head_bucket(Some(&self.creds)).sign(EXPIRES);
         let resp = self.http.head(url).send().await.map_err(|e| format!("Cellar : {e}"))?;

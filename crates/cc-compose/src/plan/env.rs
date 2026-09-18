@@ -12,13 +12,15 @@ use crate::diagnostic::{Diagnostic, Diagnostics};
 
 type Memberships = IndexMap<String, Vec<(String, Vec<String>)>>;
 
-/// Un service substitué par un addon.
-#[derive(Debug, Clone, Copy)]
+/// Un service substitué par un addon, ou un Cellar déclaré en `x-clever`.
+#[derive(Debug, Clone)]
 pub struct AddonRef {
     pub provider: &'static str,
     /// Membre du network group : joint par son FQDN de membre sur
     /// `addon_ng_port`, sinon par son hôte public.
     pub private: bool,
+    /// Cellar : ses buckets, pour `{{n.bucket}}` et `CELLAR_ADDON_BUCKET`.
+    pub buckets: Vec<String>,
 }
 
 /// Services substitués par un addon : nom → fournisseur et mode d'accès.
@@ -294,6 +296,19 @@ pub fn override_template(value: &str, consumer: &str, consumer_service: &Service
         let Some((service, role)) = inner.split_once('.') else {
             return Err(format!("`{{{{{inner}}}}}` : attendu `service.rôle` (rôles : host, port, user, password, database, uri)"));
         };
+        // Cellar : `bucket` (le premier) ou `bucket.<nom>`, littéraux du plan.
+        if let Some(a) = addons.get(service).filter(|a| a.provider == "cellar-addon") {
+            if let Some(b) = role.strip_prefix("bucket") {
+                let name = match b.strip_prefix('.') {
+                    None if b.is_empty() => a.buckets.first().cloned().ok_or_else(|| format!("`{{{{{inner}}}}}` : le Cellar `{service}` ne déclare aucun bucket"))?,
+                    Some(n) if a.buckets.iter().any(|x| x == n) => n.to_string(),
+                    _ => return Err(format!("`{{{{{inner}}}}}` : bucket inconnu pour `{service}` (déclarés : {})", a.buckets.join(", "))),
+                };
+                referenced.push(service.to_string());
+                segs.push(Segment::Literal(name));
+                continue;
+            }
+        }
         let role = match role {
             "host" => Role::Host,
             "port" => Role::Port,
@@ -301,7 +316,9 @@ pub fn override_template(value: &str, consumer: &str, consumer_service: &Service
             "password" => Role::Password,
             "database" => Role::Database,
             "uri" => Role::Uri,
-            other => return Err(format!("`{{{{{inner}}}}}` : rôle `{other}` inconnu (host, port, user, password, database, uri)")),
+            "key_id" => Role::KeyId,
+            "key_secret" => Role::KeySecret,
+            other => return Err(format!("`{{{{{inner}}}}}` : rôle `{other}` inconnu (host, port, user, password, database, uri ; key_id, key_secret, bucket pour un Cellar)")),
         };
         if service == consumer {
             return Err(format!("`{{{{{inner}}}}}` : un service ne se référence pas lui-même"));

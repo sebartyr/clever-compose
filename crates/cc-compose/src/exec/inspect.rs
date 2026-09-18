@@ -57,7 +57,7 @@ pub fn status_keys(apps: &[ProjectApp]) -> Vec<(String, bool)> {
 
 /// Fournisseurs d'addons que l'outil crée : les seuls candidats à la
 /// découverte par nom (les addons n'ont pas de tags).
-pub const ADDON_PROVIDERS: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon", "mongodb-addon", "es-addon"];
+pub const ADDON_PROVIDERS: &[&str] = &["postgresql-addon", "mysql-addon", "redis-addon", "mongodb-addon", "es-addon", "cellar-addon"];
 
 /// Une application du projet, avec le service Compose lu dans ses tags.
 #[derive(Debug, Clone)]

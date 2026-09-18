@@ -146,6 +146,11 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                         if !addon.options.is_empty() {
                             return Some(json!(format!("${{var.{}}}", external_addon_var(svc, &mut variables))));
                         }
+                        // Addon existant désigné par son nom : jamais géré
+                        // par Terraform, son id vient d'une variable.
+                        if addon.external {
+                            return Some(json!(format!("${{var.{}}}", existing_addon_var(svc, &addon.name, &mut variables))));
+                        }
                         let resource = addon_resource_type(&addon.provider)?;
                         Some(json!(format!("${{{resource}.{}.id}}", ident(svc))))
                     })
@@ -165,10 +170,25 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                     diags.push(Diagnostic::warning("terraform-addon-options", format!("addon `{}` : l'option {} n'a pas d'attribut dans le provider 2.2.0 ; ressource omise, à créer hors Terraform (`bootstrap.sh` sait le faire) et à désigner par la variable `{var}` (son id réel)", a.name, a.options.iter().map(|(k, v)| format!("`{k}={v}`")).collect::<Vec<_>>().join(", "))));
                     continue;
                 }
+                if a.external {
+                    let var = existing_addon_var(&a.service, &a.name, &mut variables);
+                    diags.push(Diagnostic::warning("terraform-addon-existing", format!("addon `{}` : existant, réutilisé par son nom ; hors Terraform, désigné par la variable `{var}` (son id `addon_xxx`){}", a.name, if a.buckets.is_empty() { String::new() } else { format!(" ; buckets {} à créer hors Terraform (`bootstrap.sh`)", a.buckets.join(", ")) })));
+                    continue;
+                }
                 let Some(resource) = addon_resource_type(&a.provider) else {
                     diags.push(Diagnostic::warning("terraform-addon", format!("addon `{}` : pas de ressource Terraform pour `{}` dans le provider 2.2.0", a.name, a.provider)));
                     continue;
                 };
+                if resource == "clevercloud_cellar" {
+                    // Pas de plan ni de version ; `region` est calculée.
+                    check_attrs(&schema, resource, &["name"], diags);
+                    addon_resources.entry(resource.to_string()).or_insert_with(|| J::Object(Map::new())).as_object_mut().unwrap().insert(ident(&a.service), json!({ "name": a.name }));
+                    for b in &a.buckets {
+                        check_attrs(&schema, "clevercloud_cellar_bucket", &["id", "cellar_id"], diags);
+                        addon_resources.entry("clevercloud_cellar_bucket".to_string()).or_insert_with(|| J::Object(Map::new())).as_object_mut().unwrap().insert(format!("{}_{}", ident(&a.service), ident(b)), json!({ "id": b, "cellar_id": format!("${{clevercloud_cellar.{}.id}}", ident(&a.service)) }));
+                    }
+                    continue;
+                }
                 let has_version = schema["provider_schemas"]["registry.terraform.io/clevercloud/clevercloud"]["resource_schemas"][resource]["block"]["attributes"].get("version").is_some();
                 check_attrs(&schema, resource, &["name", "plan", "region"], diags);
                 let mut body = json!({ "name": a.name, "plan": a.plan, "region": a.region });
@@ -288,8 +308,16 @@ fn addon_resource_type(provider: &str) -> Option<&'static str> {
         "mongodb-addon" => "clevercloud_mongodb",
         "es-addon" => "clevercloud_elasticsearch",
         "config-provider" => "clevercloud_configprovider",
+        "cellar-addon" => "clevercloud_cellar",
         _ => return None,
     })
+}
+
+/// Variable portant l'id d'un addon existant, réutilisé par son nom.
+fn existing_addon_var(service: &str, name: &str, variables: &mut Map<String, J>) -> String {
+    let var = format!("addon_{}_id", ident(service));
+    variables.entry(var.clone()).or_insert(json!({ "type": "string", "description": format!("Id de l'addon existant `{name}` (addon_xxx, `clever addon list -F json | jq '.[].addonId'`), réutilisé et jamais géré par Terraform") }));
+    var
 }
 
 /// Variable portant l'id réel d'un addon créé hors Terraform.
