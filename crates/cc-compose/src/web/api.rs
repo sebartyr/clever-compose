@@ -937,7 +937,7 @@ async fn local_addon(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, 
     if !b.plan.is_empty() && !provider.plans.iter().any(|p| p.slug == b.plan) {
         return Err(bad(format!("plan `{}` inconnu pour {}", b.plan, provider.name)));
     }
-    if !b.version.is_empty() && !provider.versions.iter().any(|v| *v == b.version) {
+    if !b.version.is_empty() && !provider.versions.contains(&b.version) {
         return Err(bad(format!("version `{}` inconnue pour {} ({})", b.version, provider.name, provider.versions.join(", "))));
     }
     use crate::compose::edit::Entry;
