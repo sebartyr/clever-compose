@@ -154,7 +154,11 @@ impl Ui {
         let mut out = std::io::stdout().lock();
         let catalog = crate::plan::addons::catalog();
         let _ = writeln!(out, "{} {}", self.paint("1", "Projet"), plan.project);
-        let mut rows: Vec<[String; 3]> = Vec::new();
+        // Une ligne par ressource, et sous une application les variables
+        // dont la valeur est réécrite (FQDN de membre, identifiant d'addon,
+        // secret) : ce que le compose déclarait ne sera pas ce que le
+        // conteneur reçoit, autant le dire (18/09/2026, cas Vikunja).
+        let mut rows: Vec<([String; 3], Vec<String>)> = Vec::new();
         let mut monthly = 0.0f64;
         for r in &plan.resources {
             match r {
@@ -186,32 +190,36 @@ impl Ui {
                     if !extras.is_empty() {
                         detail.push_str(&format!(", {}", extras.join(", ")));
                     }
-                    rows.push([a.service.clone(), kind.into(), detail]);
+                    let rewritten: Vec<String> = a.env.iter().filter(|e| !e.key.starts_with("CLEVER_COMPOSE_") && e.value.0.iter().any(|seg| matches!(seg, Segment::Ref(_)))).map(|e| format!("{} ← {}", e.key, describe_template(&e.value))).collect();
+                    rows.push(([a.service.clone(), kind.into(), detail], rewritten));
                 }
                 Resource::Addon(a) => {
                     let price = catalog.providers.get(&a.provider).and_then(|p| p.plans.iter().find(|pl| pl.slug == a.plan)).map(|pl| pl.price).unwrap_or(0.0);
                     monthly += price;
                     let engine = a.options.get("documentdb").map(|_| " + DocumentDB").unwrap_or("");
                     let access = if a.private { "network group" } else { "hôte public" };
-                    rows.push([a.service.clone(), "addon".into(), format!("{}{engine} {} plan {} ({price} €/mois HT), {access}", a.provider.trim_end_matches("-addon"), a.version.clone().unwrap_or_default(), a.plan)]);
+                    rows.push(([a.service.clone(), "addon".into(), format!("{}{engine} {} plan {} ({price} €/mois HT), {access}", a.provider.trim_end_matches("-addon"), a.version.clone().unwrap_or_default(), a.plan)], Vec::new()));
                 }
                 Resource::NetworkGroup(ng) => {
                     let members: Vec<String> = plan.resources.iter().filter_map(|x| match x {
                         Resource::Membership(m) if m.group == ng.id => m.member.0.split('/').nth(1).map(str::to_string),
                         _ => None,
                     }).collect();
-                    rows.push([ng.network.clone(), "réseau".into(), format!("network group {} : {}", ng.name, members.join(", "))]);
+                    rows.push(([ng.network.clone(), "réseau".into(), format!("network group {} : {}", ng.name, members.join(", "))], Vec::new()));
                 }
                 _ => {}
             }
         }
-        let w0 = rows.iter().map(|r| r[0].chars().count()).max().unwrap_or(0);
-        let w1 = rows.iter().map(|r| r[1].chars().count()).max().unwrap_or(0);
-        for r in &rows {
+        let w0 = rows.iter().map(|(r, _)| r[0].chars().count()).max().unwrap_or(0);
+        let w1 = rows.iter().map(|(r, _)| r[1].chars().count()).max().unwrap_or(0);
+        for (r, sub) in &rows {
             let _ = writeln!(out, "  {:<w0$}  {:<w1$}  {}", self.paint("1", &r[0]), self.paint("2", &r[1]), r[2], w0 = w0 + if self.color { 8 } else { 0 }, w1 = w1 + if self.color { 8 } else { 0 });
+            for line in sub {
+                let _ = writeln!(out, "  {:w0$}  {:w1$}    {}", "", "", self.paint("2", line));
+            }
         }
         let count = |kind: &str, sing: &str, plur: &str| {
-            let n = rows.iter().filter(|r| r[1].starts_with(kind)).count();
+            let n = rows.iter().filter(|(r, _)| r[1].starts_with(kind)).count();
             (n > 0).then(|| format!("{n} {}", if n > 1 { plur } else { sing }))
         };
         let parts: Vec<String> = [count("application", "application", "applications"), count("tâche", "tâche", "tâches"), count("addon", "addon", "addons"), count("réseau", "network group", "network groups")].into_iter().flatten().collect();
@@ -224,4 +232,21 @@ impl Ui {
         self.clear_progress(&mut out);
         let _ = writeln!(out, "{} {msg}", if ok { self.paint("1;32", "✔") } else { self.paint("1;31", "✘") });
     }
+}
+
+/// Une valeur d'environnement du plan en clair : les littéraux tels quels,
+/// chaque référence décrite entre chevrons.
+fn describe_template(t: &cc_compose_model::plan::Template) -> String {
+    use cc_compose_model::plan::{Reference, Segment};
+    t.0.iter()
+        .map(|seg| match seg {
+            Segment::Literal(l) => l.clone(),
+            Segment::Ref(Reference::MemberFqdn { member }) => {
+                let (name, net) = member.0.trim_start_matches("member/").split_once('@').unwrap_or((member.0.as_str(), "?"));
+                format!("<FQDN de {name} dans le network group {net}>")
+            }
+            Segment::Ref(Reference::AddonEnv { addon, var }) => format!("<{var} de l'addon {}, expansée au démarrage>", addon.0.trim_start_matches("addon/")),
+            Segment::Ref(Reference::Secret { name }) => format!("<secret {name}>"),
+        })
+        .collect()
 }

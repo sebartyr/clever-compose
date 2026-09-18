@@ -353,7 +353,8 @@ Scalabilité éditée depuis l'interface : `PUT /api/local/{id}/scaling`
 textuelle, formatage conservé) ; `POST …/assets/sync` pousse les assets
 sans `up`.
 `clap` (aide par commande, `--org` ou `CLEVER_COMPOSE_ORG`). `plan` affiche un résumé
-lisible (ressources, coût) puis les diagnostics ; `--json` pour le plan
+lisible (ressources, coût, et sous chaque application les variables dont la
+valeur est réécrite : FQDN de membre, identifiant d'addon, secret) puis les diagnostics ; `--json` pour le plan
 brut. Sortie rendue par `ui.rs` (couleurs, progression, bilan ✔/✘).
 
 ---

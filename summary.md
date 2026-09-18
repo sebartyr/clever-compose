@@ -107,6 +107,13 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
   en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
   Docker ne sait pas y résoudre `root`.
+- **Corrélation visible** (18/09/2026) : la corrélation par égalité de
+  valeur (`VIKUNJA_DATABASE_PASSWORD: changeme` = `POSTGRES_PASSWORD` de
+  `db` → mot de passe de l'addon) était muette, et un utilisateur l'a
+  « corrigée » en `${POSTGRESQL_ADDON_PASSWORD}`, que Compose interpole à
+  vide. Le résumé de `plan` liste désormais, sous chaque application, les
+  variables réécrites et leur source (`ui::describe_template`), sans
+  nouveau diagnostic : ce n'est pas à corriger, c'est ce que `up` fera.
 - **Catalogue embarqué** (`data/addon-providers.json`, provenance dans
   `data/PROVENANCE.md`) : plans avec id, slug, prix, zones, features (`Max
   connection limit`), versions dédiées et version par défaut, pour
