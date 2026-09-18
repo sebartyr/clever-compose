@@ -73,7 +73,10 @@
         "port": {
           "mode": "forward",
           "target_port": 3000
-        }
+        },
+        "volumes": [
+          "/data"
+        ]
       },
       "env": [
         {

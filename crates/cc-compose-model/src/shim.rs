@@ -64,6 +64,13 @@ pub struct ShimConfig {
     /// d'image (CLAUDE.md §6).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secrets: Vec<SecretFile>,
+
+    /// Cibles des volumes éphémères (volume nommé, bind de répertoire,
+    /// tmpfs). Docker crée le point de montage ; sans volume, le shim crée
+    /// le répertoire au démarrage et le donne à l'utilisateur de l'image,
+    /// pour que l'application puisse y écrire (Vikunja, `FROM scratch`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

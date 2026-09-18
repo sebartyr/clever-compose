@@ -506,6 +506,7 @@ fn plan_service(
     // Bind mounts de fichiers : copiés dans l'image ; volumes nommés :
     // refusés sans --allow-ephemeral (addons en phase 5).
     let mut files: Vec<CopiedFile> = Vec::new();
+    let mut ephemeral_dirs: Vec<String> = Vec::new();
     for (i, v) in s.volumes.iter().enumerate() {
         let vp = p.child("volumes").index(i);
         match v.kind.as_str() {
@@ -516,6 +517,7 @@ fn plan_service(
                 match meta {
                     Ok(m) if m.is_file() => files.push(CopiedFile { source: shown.clone(), target: v.target.clone(), read_only: v.read_only }),
                     Ok(_) if ctx.allow_ephemeral || x.ephemeral == Some(true) => {
+                        ephemeral_dirs.push(v.target.clone());
                         diags.push(Diagnostic::warning("volume-ephemeral", format!("le répertoire `{shown}` monté sur `{}` sera éphémère : rien n'est copié dans l'image et les données sont perdues à chaque redéploiement", v.target)).with_path(&vp));
                     }
                     Ok(_) => {
@@ -528,12 +530,13 @@ fn plan_service(
             }
             "volume" => {
                 if ctx.allow_ephemeral || x.ephemeral == Some(true) {
+                    ephemeral_dirs.push(v.target.clone());
                     diags.push(Diagnostic::warning("volume-ephemeral", format!("le volume `{}` monté sur `{}` sera éphémère : les données sont perdues à chaque redéploiement", v.source.clone().unwrap_or_default(), v.target)).with_path(&vp));
                 } else {
                     diags.push(Diagnostic::error("volume-unsupported", format!("le volume `{}` monté sur `{}` n'a pas d'équivalent : pas de volume persistant sur le runtime Docker ; utilisez un addon managé, ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données", v.source.clone().unwrap_or_default(), v.target)).with_path(&vp));
                 }
             }
-            "tmpfs" => {}
+            "tmpfs" => ephemeral_dirs.push(v.target.clone()),
             other => {
                 diags.push(Diagnostic::error("volume-type-unsupported", format!("montage de type `{other}` non supporté")).with_path(&vp));
             }
@@ -731,7 +734,7 @@ fn plan_service(
         scaling,
         source,
         image: intrinsics,
-        shim: ShimConfig { argv, workdir, user, port, tcp, udp, secrets: shim_secrets },
+        shim: ShimConfig { argv, workdir, user, port, tcp, udp, secrets: shim_secrets, volumes: ephemeral_dirs },
         env,
         depends_on,
         health_check_path,

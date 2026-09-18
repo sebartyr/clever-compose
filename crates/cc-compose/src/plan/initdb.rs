@@ -295,7 +295,7 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
         scaling: Scaling { min_flavor: super::flavors::docker().default_flavor.clone(), max_flavor: super::flavors::docker().default_flavor.clone(), min_instances: 1, max_instances: 1 },
         source: Source::Synthetic { image, private_registry: false, files, generated: vec![GeneratedFile { target: "/cc-init.sh".into(), content: script, executable: true }] },
         image: intrinsics,
-        shim: ShimConfig { argv: vec!["sh".into(), "/cc-init.sh".into()], workdir: None, user: None, port: PlatformPort::Health { ready_port: None }, tcp: None, udp: None, secrets: Vec::new() },
+        shim: ShimConfig { argv: vec!["sh".into(), "/cc-init.sh".into()], workdir: None, user: None, port: PlatformPort::Health { ready_port: None }, tcp: None, udp: None, secrets: Vec::new(), volumes: Vec::new() },
         env: vec![EnvVar { key: "CLEVER_COMPOSE_INIT_HASH".into(), value: Template::literal(hash) }],
         depends_on: vec![ResourceId(format!("addon/{service}"))],
         health_check_path: None,

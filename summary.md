@@ -101,7 +101,12 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   sorties (stockage externe, Cellar, ou éphémère). Le contenu initial du
   répertoire n'est pas copié : une copie serait une approximation (seed
   figé dans l'image) et le plafond du contexte de build la rendrait
-  fragile.
+  fragile. Le point de montage est créé par le shim au démarrage
+  (`ShimConfig.volumes`, ajout additif au plan, absent si vide) et donné à
+  l'utilisateur de l'image s'il n'existait pas, comme Docker le ferait
+  pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
+  en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
+  Docker ne sait pas y résoudre `root`.
 - **Catalogue embarqué** (`data/addon-providers.json`, provenance dans
   `data/PROVENANCE.md`) : plans avec id, slug, prix, zones, features (`Max
   connection limit`), versions dédiées et version par défaut, pour

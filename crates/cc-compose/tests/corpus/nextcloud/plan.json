@@ -70,7 +70,10 @@
         "port": {
           "mode": "forward",
           "target_port": 80
-        }
+        },
+        "volumes": [
+          "/var/www/html"
+        ]
       },
       "env": [
         {

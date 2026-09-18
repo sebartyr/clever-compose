@@ -18,6 +18,19 @@ pub struct Child {
     exited: oneshot::Receiver<i32>,
 }
 
+/// Identifiants de l'utilisateur de l'image : `None` si elle tourne en root.
+pub fn resolve_ids(config: &ShimConfig) -> Result<Option<Ids>, String> {
+    let Some(user) = &config.user else { return Ok(None) };
+    match Ids::from_numeric(user) {
+        Some(ids) => Ok(Some(ids)),
+        None => {
+            let raw = std::fs::read_to_string(IDS_PATH)
+                .map_err(|e| format!("utilisateur `{user}` : lecture de {IDS_PATH} : {e}"))?;
+            Ids::parse(&raw).map(Some).map_err(|e| format!("{IDS_PATH} : {e}"))
+        }
+    }
+}
+
 pub fn spawn(config: &ShimConfig, env_remove: &[String], env_set: &[(String, String)]) -> Result<Child, String> {
     let mut cmd = Command::new(&config.argv[0]);
     cmd.args(&config.argv[1..]);
@@ -30,15 +43,7 @@ pub fn spawn(config: &ShimConfig, env_remove: &[String], env_set: &[(String, Str
     if let Some(dir) = &config.workdir {
         cmd.current_dir(dir);
     }
-    if let Some(user) = &config.user {
-        let ids = match Ids::from_numeric(user) {
-            Some(ids) => ids,
-            None => {
-                let raw = std::fs::read_to_string(IDS_PATH)
-                    .map_err(|e| format!("utilisateur `{user}` : lecture de {IDS_PATH} : {e}"))?;
-                Ids::parse(&raw).map_err(|e| format!("{IDS_PATH} : {e}"))?
-            }
-        };
+    if let Some(ids) = resolve_ids(config)? {
         // Abandon des privilèges dans l'enfant, après le fork, dans l'ordre
         // setgroups, setgid, setuid (`CommandExt::groups` est instable ;
         // `Command::uid/gid` s'appliqueraient avant `pre_exec`, trop tôt pour

@@ -13,6 +13,7 @@ mod dns;
 mod expand;
 mod relay;
 mod secrets;
+mod volumes;
 
 use std::process::ExitCode;
 
@@ -61,6 +62,7 @@ async fn run(config: ShimConfig) -> Result<u8, String> {
     // Le stub DNS et resolv.conf avant l'enfant, qui peut résoudre au
     // démarrage (nginx).
     dns::start().await?;
+    volumes::prepare(&config)?;
     let consumed = secrets::materialize(&config.secrets)?;
     let expanded = expand::expand_all();
     let child = child::spawn(&config, &consumed, &expanded)?;
