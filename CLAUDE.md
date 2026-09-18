@@ -288,7 +288,9 @@ aucune variable d'environnement ni identifiant Docker du serveur,
 ## 6. Exécuteur
 
 Sans état local : apps nommées `<projet>-<service>`, tags `compose-project`,
-`compose-service`, `compose-spec`. L'état se reconstruit depuis l'API
+`compose-service`, `compose-spec`. Seul l'espace `compose-*` est géré : un
+tag posé par l'utilisateur survit au `up` (`reconcile::merge_tags`,
+18/09/2026). L'état se reconstruit depuis l'API
 (`exec/inspect::discover`), ce qui sert à `up`, `down`, `ps`, `logs`.
 
 Ordre du `up` : addons, groupes, apps sans déploiement, liaisons, variables

@@ -155,8 +155,12 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                         log("  scaling mis à jour");
                     }
                 }
-                if tags != app.tags && !opts.dry_run {
-                    platform.set_tags(&x.id, &app.tags).await?;
+                // Seuls les tags `compose-*` sont à nous : les nôtres
+                // périmés (`compose-spec=` d'un ancien plan) partent, ceux
+                // posés par l'utilisateur restent (18/09/2026).
+                let wanted = merge_tags(&tags, &app.tags);
+                if tags != wanted && !opts.dry_run {
+                    platform.set_tags(&x.id, &wanted).await?;
                 }
                 state.app_ids.insert(app.service.clone(), x.id.clone());
             }
@@ -652,4 +656,27 @@ pub async fn down<P: Platform>(project: &str, platform: &P, dry_run: bool, confi
         log(&format!("aucune application taguée `compose-project={project}` : rien à faire ?"));
     }
     Ok(())
+}
+
+/// Tags visés pour une application existante : ceux du plan, plus les tags
+/// de `current` hors de l'espace `compose-` (posés par l'utilisateur).
+pub fn merge_tags(current: &[String], planned: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = planned.to_vec();
+    for t in current {
+        if !t.starts_with("compose-") && !out.contains(t) {
+            out.push(t.clone());
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tag_tests {
+    #[test]
+    fn user_tags_survive_and_stale_compose_tags_go() {
+        let current = vec!["compose-project=p".to_string(), "compose-spec=old".to_string(), "prod".to_string(), "team=infra".to_string()];
+        let planned = vec!["compose-project=p".to_string(), "compose-service=web".to_string(), "compose-spec=new".to_string()];
+        let merged = super::merge_tags(&current, &planned);
+        assert_eq!(merged, vec!["compose-project=p", "compose-service=web", "compose-spec=new", "prod", "team=infra"]);
+    }
 }
