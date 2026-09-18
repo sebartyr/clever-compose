@@ -137,6 +137,34 @@ export interface ScalingBody extends Scaling {
   service: string;
 }
 
+export interface AddonPlan {
+  slug: string;
+  name: string;
+  price: number;
+  zones: string[];
+  features: Record<string, string>;
+}
+
+export interface AddonProvider {
+  name: string;
+  versions: string[];
+  default_version: string | null;
+  plans: AddonPlan[];
+}
+
+export interface AddonPlans {
+  providers: Record<string, AddonProvider>;
+}
+
+/** Plan, version et accès d'un addon, écrits dans x-clever du service. */
+export interface AddonBody {
+  service: string;
+  provider: string;
+  plan: string;
+  version: string;
+  private: boolean;
+}
+
 // ------------------------------------------------------------ diagramme
 
 export type NodeKind = 'app' | 'task' | 'addon';

@@ -179,8 +179,10 @@ pub fn router(state: Shared) -> Router {
         .route("/api/local/{id}/seed/upload", post(local_seed_upload).layer(axum::extract::DefaultBodyLimit::max(SEED_UPLOAD_LIMIT)))
         .route("/api/local/{id}/export", post(local_export))
         .route("/api/local/{id}/scaling", axum::routing::put(local_scaling))
+        .route("/api/local/{id}/addon", axum::routing::put(local_addon))
         .route("/api/local/{id}/assets/sync", post(local_assets_sync))
         .route("/api/flavors", get(flavors))
+        .route("/api/addon-plans", get(addon_plans))
         // Corps JSON et archives : 64 Mio ; un dump de seed peut être plus
         // gros (route à sa propre limite, `SEED_UPLOAD_LIMIT`).
         .layer(axum::extract::DefaultBodyLimit::max(ARCHIVE_LIMIT))
@@ -887,6 +889,62 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
         Entry { key: "max_flavor", value: if same_flavor { None } else { b.max_flavor.clone() } },
         Entry { key: "min_instances", value: b.min_instances.map(|v| v.to_string()) },
         Entry { key: "max_instances", value: b.max_instances.map(|v| v.to_string()) },
+    ];
+    let out = crate::compose::edit::set_xclever(&text, &b.service, &entries).map_err(bad)?;
+    std::fs::write(&path, &out).map_err(|e| internal(e.to_string()))?;
+    Ok(Json(json!({ "ok": true, "path": path.strip_prefix(&dir).unwrap_or(&path).to_string_lossy() })))
+}
+
+/// Catalogue des addons (plans, prix, zones, versions), pour le formulaire
+/// de l'interface ; même source que le planificateur.
+async fn addon_plans() -> Json<J> {
+    let c = crate::plan::addons::catalog();
+    Json(json!({ "providers": c.providers.iter().map(|(id, p)| (id.clone(), json!({
+        "name": p.name,
+        "versions": p.versions,
+        "default_version": p.default_version,
+        "plans": p.plans.iter().map(|pl| json!({ "slug": pl.slug, "name": pl.name, "price": pl.price, "zones": pl.zones, "features": pl.features })).collect::<Vec<_>>(),
+    }))).collect::<serde_json::Map<String, J>>() }))
+}
+
+#[derive(Deserialize)]
+struct AddonBody {
+    service: String,
+    provider: String,
+    /// Slug du plan ; vide = retirer la clé (plan par défaut).
+    #[serde(default)]
+    plan: String,
+    /// Vide = version du tag de l'image.
+    #[serde(default)]
+    version: String,
+    /// Faux = hôte public (`x-clever.private: false`) ; vrai = défaut, clé retirée.
+    #[serde(default = "default_true")]
+    private: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Pose le plan, la version et l'accès d'un addon dans `x-clever` du
+/// service substitué, comme [`local_scaling`].
+async fn local_addon(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Json(b): Json<AddonBody>) -> Result<Json<J>, ApiError> {
+    let (dir, _) = project_dir(&s, &id, &c).await?;
+    let path = main_compose(&dir).ok_or_else(|| bad("aucun fichier compose dans le projet"))?;
+    let text = std::fs::read_to_string(&path).map_err(|e| internal(e.to_string()))?;
+    let catalog = crate::plan::addons::catalog();
+    let provider = catalog.providers.get(crate::plan::addons::platform_provider(&b.provider)).ok_or_else(|| bad(format!("fournisseur `{}` inconnu", b.provider)))?;
+    if !b.plan.is_empty() && !provider.plans.iter().any(|p| p.slug == b.plan) {
+        return Err(bad(format!("plan `{}` inconnu pour {}", b.plan, provider.name)));
+    }
+    if !b.version.is_empty() && !provider.versions.iter().any(|v| *v == b.version) {
+        return Err(bad(format!("version `{}` inconnue pour {} ({})", b.version, provider.name, provider.versions.join(", "))));
+    }
+    use crate::compose::edit::Entry;
+    let entries = vec![
+        Entry { key: "plan", value: (!b.plan.is_empty()).then(|| b.plan.clone()) },
+        Entry { key: "version", value: (!b.version.is_empty()).then(|| format!("\"{}\"", b.version)) },
+        Entry { key: "private", value: (!b.private).then(|| "false".to_string()) },
     ];
     let out = crate::compose::edit::set_xclever(&text, &b.service, &entries).map_err(bad)?;
     std::fs::write(&path, &out).map_err(|e| internal(e.to_string()))?;

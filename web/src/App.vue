@@ -10,7 +10,7 @@ import Diagram from './components/Diagram.vue';
 import SessionPanel from './components/SessionPanel.vue';
 import LogPanel from './components/LogPanel.vue';
 import NodeDetail from './components/NodeDetail.vue';
-import type { Assets, Current, Diagnostic, ExportResult, Flavors, Graph, Info, Inventory, LocalProject, Org, Plan, ScalingBody, Session } from './types';
+import type { AddonBody, AddonPlans, Assets, Current, Diagnostic, ExportResult, Flavors, Graph, Info, Inventory, LocalProject, Org, Plan, ScalingBody, Session } from './types';
 
 
 type OptKey = 'yes' | 'dry_run' | 'allow_ephemeral' | 'no_wait' | 'assets';
@@ -35,6 +35,7 @@ const assets = ref<Assets | null>(null);
 const assetFile = ref('');
 const exportFile = ref('');
 const flavors = ref<Flavors | null>(null);
+const addonPlans = ref<AddonPlans | null>(null);
 // Connexion : sans identifiants dans l'environnement, rien ne s'affiche
 // avant la session. La page part vers Clever Cloud et revient par le
 // callback du serveur, les jetons dans le fragment de l'URL.
@@ -91,12 +92,20 @@ const notify = (e: unknown) => {
   setTimeout(() => { if (error.value === msg) error.value = ''; }, 8000);
 };
 
-const loadInfo = async () => { try { info.value = await api.info(); flavors.value = await api.flavors(); } catch { /* serveur absent */ } };
+const loadInfo = async () => { try { info.value = await api.info(); flavors.value = await api.flavors(); addonPlans.value = await api.addonPlans(); } catch { /* serveur absent */ } };
 // Scalabilité posée dans le compose (x-clever), puis fichiers et plan relus.
 const setScaling = async (body: ScalingBody) => {
   if (!current.value) return;
   try {
     await api.setScaling(current.value.id, body);
+    if (file.path && !file.dirty) await openFile(file.path);
+    await loadPlan();
+  } catch (e) { notify(e); }
+};
+const setAddon = async (body: AddonBody) => {
+  if (!current.value) return;
+  try {
+    await api.setAddon(current.value.id, body);
     if (file.path && !file.dirty) await openFile(file.path);
     await loadPlan();
   } catch (e) { notify(e); }
@@ -388,7 +397,7 @@ watch(current, () => { sideOpen.value = false; });
             <p v-if="current.type === 'platform' && assets" class="dim">Assets conservés dans Cellar (bucket {{ assets.bucket }}, {{ assets.manifest?.files.length }} fichiers, {{ assets.manifest?.uploaded_at }}) : onglet « Fichiers (Cellar) », ou « Ouvrir en local ».</p>
             <p v-else-if="current.type === 'platform'" class="dim">Pas d'assets dans Cellar pour ce projet : relancez <code>up</code> avec <code>--assets</code> ou <code>x-clever.assets: true</code> pour que le compose et le plan soient lisibles ici.</p>
           </div>
-          <NodeDetail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" :flavors="flavors" @close="selected = null" @logs="doLogs" @scaling="setScaling" />
+          <NodeDetail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" :flavors="flavors" :addonPlans="addonPlans" @close="selected = null" @logs="doLogs" @scaling="setScaling" @addon="setAddon" />
         </div>
         <div class="content compose" v-show="tab === 'compose'">
           <aside class="files"><a v-for="f in files" :key="f" href="#" :class="{ active: f === file.path }" @click.prevent="openFile(f)">{{ f }}</a></aside>

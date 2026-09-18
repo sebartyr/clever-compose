@@ -3,10 +3,10 @@
      formulaire de scalabilité et le JSON brut. -->
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
-import type { Flavors, GraphNode, ScalingBody } from '../types';
+import type { AddonBody, AddonPlans, Flavors, GraphNode, ScalingBody } from '../types';
 
-const props = defineProps<{ node: GraphNode | null; platform: boolean; flavors: Flavors | null }>();
-const emit = defineEmits<{ close: []; logs: [service: string]; scaling: [body: ScalingBody] }>();
+const props = defineProps<{ node: GraphNode | null; platform: boolean; flavors: Flavors | null; addonPlans: AddonPlans | null }>();
+const emit = defineEmits<{ close: []; logs: [service: string]; scaling: [body: ScalingBody]; addon: [body: AddonBody] }>();
 
 const env = computed(() => ((props.node?.data?.env || []) as { key: string; value: any[] }[]).map((e) => ({ key: e.key, value: e.value.map((s) => (s.literal !== undefined ? s.literal : `\${${s.ref.var || s.ref.member || s.ref.name}}`)).join('') })));
 const json = computed(() => JSON.stringify(props.node?.data || {}, null, 2));
@@ -23,6 +23,32 @@ const scalingDirty = computed(() => {
   const s = props.node?.data?.scaling;
   return !!s && (s.min_flavor !== scaling.min_flavor || s.max_flavor !== scaling.max_flavor || s.min_instances !== Number(scaling.min_instances) || s.max_instances !== Number(scaling.max_instances));
 });
+// Formulaire d'addon (plan, version, accès), même mécanique : lu depuis
+// le plan, écrit dans x-clever du service substitué.
+const addon = reactive({ plan: '', version: '', private: true });
+watch(() => props.node, (n) => {
+  if (n?.kind !== 'addon' || !n.data?.provider) return;
+  addon.plan = n.data.plan || ''; addon.version = n.data.version || ''; addon.private = n.data.private !== false;
+}, { immediate: true });
+// DocumentDB est un PostgreSQL avec option : catalogue de PostgreSQL.
+const providerId = computed(() => (props.node?.data?.provider === 'documentdb' ? 'postgresql-addon' : props.node?.data?.provider) as string | undefined);
+const provider = computed(() => (providerId.value && props.addonPlans?.providers[providerId.value]) || null);
+const planOptions = computed(() => {
+  const region = props.node?.data?.region as string | undefined;
+  return (provider.value?.plans || [])
+    .filter((p) => !region || !p.zones.length || p.zones.includes(region))
+    .map((p) => ({ value: p.slug, label: `${p.name} — ${p.price} €/mois HT${p.features['Max connection limit'] ? ', ' + p.features['Max connection limit'] + ' connexions' : ''}` }));
+});
+const versionOptions = computed(() => [{ value: '', label: provider.value?.default_version ? `selon l'image (défaut ${provider.value.default_version})` : "selon l'image" }, ...(provider.value?.versions || []).map((v) => ({ value: v, label: v }))]);
+const accessOptions = [{ value: 'private', label: 'network group (port 8080)' }, { value: 'public', label: 'hôte public' }];
+const addonDirty = computed(() => {
+  const d = props.node?.data;
+  return !!d && (addon.plan !== (d.plan || '') || addon.version !== (d.version || '') || addon.private !== (d.private !== false));
+});
+const applyAddon = () => {
+  if (!props.node || !providerId.value) return;
+  emit('addon', { service: props.node.data.service, provider: providerId.value, plan: addon.plan, version: addon.version, private: addon.private });
+};
 const applyScaling = () => {
   if (!props.node) return;
   emit('scaling', { service: props.node.data.service, min_flavor: scaling.min_flavor, max_flavor: scaling.max_flavor, min_instances: Number(scaling.min_instances), max_instances: Number(scaling.max_instances) });
@@ -82,6 +108,14 @@ const applyScaling = () => {
         <dt>Plan</dt><dd>{{ node.data.plan }}{{ node.data.version ? ' · version ' + node.data.version : '' }}</dd>
         <dt>Accès</dt><dd>{{ node.data.private ? 'network group' : 'hôte public' }}</dd>
       </dl>
+      <h4>Plan</h4>
+      <div class="scaling" v-if="provider">
+        <cc-select label="Plan" :options="planOptions" :value="addon.plan" @cc-select="(e: CustomEvent) => addon.plan = e.detail" title="Plan de l'addon (x-clever.plan) ; un plan partagé (dev) sert la version de son cluster et n'a pas de peer dans le network group"></cc-select>
+        <cc-select label="Version" :options="versionOptions" :value="addon.version" @cc-select="(e: CustomEvent) => addon.version = e.detail" title="Version de l'addon (x-clever.version), sinon celle du tag de l'image"></cc-select>
+        <cc-select label="Accès" :options="accessOptions" :value="addon.private ? 'private' : 'public'" @cc-select="(e: CustomEvent) => addon.private = e.detail === 'private'" title="Membre du network group (défaut) ou joint par son hôte public (x-clever.private: false)"></cc-select>
+        <cc-button :primary="true" :disabled="!addonDirty" title="Écrit ces valeurs dans x-clever du compose et recalcule le plan ; un addon existant n'est pas migré, changer de plan le recrée au prochain up" @cc-click="applyAddon">Appliquer au compose</cc-button>
+      </div>
+      <p v-else class="sub">Catalogue des plans indisponible.</p>
     </template>
     <details><summary>JSON</summary><pre class="json">{{ json }}</pre></details>
   </aside>

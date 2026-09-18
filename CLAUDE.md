@@ -365,7 +365,9 @@ terminal.
 qui sont aussi les seuls retours admis après la danse OAuth (`?return=`).
 Scalabilité éditée depuis l'interface : `PUT /api/local/{id}/scaling`
 écrit `x-clever` dans le compose par `compose::edit::set_xclever` (édition
-textuelle, formatage conservé) ; `POST …/assets/sync` pousse les assets
+textuelle, formatage conservé) ; `PUT /api/local/{id}/addon` de même pour
+`plan`, `version`, `private` d'un addon, catalogue par `GET /api/addon-plans`
+(18/09/2026 ; un addon existant n'est pas migré : `up` le signale, voir §10) ; `POST …/assets/sync` pousse les assets
 sans `up`.
 `clap` (aide par commande, `--org` ou `CLEVER_COMPOSE_ORG`). `plan` affiche un résumé
 lisible (ressources, coût, et sous chaque application les variables dont la
@@ -376,6 +378,15 @@ brut. Sortie rendue par `ui.rs` (couleurs, progression, bilan ✔/✘).
 
 ## 10. Ouvert, reporté, décidé
 
+- Reporté : **changement de plan d'un addon existant**. L'exécuteur ne
+  fait que le signaler (`reconcile.rs`, « changement de plan manuel »).
+  L'API de migration existe dans le client officiel
+  (`POST /v2/organisations/{org}/addons/{id}/migrations`, corps
+  `{planId, region, version}`, `@clevercloud/client` 12.5.0, console
+  legacy `AddonMigrationSP`) ; sa disponibilité serveur n'est pas vérifiée
+  (le propriétaire pense qu'elle ne l'est pas, 18/09/2026). Repli prévu :
+  une Clever Task de migration (nouvel addon, dump, restore, rebascule
+  des liaisons), sur le modèle de la tâche d'init.
 - Reporté : DocumentDB dans l'export Terraform (pas d'attribut d'option
   dans le provider : ressource omise, id réel en variable
   `addon_<svc>_real_id`, `terraform-addon-options`) ; les autres points

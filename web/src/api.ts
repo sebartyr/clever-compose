@@ -1,7 +1,7 @@
 // Client de l'API locale de `clever-compose ui`. Les opérations longues
 // arrivent en SSE (événements `log` puis `done`), y compris en POST : on lit
 // le corps de la réponse `fetch` en flux.
-import type { Assets, ExportResult, Flavors, Info, Inventory, Json, LocalProject, Org, Plan, Diagnostic, ScalingBody, Session } from './types';
+import type { AddonBody, AddonPlans, Assets, ExportResult, Flavors, Info, Inventory, Json, LocalProject, Org, Plan, Diagnostic, ScalingBody, Session } from './types';
 
 export type OnLog = (line: string) => void;
 /** Une opération en cours : sa fin, et de quoi l'interrompre. */
@@ -78,6 +78,8 @@ export const api = {
   exportProject: (id: string, body: { branches: boolean; allow_ephemeral: boolean }) => json<ExportResult>('POST', `/api/local/${encodeURIComponent(id)}/export`, body),
   flavors: () => json<Flavors>('GET', '/api/flavors'),
   setScaling: (id: string, body: ScalingBody) => json('PUT', `/api/local/${encodeURIComponent(id)}/scaling`, body),
+  addonPlans: () => json<AddonPlans>('GET', '/api/addon-plans'),
+  setAddon: (id: string, body: AddonBody) => json('PUT', `/api/local/${encodeURIComponent(id)}/addon`, body),
   syncAssets: (id: string, onLog: OnLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/assets/sync`, null, onLog),
   /** Connexion : rend { mode: 'redirect', url }. */
   // Retour après la danse : relatif quand l'API sert la page (même
