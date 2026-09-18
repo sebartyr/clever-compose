@@ -100,7 +100,10 @@ mêmes commits déployés (vérifié en réel).
   `build.rs` de la CLI (`cargo build -p cc-compose-shim --profile shim
   --target x86_64-unknown-linux-musl --target-dir target/shim-build`,
   répertoire séparé pour éviter le verrou du build en cours ; relancé sur
-  changement de ses sources, de `cc-compose-model` ou de `Cargo.lock`) et
+  changement de ses sources, de `cc-compose-model` ou de `Cargo.lock` ;
+  lié par `rust-lld` et les crt musl de rustup, jamais par le `cc` de
+  l'hôte, pour bâtir depuis macOS : seul `rustup target add
+  x86_64-unknown-linux-musl` est requis, décision du 18/09/2026) et
   embarqué par `include_bytes!` (`CLEVER_COMPOSE_SHIM_BIN` au build ou `CLEVER_COMPOSE_SHIM_PATH`
   à l'exécution pour en charger un autre). `default-members` limite
   `cargo build` à la CLI (décision du 16/09/2026).

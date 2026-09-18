@@ -131,6 +131,11 @@ fn build_shim(root: &std::path::Path) -> Result<PathBuf, String> {
         .env_remove("CARGO_BUILD_RUSTFLAGS")
         .env_remove("CARGO_TARGET_DIR")
         .env_remove("CLEVER_COMPOSE_SHIM_BIN")
+        // Liaison par le `rust-lld` et les objets crt musl que rustup
+        // embarque, jamais par le `cc` de l'hôte : sur macOS ce serait
+        // Apple clang, incapable de produire un ELF Linux (18/09/2026).
+        .env("CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER", "rust-lld")
+        .env("CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS", "-C linker-flavor=ld.lld -C link-self-contained=yes")
         .env("CARGO_TERM_COLOR", "never")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped());
@@ -138,7 +143,10 @@ fn build_shim(root: &std::path::Path) -> Result<PathBuf, String> {
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
         let hint = if err.contains("target may not be installed") || err.contains("can't find crate for `std`") { format!(" — installez la cible : rustup target add {TRIPLE}") } else { String::new() };
-        let last = err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").to_string();
+        // Les dernières lignes utiles : une erreur de liaison tient
+        // rarement en une ligne.
+        let tail: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).collect();
+        let last = tail.iter().rev().take(6).rev().cloned().collect::<Vec<_>>().join(" | ");
         return Err(format!("cargo build du shim : {last}{hint}"));
     }
     let bin = target_dir.join(TRIPLE).join("shim").join("cc-shim");
