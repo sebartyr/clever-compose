@@ -258,3 +258,79 @@ pub fn dns_map(consumer: &str, consumer_service: &Service, memberships: &Members
     }
     Template(segments)
 }
+
+/// Ce que `{{addon.rôle}}` vaut pour `consumer` : hôte et port du membre
+/// si l'addon est privé et partage un réseau avec lui, sinon les variables
+/// de la liaison (expansées par le shim).
+pub fn addon_role(addon: &str, role: super::addons::Role, consumer_service: &Service, memberships: &Memberships, addons: &Addons) -> Option<Template> {
+    use super::addons::{self, Role};
+    let a = addons.get(addon)?;
+    let private_net = if a.private { shared_net(addon, consumer_service, memberships) } else { None };
+    let seg = match (role, private_net) {
+        (Role::Host, Some(net)) => Some(member_ref(addon, &net)),
+        (Role::Port, Some(_)) => Some(Segment::Literal(cc_compose_model::plan::addon_ng_port(a.provider).to_string())),
+        _ => Some(addons::seg(addon, a.provider, role)?),
+    }?;
+    Some(if a.provider == addons::DOCUMENTDB && role == Role::Uri { Template(vec![seg, Segment::Literal(format!("?{}", addons::DOCUMENTDB_URI_PARAMS))]) } else { Template(vec![seg]) })
+}
+
+/// Variable de `x-clever.environment` : littéral avec des références
+/// `{{service.rôle}}`. Renvoie les services référencés (pour la table DNS
+/// et les dépendances) ou le premier problème.
+pub fn override_template(value: &str, consumer: &str, consumer_service: &Service, project: &Project, memberships: &Memberships, addons: &Addons) -> Result<(Template, Vec<String>), String> {
+    use super::addons::Role;
+    let mut segs: Vec<Segment> = Vec::new();
+    let mut referenced: Vec<String> = Vec::new();
+    let mut rest = value;
+    while let Some(start) = rest.find("{{") {
+        let Some(len) = rest[start..].find("}}") else {
+            return Err(format!("`{{{{` sans `}}}}` dans `{value}`"));
+        };
+        if start > 0 {
+            segs.push(Segment::Literal(rest[..start].to_string()));
+        }
+        let inner = rest[start + 2..start + len].trim();
+        rest = &rest[start + len + 2..];
+        let Some((service, role)) = inner.split_once('.') else {
+            return Err(format!("`{{{{{inner}}}}}` : attendu `service.rôle` (rôles : host, port, user, password, database, uri)"));
+        };
+        let role = match role {
+            "host" => Role::Host,
+            "port" => Role::Port,
+            "user" => Role::User,
+            "password" => Role::Password,
+            "database" => Role::Database,
+            "uri" => Role::Uri,
+            other => return Err(format!("`{{{{{inner}}}}}` : rôle `{other}` inconnu (host, port, user, password, database, uri)")),
+        };
+        if service == consumer {
+            return Err(format!("`{{{{{inner}}}}}` : un service ne se référence pas lui-même"));
+        }
+        let t = if addons.contains_key(service) {
+            addon_role(service, role, consumer_service, memberships, addons).ok_or_else(|| format!("`{{{{{inner}}}}}` : l'addon `{service}` ({}) n'a pas de variable pour ce rôle", addons[service].provider))?
+        } else if project.services.contains_key(service) {
+            if role != Role::Host {
+                return Err(format!("`{{{{{inner}}}}}` : `{service}` n'est pas substitué par un addon, seul `host` est disponible"));
+            }
+            let Some((member, net)) = resolve_alias(service, consumer, consumer_service, memberships) else {
+                return Err(format!("`{{{{{inner}}}}}` : `{service}` ne partage aucun réseau avec `{consumer}`"));
+            };
+            Template(vec![member_ref(&member, &net)])
+        } else {
+            return Err(format!("`{{{{{inner}}}}}` : service `{service}` inconnu"));
+        };
+        referenced.push(service.to_string());
+        segs.extend(t.0);
+    }
+    if !rest.is_empty() || segs.is_empty() {
+        segs.push(Segment::Literal(rest.to_string()));
+    }
+    Ok((Template(segs), referenced))
+}
+
+/// Nom de la variable `<préfixe>_NG_HOST` / `_NG_PORT` d'un addon privé :
+/// le préfixe de ses variables de liaison (`POSTGRESQL_ADDON`, `REDIS`).
+pub fn ng_var(provider: &str, suffix: &str) -> Option<String> {
+    let host = super::addons::addon_var(provider, super::addons::Role::Host)?;
+    Some(format!("{}_NG_{suffix}", host.strip_suffix("_HOST")?))
+}

@@ -72,6 +72,8 @@
         "environment": {
           "CLEVER_COMPOSE_DNS_MAP": "search=${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "CLEVER_COMPOSE_EXPAND": "ES_URL",
+          "ES_ADDON_NG_HOST": "${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "ES_ADDON_NG_PORT": "8080",
           "ES_URL": "http://$${ES_ADDON_USER}:$${ES_ADDON_PASSWORD}@${clevercloud_elasticsearch.search.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080"
         },
         "networkgroups": [

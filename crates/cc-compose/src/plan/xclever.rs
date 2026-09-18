@@ -45,6 +45,17 @@ pub struct XClever {
     /// MongoDB 7.0 ; défaut pour un tag 5+ ou absent) ou `mongodb` (addon
     /// MongoDB 4.0.3 ; défaut pour un tag 4.x).
     pub engine: Option<String>,
+    /// Image custom : dialecte de `data/addon-images.json` (`postgres`,
+    /// `mysql`, `redis`...) selon lequel ce service se configure ; il est
+    /// alors substitué par l'addon correspondant, `build:` compris.
+    pub dialect: Option<String>,
+    /// Variables imposées sur Clever Cloud, qui l'emportent sur toute
+    /// règle (corrélation, réécriture de nom). Valeur littérale, avec des
+    /// références `{{service.rôle}}` (rôles `host`, `port`, `user`,
+    /// `password`, `database`, `uri` d'un service substitué ; `host` d'un
+    /// service quelconque du même network group).
+    #[serde(default)]
+    pub environment: indexmap::IndexMap<String, String>,
     /// Service substitué par un addon : où s'exécutent ses scripts
     /// d'initialisation. `task` (défaut : une Clever Task) ou `local`
     /// (depuis le poste qui lance `up`).
@@ -88,6 +99,13 @@ fn parse(v: &serde_json::Value, p: &Path, diags: &mut Diagnostics) -> XClever {
                 if e != "documentdb" && e != "mongodb" {
                     diags.push(Diagnostic::error("x-clever-invalid", format!("`engine` vaut `documentdb` ou `mongodb`, pas `{e}`")).with_path(&p.child("engine")));
                     x.engine = None;
+                }
+            }
+            if let Some(d) = &x.dialect {
+                if crate::plan::addons::dialect(d).is_none() {
+                    let known: Vec<&str> = crate::plan::addons::images().dialects.keys().map(String::as_str).collect();
+                    diags.push(Diagnostic::error("x-clever-invalid", format!("`dialect` inconnu `{d}` ; dialectes : {}", known.join(", "))).with_path(&p.child("dialect")));
+                    x.dialect = None;
                 }
             }
             if let Some(init) = &x.init {

@@ -1,0 +1,41 @@
+name: xclever-environment
+services:
+  app:
+    environment:
+      APP_DB_HOST: db2:8080
+      APP_DB_PASSWORD: changeme
+      APP_DB_URL: postgres://x:y@db2/z
+      APP_DB_USER: vikunja
+    image: vikunja/vikunja:2.6.0
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 3456
+        published: "3456"
+        protocol: tcp
+    x-clever:
+      environment:
+        APP_DB_PASSWORD: '{{db2.password}}'
+        APP_DB_URL: postgres://{{db2.user}}:{{db2.password}}@{{db2.host}}:{{db2.port}}/{{db2.database}}?sslmode=disable
+        APP_DB_USER: '{{ db1.user }}'
+        APP_SECRET: literal-sur-clever
+  db1:
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+    image: postgres:18
+    networks:
+      default: null
+  db2:
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+    image: ghcr.io/monorga/pg-custom:18.1
+    networks:
+      default: null
+    x-clever:
+      dialect: postgres
+networks:
+  default:
+    name: xclever-environment_default

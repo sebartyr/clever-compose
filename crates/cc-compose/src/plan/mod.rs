@@ -121,10 +121,15 @@ pub fn plan(project: &Project, ctx: &Context<'_>, diags: &mut Diagnostics) -> Op
         // `--allow-ephemeral` ne concerne que les volumes des services non
         // substituables ; seul `x-clever.ephemeral: true` garde une base en
         // conteneur.
-        if s.build.is_some() {
-            continue;
-        }
-        let Some(mut rec) = s.image.as_deref().and_then(addons::recognize) else { continue };
+        // Un dialecte explicite (`x-clever.dialect`) vaut reconnaissance,
+        // image custom ou `build:` compris ; sinon l'image seule, jamais un
+        // `build:`.
+        let recognized = match &x.dialect {
+            Some(d) => addons::recognize_as(d, s.image.as_deref()),
+            None if s.build.is_some() => None,
+            None => s.image.as_deref().and_then(addons::recognize),
+        };
+        let Some(mut rec) = recognized else { continue };
         // `mongo` : DocumentDB (PostgreSQL dédié + option) sauf tag 4.x ou
         // `x-clever.engine: mongodb` ; la version du tag est celle de
         // MongoDB, elle ne désigne pas une version de PostgreSQL.
@@ -573,8 +578,28 @@ fn plan_service(
     // des noms de services, table DNS limitée aux services référencés.
     let mut referenced: BTreeSet<String> = s.depends_on.keys().cloned().collect();
     let mut env: Vec<EnvVar> = Vec::new();
+    // `x-clever.environment` : valeur imposée, aucune règle ne s'applique
+    // (ni corrélation ni réécriture de nom) ; les références
+    // `{{service.rôle}}` sont résolues ici.
+    for (k, v) in &x.environment {
+        let ep = p.child("x-clever").child("environment").child(k);
+        if k == "CC_DOCKER_EXPOSED_HTTP_PORT" || k == "CC_MOUNT_DOCKER_SOCKET" {
+            diags.push(Diagnostic::error("reserved-variable", format!("`{k}` est interdite : elle ferait sortir le conteneur du mode `--net host` et casserait la joignabilité dans le network group (CLAUDE.md §3)")).with_path(&ep));
+            continue;
+        }
+        match env::override_template(v, name, s, project, memberships, addons) {
+            Ok((t, refs)) => {
+                referenced.extend(refs);
+                env.push(EnvVar { key: k.clone(), value: t });
+            }
+            Err(e) => diags.push(Diagnostic::error("environment-override-invalid", format!("`{k}` : {e}")).with_path(&ep)),
+        }
+    }
     for (k, v) in &s.environment {
         let ep = p.child("environment").child(k);
+        if x.environment.contains_key(k) {
+            continue;
+        }
         if k == "CC_DOCKER_EXPOSED_HTTP_PORT" || k == "CC_MOUNT_DOCKER_SOCKET" {
             diags.push(Diagnostic::error("reserved-variable", format!("`{k}` est interdite : elle ferait sortir le conteneur du mode `--net host` et casserait la joignabilité dans le network group (CLAUDE.md §3)")).with_path(&ep));
             continue;
@@ -622,6 +647,28 @@ fn plan_service(
             }
         }
         env.push(EnvVar { key: k.clone(), value: t });
+    }
+    // Addon privé joint par le groupe : son FQDN de membre et son port dans
+    // le groupe, sous `<préfixe>_NG_HOST` / `_NG_PORT`, à côté des variables
+    // de la liaison (qui donnent l'hôte public), pour que l'application ou
+    // ses scripts puissent les utiliser (18/09/2026).
+    for addon_name in referenced.clone() {
+        let Some(a) = addons.get(&addon_name).filter(|a| a.private) else { continue };
+        let Some(net) = env::shared_net(&addon_name, s, memberships) else { continue };
+        // Deux addons du même fournisseur : la plateforme fait déjà
+        // collisionner leurs variables de liaison ; ici rien n'est injecté,
+        // la référence `{{service.host}}` désigne chacun sans ambiguïté.
+        let same_provider: Vec<&String> = referenced.iter().filter(|o| addons.get(*o).is_some_and(|b| b.provider == a.provider)).collect();
+        if same_provider.len() > 1 {
+            if addon_name == *same_provider[0] {
+                diags.push(Diagnostic::warning("addon-ng-vars-collision", format!("`{name}` utilise plusieurs addons {} ({}) : les variables `{}`/`{}` ne sont pas injectées (et celles de la liaison, `{}`, se recouvrent) ; désignez chacun par `{{{{service.host}}}}` dans `x-clever.environment`", a.provider, same_provider.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", "), env::ng_var(a.provider, "HOST").unwrap_or_default(), env::ng_var(a.provider, "PORT").unwrap_or_default(), addons::addon_var(a.provider, addons::Role::Host).unwrap_or_default())).with_path(p));
+            }
+            continue;
+        }
+        if let (Some(host), Some(port)) = (env::ng_var(a.provider, "HOST"), env::ng_var(a.provider, "PORT")) {
+            env.push(EnvVar { key: host, value: Template(vec![Segment::Ref(Reference::MemberFqdn { member: ResourceId(format!("member/{addon_name}@{net}")) })]) });
+            env.push(EnvVar { key: port, value: Template::literal(addon_ng_port(a.provider).to_string()) });
+        }
     }
     // Variables à expanser par le shim au démarrage (références d'addon).
     let expand: Vec<String> = env.iter().filter(|e| e.value.0.iter().any(|seg| matches!(seg, Segment::Ref(Reference::AddonEnv { .. })))).map(|e| e.key.clone()).collect();

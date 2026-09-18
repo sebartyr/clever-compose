@@ -33,6 +33,8 @@ clever service link-addon "$ADDON_search" --app "$APP_app"
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_app" 'CLEVER_COMPOSE_DNS_MAP' 'search='"${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_app" 'CLEVER_COMPOSE_EXPAND' 'ES_URL'
+clever env set --app "$APP_app" 'ES_ADDON_NG_HOST' "${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_app" 'ES_ADDON_NG_PORT' '8080'
 clever env set --app "$APP_app" 'ES_URL' 'http://''${ES_ADDON_USER}'':''${ES_ADDON_PASSWORD}''@'"${ADDON_REAL_search}.m.${NG_default}.cc-ng.cloud"':8080'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)

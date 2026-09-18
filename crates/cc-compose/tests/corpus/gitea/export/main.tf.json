@@ -63,7 +63,9 @@
           "DB_NAME": "$${POSTGRESQL_ADDON_DB}",
           "DB_PASSWD": "$${POSTGRESQL_ADDON_PASSWORD}",
           "DB_TYPE": "postgres",
-          "DB_USER": "$${POSTGRESQL_ADDON_USER}"
+          "DB_USER": "$${POSTGRESQL_ADDON_USER}",
+          "POSTGRESQL_ADDON_NG_HOST": "${clevercloud_postgresql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "POSTGRESQL_ADDON_NG_PORT": "8080"
         },
         "networkgroups": [
           {

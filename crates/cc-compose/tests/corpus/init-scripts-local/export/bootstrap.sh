@@ -42,6 +42,8 @@ clever env set --app "$APP_api" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.
 clever env set --app "$APP_api" 'CLEVER_COMPOSE_EXPAND' 'DATABASE_URL,DB_PASSWORD'
 clever env set --app "$APP_api" 'DATABASE_URL' 'postgres://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"':8080''/''${POSTGRESQL_ADDON_DB}''?sslmode=disable'
 clever env set --app "$APP_api" 'DB_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
+clever env set --app "$APP_api" 'POSTGRESQL_ADDON_NG_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_api" 'POSTGRESQL_ADDON_NG_PORT' '8080'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
 (

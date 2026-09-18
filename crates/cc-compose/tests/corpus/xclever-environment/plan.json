@@ -1,0 +1,260 @@
+{
+  "project": "xclever-environment",
+  "spec_hash": "fbcfa2da4c410c866c34c5f0131504d5",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "xclever-environment-default",
+      "tags": [
+        "compose-project=xclever-environment",
+        "compose-network=default",
+        "compose-spec=fbcfa2da4c410c866c34c5f0131504d5"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/db1",
+      "service": "db1",
+      "name": "xclever-environment-db1",
+      "provider": "postgresql-addon",
+      "plan": "xxs_sml",
+      "region": "par",
+      "version": "18",
+      "tags": [
+        "compose-project=xclever-environment",
+        "compose-service=db1",
+        "compose-spec=fbcfa2da4c410c866c34c5f0131504d5"
+      ],
+      "private": true
+    },
+    {
+      "resource": "addon",
+      "id": "addon/db2",
+      "service": "db2",
+      "name": "xclever-environment-db2",
+      "provider": "postgresql-addon",
+      "plan": "xxs_sml",
+      "region": "par",
+      "version": "18",
+      "tags": [
+        "compose-project=xclever-environment",
+        "compose-service=db2",
+        "compose-spec=fbcfa2da4c410c866c34c5f0131504d5"
+      ],
+      "private": true
+    },
+    {
+      "resource": "app",
+      "id": "app/app",
+      "service": "app",
+      "name": "xclever-environment-app",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "vikunja/vikunja:2.6.0",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/app/vikunja/vikunja"
+        ],
+        "cmd": [],
+        "user": "1000",
+        "workdir": "/app/vikunja",
+        "exposed_ports": [
+          3456
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/app/vikunja/vikunja"
+        ],
+        "workdir": "/app/vikunja",
+        "user": "1000",
+        "port": {
+          "mode": "forward",
+          "target_port": 3456
+        }
+      },
+      "env": [
+        {
+          "key": "APP_DB_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db2@default"
+              }
+            },
+            {
+              "literal": ":8080"
+            }
+          ]
+        },
+        {
+          "key": "APP_DB_PASSWORD",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db2",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            }
+          ]
+        },
+        {
+          "key": "APP_DB_URL",
+          "value": [
+            {
+              "literal": "postgres://"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db2",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db2",
+                "var": "POSTGRESQL_ADDON_PASSWORD"
+              }
+            },
+            {
+              "literal": "@"
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db2@default"
+              }
+            },
+            {
+              "literal": ":"
+            },
+            {
+              "literal": "8080"
+            },
+            {
+              "literal": "/"
+            },
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db2",
+                "var": "POSTGRESQL_ADDON_DB"
+              }
+            },
+            {
+              "literal": "?sslmode=disable"
+            }
+          ]
+        },
+        {
+          "key": "APP_DB_USER",
+          "value": [
+            {
+              "ref": {
+                "ref": "addon_env",
+                "addon": "addon/db1",
+                "var": "POSTGRESQL_ADDON_USER"
+              }
+            }
+          ]
+        },
+        {
+          "key": "APP_SECRET",
+          "value": [
+            {
+              "literal": "literal-sur-clever"
+            }
+          ]
+        },
+        {
+          "key": "CLEVER_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "db1="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db1@default"
+              }
+            },
+            {
+              "literal": ",db2="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db2@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "CLEVER_COMPOSE_EXPAND",
+          "value": [
+            {
+              "literal": "APP_DB_PASSWORD,APP_DB_USER,APP_DB_URL"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/db1",
+        "addon/db2"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=xclever-environment",
+        "compose-service=app",
+        "compose-spec=fbcfa2da4c410c866c34c5f0131504d5"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/app@default",
+      "member": "app/app",
+      "group": "ng/default",
+      "aliases": [
+        "app"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db1@default",
+      "member": "addon/db1",
+      "group": "ng/default",
+      "aliases": [
+        "db1"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/db2@default",
+      "member": "addon/db2",
+      "group": "ng/default",
+      "aliases": [
+        "db2"
+      ]
+    }
+  ]
+}

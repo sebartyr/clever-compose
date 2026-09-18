@@ -1,0 +1,16 @@
+{
+  "vikunja/vikunja:2.6.0": {
+    "entrypoint": ["/app/vikunja/vikunja"],
+    "cmd": [],
+    "user": "1000",
+    "workdir": "/app/vikunja",
+    "exposed_ports": [3456]
+  },
+  "postgres:18": {
+    "entrypoint": ["docker-entrypoint.sh"],
+    "cmd": ["postgres"],
+    "user": null,
+    "workdir": null,
+    "exposed_ports": [5432]
+  }
+}

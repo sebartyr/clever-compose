@@ -1,0 +1,27 @@
+services:
+  app:
+    image: vikunja/vikunja:2.6.0
+    environment:
+      APP_DB_HOST: db2:8080
+      APP_DB_PASSWORD: changeme
+      APP_DB_USER: vikunja
+      APP_DB_URL: postgres://x:y@db2/z
+    ports: ["3456:3456"]
+    x-clever:
+      environment:
+        APP_DB_PASSWORD: "{{db2.password}}"
+        APP_DB_USER: "{{ db1.user }}"
+        APP_DB_URL: "postgres://{{db2.user}}:{{db2.password}}@{{db2.host}}:{{db2.port}}/{{db2.database}}?sslmode=${PG_SSL:-disable}"
+        APP_SECRET: literal-sur-clever
+  db1:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+  db2:
+    image: ghcr.io/monorga/pg-custom:18.1
+    x-clever:
+      dialect: postgres
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja

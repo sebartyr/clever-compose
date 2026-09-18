@@ -107,6 +107,21 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
   en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
   Docker ne sait pas y résoudre `root`.
+- **Dialectes en données, override explicite, interpolation** (18/09/2026,
+  demande du propriétaire en trois points) : (1) `data/addon-images.json`
+  porte la reconnaissance des images et la lecture de leurs identifiants
+  (`recognize`, `declared` ne sont plus des `match` ; goldens identiques
+  avant/après, preuve de fidélité) ; (2) `x-clever.dialect` désigne un
+  dialecte pour une image custom ou un `build:`, `x-clever.environment`
+  impose une variable sur Clever Cloud sans qu'aucune règle ne s'applique
+  ; (3) références `{{service.rôle}}` dans ces valeurs (`${…}` est
+  l'interpolation Compose, qui refuse `${db.password}` : nom invalide, et
+  qui a lieu avant nous ; `{{` exige des guillemets en YAML, erreur
+  immédiate sinon). Un addon privé joint par le groupe injecte aussi
+  `<PRÉFIXE>_NG_HOST`/`_NG_PORT` (FQDN de membre, port du groupe) dans
+  ses consommateurs, sauf collision de fournisseur
+  (`addon-ng-vars-collision`) ; exports Terraform et script suivent. Cas
+  `xclever-environment` au corpus.
 - **Corrélation ambiguë bloquante** (18/09/2026) : `correlate` prenait le
   premier addon dont la valeur correspondait ; avec deux bases et `changeme`
   partout, l'application visant `db2` recevait les identifiants de `db1`.

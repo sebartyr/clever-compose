@@ -40,6 +40,8 @@ clever service link-addon "$ADDON_mongo" --app "$APP_api"
 clever env set --app "$APP_mongo_init" 'CLEVER_COMPOSE_INIT_HASH' '965bdbffd89e76fcb0544c283a25b57e'
 clever env set --app "$APP_api" 'CLEVER_COMPOSE_DNS_MAP' 'mongo='"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'CLEVER_COMPOSE_EXPAND' 'MONGO_URL,MONGO_PASSWORD'
+clever env set --app "$APP_api" 'DOCUMENTDB_ADDON_NG_HOST' "${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_api" 'DOCUMENTDB_ADDON_NG_PORT' '4040'
 clever env set --app "$APP_api" 'MONGO_HOST' "${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_api" 'MONGO_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'
 clever env set --app "$APP_api" 'MONGO_URL' 'mongodb://''${POSTGRESQL_ADDON_USER}'':''${POSTGRESQL_ADDON_PASSWORD}''@'"${ADDON_REAL_mongo}.m.${NG_default}.cc-ng.cloud"':4040''/''${POSTGRESQL_ADDON_DB}''?retryWrites=true&tls=true&tlsAllowInvalidCertificates=true'

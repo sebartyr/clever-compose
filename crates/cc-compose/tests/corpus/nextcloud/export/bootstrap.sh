@@ -33,6 +33,8 @@ clever service link-addon "$ADDON_db" --app "$APP_nc"
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_nc" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_nc" 'CLEVER_COMPOSE_EXPAND' 'POSTGRES_PASSWORD,POSTGRES_DB,POSTGRES_USER'
+clever env set --app "$APP_nc" 'POSTGRESQL_ADDON_NG_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_nc" 'POSTGRESQL_ADDON_NG_PORT' '8080'
 clever env set --app "$APP_nc" 'POSTGRES_DB' '${POSTGRESQL_ADDON_DB}'
 clever env set --app "$APP_nc" 'POSTGRES_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_nc" 'POSTGRES_PASSWORD' '${POSTGRESQL_ADDON_PASSWORD}'

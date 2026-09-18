@@ -38,6 +38,8 @@ clever env set --app "$APP_gitea" 'DB_NAME' '${POSTGRESQL_ADDON_DB}'
 clever env set --app "$APP_gitea" 'DB_PASSWD' '${POSTGRESQL_ADDON_PASSWORD}'
 clever env set --app "$APP_gitea" 'DB_TYPE' 'postgres'
 clever env set --app "$APP_gitea" 'DB_USER' '${POSTGRESQL_ADDON_USER}'
+clever env set --app "$APP_gitea" 'POSTGRESQL_ADDON_NG_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_gitea" 'POSTGRESQL_ADDON_NG_PORT' '8080'
 
 # Déploiements, dans l'ordre topologique (dépôts synthétiques exportés)
 (

@@ -59,6 +59,8 @@
         "environment": {
           "CLEVER_COMPOSE_DNS_MAP": "db=${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "CLEVER_COMPOSE_EXPAND": "WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME",
+          "MYSQL_ADDON_NG_HOST": "${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
+          "MYSQL_ADDON_NG_PORT": "8080",
           "WORDPRESS_DB_HOST": "${clevercloud_mysql.db.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud",
           "WORDPRESS_DB_NAME": "$${MYSQL_ADDON_DB}",
           "WORDPRESS_DB_PASSWORD": "$${MYSQL_ADDON_PASSWORD}",

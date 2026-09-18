@@ -75,6 +75,8 @@ resource "clevercloud_docker" "api" {
   environment        = {
     CLEVER_COMPOSE_DNS_MAP = "mongo=${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
     CLEVER_COMPOSE_EXPAND  = "MONGO_URL"
+    MONGODB_ADDON_NG_HOST  = "${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    MONGODB_ADDON_NG_PORT  = "8080"
     MONGO_URL              = "mongodb://$${MONGODB_ADDON_USER}:$${MONGODB_ADDON_PASSWORD}@${clevercloud_mongodb.mongo.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud:8080/$${MONGODB_ADDON_DB}"
   }
   networkgroups      = [

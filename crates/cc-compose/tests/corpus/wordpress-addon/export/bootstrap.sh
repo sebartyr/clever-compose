@@ -33,6 +33,8 @@ clever service link-addon "$ADDON_db" --app "$APP_wordpress"
 # Variables d'environnement (les FQDN des membres sont connus dès la création)
 clever env set --app "$APP_wordpress" 'CLEVER_COMPOSE_DNS_MAP' 'db='"${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_wordpress" 'CLEVER_COMPOSE_EXPAND' 'WORDPRESS_DB_USER,WORDPRESS_DB_PASSWORD,WORDPRESS_DB_NAME'
+clever env set --app "$APP_wordpress" 'MYSQL_ADDON_NG_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
+clever env set --app "$APP_wordpress" 'MYSQL_ADDON_NG_PORT' '8080'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_HOST' "${ADDON_REAL_db}.m.${NG_default}.cc-ng.cloud"
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_NAME' '${MYSQL_ADDON_DB}'
 clever env set --app "$APP_wordpress" 'WORDPRESS_DB_PASSWORD' '${MYSQL_ADDON_PASSWORD}'

@@ -239,7 +239,19 @@ scaling vertical), `min_instances`/`max_instances` (horizontal), `task`,
 `http_port`, `protocol`, `domains`, `ephemeral`, `plan`, `version`,
 `tcp_namespace`, `engine` (`documentdb` | `mongodb`), `init` (`task` par
 défaut, `local`), `private` (vrai par défaut : addon membre du groupe ;
-`false` : hôte public). Niveau projet : `network_groups` (`per-network` | `single` |
+`false` : hôte public), `dialect` (image custom ou `build:` à traiter
+comme `postgres`, `mysql`, `redis`… : substituée par l'addon),
+`environment` (variables imposées sur Clever Cloud, qui l'emportent sur
+toute règle ; références `{{service.rôle}}`, rôles `host`, `port`,
+`user`, `password`, `database`, `uri` d'un addon, `host` d'un service du
+même groupe ; `${VAR}` reste l'interpolation Compose depuis le `.env`,
+faite avant que l'outil ne lise le fichier). Reconnaissance des images et
+lecture de leurs identifiants par `data/addon-images.json` (dialectes,
+provenance dans `data/PROVENANCE.md`) ; sinon corrélation par égalité de
+valeur (décision du 18/09/2026). Un addon privé joint par le groupe
+injecte `<PRÉFIXE>_NG_HOST`/`_NG_PORT` (FQDN de membre, port du groupe) à
+côté des variables de la liaison, sauf deux addons du même fournisseur
+(`addon-ng-vars-collision`). Niveau projet : `network_groups` (`per-network` | `single` |
 `none`). Les clés `x-*` sont ignorées par Compose : le fichier reste
 utilisable en local.
 
@@ -249,7 +261,8 @@ utilisable en local.
 `addon-version-ambiguous`, `addon-init-task`, `addon-init-local`,
 `addon-init-scripts`, `addon-tuning-args`, `addon-multiple-databases`,
 `addon-credential-ambiguous` (même valeur chez plusieurs addons : valeurs
-distinctes exigées, jamais le premier venu),
+distinctes ou `x-clever.environment`, jamais le premier venu),
+`addon-ng-vars-collision`, `environment-override-invalid`,
 `addon-no-superuser`, `addon-connections`, `addon-documentdb-shared`,
 `addon-documentdb-version`, `terraform-addon-options`, `addon-private-shared`,
 `addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,

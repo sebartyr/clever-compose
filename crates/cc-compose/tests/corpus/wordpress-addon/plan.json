@@ -96,6 +96,25 @@
           ]
         },
         {
+          "key": "MYSQL_ADDON_NG_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "MYSQL_ADDON_NG_PORT",
+          "value": [
+            {
+              "literal": "8080"
+            }
+          ]
+        },
+        {
           "key": "WORDPRESS_DB_HOST",
           "value": [
             {
