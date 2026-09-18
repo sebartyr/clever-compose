@@ -84,6 +84,35 @@ pub struct State {
     /// Docker du poste, et anonyme pour les projets déposés. Créés à la
     /// première demande.
     registries: std::sync::Mutex<[Option<Arc<crate::plan::registry::Registry>>; 2]>,
+    /// Opérations longues en cours (`up`, `down`, `seed`…) et arrêt
+    /// demandé : après un Ctrl-C, plus aucune nouvelle opération n'est
+    /// acceptée et le serveur attend la fin de celles qui tournent.
+    pub running: std::sync::atomic::AtomicUsize,
+    pub shutting_down: std::sync::atomic::AtomicBool,
+    pub idle: tokio::sync::Notify,
+}
+
+impl State {
+    /// Réserve une place pour une opération longue ; `None` si le serveur
+    /// s'arrête. La garde décrémente et réveille l'arrêt à la fin.
+    pub fn begin_operation(self: &Arc<Self>) -> Option<RunningOp> {
+        use std::sync::atomic::Ordering;
+        if self.shutting_down.load(Ordering::SeqCst) {
+            return None;
+        }
+        self.running.fetch_add(1, Ordering::SeqCst);
+        Some(RunningOp(self.clone()))
+    }
+}
+
+pub struct RunningOp(Arc<State>);
+
+impl Drop for RunningOp {
+    fn drop(&mut self) {
+        if self.0.running.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            self.0.idle.notify_waiters();
+        }
+    }
 }
 
 /// L'exécution locale des tâches est-elle possible sur ce serveur ?
@@ -382,7 +411,7 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     if !listen.ip().is_loopback() && public_base.is_none() {
         slog("sans --public-url : le callback OAuth est bâti sur l'en-tête Host de chaque requête (X-Forwarded-Proto pour le schéma) ; posez --public-url derrière un proxy pour figer la base");
     }
-    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), pending_reserved: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default(), registries: Default::default() });
+    let state = Arc::new(State { fallback, locals, oauth, public_base, listen, origins, pending: Default::default(), pending_reserved: Default::default(), limiter: Limiter::new(std::time::Duration::from_secs(60), 20), api_key: o.api_key.clone(), local_exec, validated: Default::default(), registries: Default::default(), running: Default::default(), shutting_down: Default::default(), idle: tokio::sync::Notify::new() });
     let app = api::router(state.clone());
     #[cfg(feature = "ui")]
     let app = if o.ui { app.fallback(assets::serve) } else { app.fallback(api_only) };
@@ -406,9 +435,38 @@ pub async fn serve(o: ServeOptions, fallback: Option<Session>, oauth: OauthConsu
     // L'adresse du pair est exposée aux routes (`ConnectInfo`) : l'exécution
     // locale exige une connexion depuis le poste.
     let app = app.into_make_service_with_connect_info::<SocketAddr>();
-    axum::serve(listener, app).with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-    }).await.map_err(|e| format!("serveur : {e}"))
+    // Arrêt en deux temps : le premier Ctrl-C refuse les nouvelles
+    // opérations et attend celles en cours (un `up` interrompu à mi-chemin
+    // laisse la plateforme dans un état que le prochain `up` reprend, mais
+    // autant le finir) ; un second Ctrl-C force la sortie.
+    let st = state.clone();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            st.shutting_down.store(true, std::sync::atomic::Ordering::SeqCst);
+            loop {
+                // Inscrit avant de lire le compteur : un réveil entre les
+                // deux n'est pas perdu.
+                let notified = st.idle.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                let n = st.running.load(std::sync::atomic::Ordering::SeqCst);
+                if n == 0 {
+                    break;
+                }
+                slog(&format!("arrêt : {n} opération(s) en cours, attente de leur fin (Ctrl-C à nouveau pour forcer)"));
+                tokio::select! {
+                    _ = &mut notified => {}
+                    _ = tokio::signal::ctrl_c() => {
+                        slog("arrêt forcé");
+                        std::process::exit(130);
+                    }
+                }
+            }
+            slog("arrêt");
+        })
+        .await
+        .map_err(|e| format!("serveur : {e}"))
 }
 
 #[cfg(test)]

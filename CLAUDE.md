@@ -128,6 +128,10 @@ mêmes commits déployés (vérifié en réel).
   requête pair loopback, aucun en-tête de proxy, aucun jeton propre
   (`local_execution_allowed`, tests de route dans `web/api.rs` ; issue
   #12) ; connexion par
+  **arrêt** : premier Ctrl-C → plus aucune opération longue acceptée
+  (`State::begin_operation`), attente de celles en cours, second Ctrl-C
+  forcé (18/09/2026) ; `Registry` lâche son runtime par
+  `shutdown_background` (sinon panic à l'arrêt) ; connexion par
   `POST /api/session/login` (request token, callback du serveur) :
   navigateur → jetons dans le fragment de l'URL de retour ; jetons gardés
   en sessionStorage ; sans jetons

@@ -537,8 +537,12 @@ where
     });
     super::slog(&format!("▶ {label}"));
     let started = std::time::Instant::now();
+    let op = state.begin_operation();
     tokio::spawn(async move {
-        let result = f(state, log).await;
+        let result = match op {
+            Some(_guard) => f(state, log).await,
+            None => Err("le serveur s'arrête : opération refusée".to_string()),
+        };
         let secs = started.elapsed().as_secs();
         match &result {
             Ok(()) => super::slog(&format!("✔ {label} terminé ({secs} s)")),
@@ -1032,6 +1036,9 @@ mod tests {
             local_exec,
             validated: Default::default(),
             registries: Default::default(),
+            running: Default::default(),
+            shutting_down: Default::default(),
+            idle: tokio::sync::Notify::new(),
         };
         let id = s.locals.add_dir(dir.path.clone(), false, None).unwrap();
         (Arc::new(s), id, dir)

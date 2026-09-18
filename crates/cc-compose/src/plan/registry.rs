@@ -23,7 +23,10 @@ use serde::{Deserialize, Serialize};
 use super::images::ImageResolver;
 
 pub struct Registry {
-    runtime: tokio::runtime::Runtime,
+    /// `Option` pour [`Drop`] : un runtime lâché depuis un worker d'un
+    /// autre runtime (serveur `ui` à l'arrêt) panique, sauf par
+    /// `shutdown_background`, prévu pour ce cas.
+    runtime: Option<tokio::runtime::Runtime>,
     client: Client,
     auths: HashMap<String, (String, String)>,
     cache_dir: Option<PathBuf>,
@@ -56,7 +59,7 @@ impl Registry {
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
             .map(|c| c.join("clever-compose").join("images"));
-        Ok(Registry { runtime, client, auths, cache_dir })
+        Ok(Registry { runtime: Some(runtime), client, auths, cache_dir })
     }
 
     fn auth_for(&self, registry: &str) -> RegistryAuth {
@@ -77,6 +80,8 @@ impl Registry {
         let auth = self.auth_for(reference.resolve_registry());
         let (_, digest, config) = self
             .runtime
+            .as_ref()
+            .expect("runtime du registre")
             .block_on(self.client.pull_manifest_and_config(&reference, &auth))
             .map_err(|e| format!("registre `{}` : {e}", reference.resolve_registry()))?;
         let file: oci_client::config::ConfigFile = serde_json::from_str(&config).map_err(|e| format!("configuration d'image invalide : {e}"))?;
@@ -171,4 +176,12 @@ pub fn docker_auths() -> HashMap<String, (String, String)> {
         }
     }
     out
+}
+
+impl Drop for Registry {
+    fn drop(&mut self) {
+        if let Some(rt) = self.runtime.take() {
+            rt.shutdown_background();
+        }
+    }
 }
