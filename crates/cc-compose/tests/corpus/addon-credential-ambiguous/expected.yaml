@@ -1,0 +1,32 @@
+name: addon-credential-ambiguous
+services:
+  app:
+    environment:
+      APP_DB_HOST: db2:8080
+      APP_DB_PASSWORD: changeme
+      APP_DB_USER: vikunja
+    image: vikunja/vikunja:2.6.0
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 3456
+        published: "3456"
+        protocol: tcp
+  db1:
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+    image: postgres:18
+    networks:
+      default: null
+  db2:
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+    image: postgres:18
+    networks:
+      default: null
+networks:
+  default:
+    name: addon-credential-ambiguous_default

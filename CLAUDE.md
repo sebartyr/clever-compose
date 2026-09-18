@@ -248,6 +248,8 @@ utilisable en local.
 `addon-substitution`, `addon-version-unavailable`, `addon-version-shared`,
 `addon-version-ambiguous`, `addon-init-task`, `addon-init-local`,
 `addon-init-scripts`, `addon-tuning-args`, `addon-multiple-databases`,
+`addon-credential-ambiguous` (même valeur chez plusieurs addons : valeurs
+distinctes exigées, jamais le premier venu),
 `addon-no-superuser`, `addon-connections`, `addon-documentdb-shared`,
 `addon-documentdb-version`, `terraform-addon-options`, `addon-private-shared`,
 `addon-private-port`, `addon-private-unreachable`, `addon-private-unverified`,

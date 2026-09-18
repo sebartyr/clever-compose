@@ -107,6 +107,12 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
   en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
   Docker ne sait pas y résoudre `root`.
+- **Corrélation ambiguë bloquante** (18/09/2026) : `correlate` prenait le
+  premier addon dont la valeur correspondait ; avec deux bases et `changeme`
+  partout, l'application visant `db2` recevait les identifiants de `db1`.
+  `correlate_strict` renvoie les candidats, erreur `addon-credential-ambiguous`
+  avec la sortie (valeurs distinctes par base dans le compose). Cas
+  `addon-credential-ambiguous` au corpus.
 - **Corrélation visible** (18/09/2026) : la corrélation par égalité de
   valeur (`VIKUNJA_DATABASE_PASSWORD: changeme` = `POSTGRES_PASSWORD` de
   `db` → mot de passe de l'addon) était muette, et un utilisateur l'a

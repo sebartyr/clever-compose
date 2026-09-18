@@ -1,0 +1,18 @@
+services:
+  app:
+    image: vikunja/vikunja:2.6.0
+    environment:
+      APP_DB_HOST: db2:8080
+      APP_DB_PASSWORD: changeme
+      APP_DB_USER: vikunja
+    ports: ["3456:3456"]
+  db1:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja
+  db2:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: vikunja

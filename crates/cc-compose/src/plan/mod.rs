@@ -588,7 +588,14 @@ fn plan_service(
         // déclare le service substitué (§6.2, cas 2), la clé levant les
         // ambiguïtés.
         if let Some(lit) = t.as_literal() {
-            if let Some((addon_name, role)) = correlate(k, &lit, addon_infos) {
+            let correlated = match correlate_strict(k, &lit, addon_infos) {
+                Ok(c) => c,
+                Err(candidates) => {
+                    diags.push(Diagnostic::error("addon-credential-ambiguous", format!("`{k}` vaut la même chose que l'identifiant déclaré par {} : impossible de savoir quel addon la remplira. Donnez des valeurs distinctes à chaque base dans le compose (elles ne servent qu'à faire le lien, les vraies sont celles des addons)", candidates.iter().map(|c| format!("`{c}`")).collect::<Vec<_>>().join(" et "))).with_path(&ep));
+                    None
+                }
+            };
+            if let Some((addon_name, role)) = correlated {
                 let provider = addon_infos[&addon_name].0.provider;
                 // Addon privé atteint par un réseau commun : hôte et port du
                 // membre ; les autres rôles restent ceux de la liaison.
@@ -804,6 +811,14 @@ fn redirections(name: &str, s: &Service, x: &XClever, port: &PlatformPort, p: &P
 /// unicité de la correspondance ; ambigu → rien, avertissement dans le
 /// journal du plan.
 fn correlate(key: &str, value: &str, infos: &IndexMap<String, (addons::Recognized, addons::Declared)>) -> Option<(String, addons::Role)> {
+    correlate_strict(key, value, infos).ok().flatten()
+}
+
+/// Comme [`correlate`], mais une valeur qui désigne le même rôle chez
+/// plusieurs addons est une erreur (`Err` : les candidats) plutôt qu'un
+/// choix du premier venu : deux bases avec `changeme` partout donneraient
+/// à l'application le mot de passe de la mauvaise (18/09/2026).
+fn correlate_strict(key: &str, value: &str, infos: &IndexMap<String, (addons::Recognized, addons::Declared)>) -> Result<Option<(String, addons::Role)>, Vec<String>> {
     use addons::Role;
     let k = key.to_ascii_uppercase();
     let mut matches: Vec<(String, Role)> = Vec::new();
@@ -825,9 +840,18 @@ fn correlate(key: &str, value: &str, infos: &IndexMap<String, (addons::Recognize
         }
     }
     if matches.is_empty() {
-        return None;
+        return Ok(None);
     }
-    let hinted = |role: Role| matches.iter().find(|(_, r)| *r == role).cloned();
+    // Un seul addon pour le rôle retenu, sinon les candidats.
+    let unique = |mut found: Vec<(String, Role)>| -> Result<Option<(String, Role)>, Vec<String>> {
+        found.dedup_by(|a, b| a.0 == b.0);
+        match found.len() {
+            0 => Ok(None),
+            1 => Ok(found.into_iter().next()),
+            _ => Err(found.into_iter().map(|(n, _)| n).collect()),
+        }
+    };
+    let hinted = |role: Role| unique(matches.iter().filter(|(_, r)| *r == role).cloned().collect());
     if k.contains("PASS") {
         return hinted(Role::Password);
     }
@@ -842,7 +866,7 @@ fn correlate(key: &str, value: &str, infos: &IndexMap<String, (addons::Recognize
     }
     let mut roles: Vec<Role> = matches.iter().map(|(_, r)| *r).collect();
     roles.dedup();
-    if roles.len() == 1 { matches.into_iter().next() } else { None }
+    if roles.len() == 1 { unique(matches) } else { Ok(None) }
 }
 
 /// Ports connus comme non HTTP, pour deviner le mode du port plateforme
