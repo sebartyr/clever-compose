@@ -51,19 +51,69 @@ pub fn catalog() -> &'static Catalog {
     C.get_or_init(|| serde_json::from_str(include_str!("../../data/addon-providers.json")).expect("data/addon-providers.json invalide"))
 }
 
-/// Dialecte des variables du service source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Dialect {
-    /// Images officielles Docker Hub.
-    Official,
-    /// Images Bitnami (`POSTGRESQL_*`, `MARIADB_*`...).
-    Bitnami,
+/// Règles de reconnaissance des images et de lecture de leurs identifiants
+/// (`data/addon-images.json`, provenance dans `data/PROVENANCE.md`).
+#[derive(Debug, Deserialize)]
+pub struct Images {
+    pub dialects: indexmap::IndexMap<String, Dialect>,
+    /// Nom d'image (sans `docker.io/library/`) vers dialecte.
+    pub images: indexmap::IndexMap<String, String>,
+}
+
+/// Comment une image se configure : fournisseur cible, port, et où lire
+/// chaque identifiant dans le service source.
+#[derive(Debug, Deserialize)]
+pub struct Dialect {
+    pub provider: String,
+    /// Nom court pour les messages (`postgres`, `mariadb`...).
+    pub kind: String,
+    pub port: u16,
+    /// `major` ou `major.minor` : ce qu'on retient du tag.
+    pub version: String,
+    #[serde(default)]
+    pub user: Option<CredentialSource>,
+    #[serde(default)]
+    pub password: Option<CredentialSource>,
+    #[serde(default)]
+    pub database: Option<CredentialSource>,
+    #[serde(default)]
+    pub root_password: Option<CredentialSource>,
+}
+
+/// Source d'un identifiant dans le service source.
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialSource {
+    /// Variables d'environnement, la première renseignée l'emporte.
+    #[serde(default)]
+    pub env: Vec<String>,
+    /// Valeur par défaut de l'image.
+    #[serde(default)]
+    pub default: Option<String>,
+    /// Valeur par défaut égale à un autre rôle (`POSTGRES_DB` = `POSTGRES_USER`).
+    #[serde(default)]
+    pub default_from: Option<String>,
+    /// Valeur qui suit ce drapeau dans `command` (`--requirepass`).
+    #[serde(default)]
+    pub command_flag: Option<String>,
+    /// Valeur imposée par l'image (`elastic`).
+    #[serde(default)]
+    pub fixed: Option<String>,
+}
+
+pub fn images() -> &'static Images {
+    static I: OnceLock<Images> = OnceLock::new();
+    I.get_or_init(|| serde_json::from_str(include_str!("../../data/addon-images.json")).expect("data/addon-images.json invalide"))
+}
+
+pub fn dialect(name: &str) -> Option<&'static Dialect> {
+    images().dialects.get(name)
 }
 
 #[derive(Debug, Clone)]
 pub struct Recognized {
     pub provider: &'static str,
-    pub dialect: Dialect,
+    pub dialect: &'static Dialect,
     /// Nom court pour les messages (`postgres`, `mariadb`...).
     pub kind: &'static str,
     /// Version demandée par le tag (`16`, `8.0`), si lisible.
@@ -94,28 +144,30 @@ pub fn documentdb_by_default(rec: &Recognized) -> bool {
     rec.provider == "mongodb-addon" && rec.version.as_deref().and_then(|v| v.split('.').next()?.parse::<u32>().ok()).is_none_or(|major| major >= 5)
 }
 
-/// Reconnaissance d'une image. Jamais un service `build:` (§6.1).
+/// Reconnaissance d'une image par son nom (§6.1), ou par le dialecte que
+/// le service désigne (`x-clever.dialect`, image custom). Jamais un
+/// service `build:` sans dialecte explicite.
 pub fn recognize(image: &str) -> Option<Recognized> {
-    let (name, tag) = image.rsplit_once('@').map(|(n, _)| (n, None)).unwrap_or_else(|| match image.rsplit_once(':') {
+    let (name, tag) = split_image(image);
+    let name = name.trim_start_matches("docker.io/").trim_start_matches("library/");
+    let d = dialect(images().images.get(name)?)?;
+    Some(recognized(d, tag))
+}
+
+pub fn recognize_as(dialect_name: &str, image: Option<&str>) -> Option<Recognized> {
+    let d = dialect(dialect_name)?;
+    Some(recognized(d, image.and_then(|i| split_image(i).1)))
+}
+
+fn split_image(image: &str) -> (&str, Option<&str>) {
+    image.rsplit_once('@').map(|(n, _)| (n, None)).unwrap_or_else(|| match image.rsplit_once(':') {
         Some((n, t)) if !t.contains('/') => (n, Some(t)),
         _ => (image, None),
-    });
-    let name = name.trim_start_matches("docker.io/").trim_start_matches("library/");
-    let (provider, dialect, kind, port, major_only) = match name {
-        "postgres" | "postgis/postgis" | "pgvector/pgvector" | "timescale/timescaledb" | "timescale/timescaledb-ha" => ("postgresql-addon", Dialect::Official, "postgres", 5432, true),
-        "bitnami/postgresql" => ("postgresql-addon", Dialect::Bitnami, "postgres", 5432, true),
-        "mysql" => ("mysql-addon", Dialect::Official, "mysql", 3306, false),
-        "bitnami/mysql" => ("mysql-addon", Dialect::Bitnami, "mysql", 3306, false),
-        "mariadb" => ("mysql-addon", Dialect::Official, "mariadb", 3306, false),
-        "bitnami/mariadb" => ("mysql-addon", Dialect::Bitnami, "mariadb", 3306, false),
-        "redis" | "valkey/valkey" | "redis/redis-stack-server" => ("redis-addon", Dialect::Official, "redis", 6379, true),
-        "bitnami/redis" | "bitnami/valkey" => ("redis-addon", Dialect::Bitnami, "redis", 6379, true),
-        "mongo" => ("mongodb-addon", Dialect::Official, "mongo", 27017, false),
-        "bitnami/mongodb" => ("mongodb-addon", Dialect::Bitnami, "mongo", 27017, false),
-        "elasticsearch" | "docker.elastic.co/elasticsearch/elasticsearch" => ("es-addon", Dialect::Official, "elasticsearch", 9200, true),
-        "bitnami/elasticsearch" => ("es-addon", Dialect::Bitnami, "elasticsearch", 9200, true),
-        _ => return None,
-    };
+    })
+}
+
+fn recognized(d: &'static Dialect, tag: Option<&str>) -> Recognized {
+    let major_only = d.version == "major";
     let version = tag.filter(|t| *t != "latest").and_then(|t| {
         let digits: String = t.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
         if digits.is_empty() {
@@ -124,7 +176,7 @@ pub fn recognize(image: &str) -> Option<Recognized> {
         let parts: Vec<&str> = digits.trim_end_matches('.').split('.').collect();
         Some(if major_only { parts[0].to_string() } else { parts.iter().take(2).cloned().collect::<Vec<_>>().join(".") })
     });
-    Some(Recognized { provider, dialect, kind, version, port })
+    Recognized { provider: &d.provider, dialect: d, kind: &d.kind, version, port: d.port }
 }
 
 /// Identifiants déclarés par le service source, selon son dialecte.
@@ -137,51 +189,39 @@ pub struct Declared {
 }
 
 pub fn declared(r: &Recognized, s: &Service) -> Declared {
-    let get = |k: &str| s.environment.get(k).and_then(|v| v.clone()).filter(|v| !v.is_empty());
-    let mut d = Declared::default();
-    // DocumentDB remplace un service `mongo` : mêmes variables déclarées.
-    let provider = if r.provider == DOCUMENTDB { "mongodb-addon" } else { r.provider };
-    match (provider, r.dialect) {
-        ("postgresql-addon", Dialect::Official) => {
-            d.user = get("POSTGRES_USER").or_else(|| Some("postgres".into()));
-            d.password = get("POSTGRES_PASSWORD");
-            d.database = get("POSTGRES_DB").or_else(|| d.user.clone());
+    let d = r.dialect;
+    let read = |src: &Option<CredentialSource>| -> Option<String> {
+        let src = src.as_ref()?;
+        if let Some(f) = &src.fixed {
+            return Some(f.clone());
         }
-        ("postgresql-addon", Dialect::Bitnami) => {
-            d.user = get("POSTGRESQL_USERNAME").or_else(|| Some("postgres".into()));
-            d.password = get("POSTGRESQL_PASSWORD").or_else(|| get("POSTGRES_PASSWORD"));
-            d.database = get("POSTGRESQL_DATABASE").or_else(|| Some("postgres".into()));
-        }
-        ("mysql-addon", _) => {
-            let prefix = if r.kind == "mariadb" && r.dialect == Dialect::Bitnami { "MARIADB_" } else { "MYSQL_" };
-            d.root_password = get(&format!("{prefix}ROOT_PASSWORD")).or_else(|| get("MYSQL_ROOT_PASSWORD")).or_else(|| get("MARIADB_ROOT_PASSWORD"));
-            d.user = get(&format!("{prefix}USER")).or_else(|| get("MYSQL_USER")).or_else(|| get("MARIADB_USER"));
-            d.password = get(&format!("{prefix}PASSWORD")).or_else(|| get("MYSQL_PASSWORD")).or_else(|| get("MARIADB_PASSWORD"));
-            d.database = get(&format!("{prefix}DATABASE")).or_else(|| get("MYSQL_DATABASE")).or_else(|| get("MARIADB_DATABASE"));
-        }
-        ("redis-addon", Dialect::Official) => {
-            // `--requirepass X` dans la commande, sinon sans mot de passe.
+        if let Some(flag) = &src.command_flag {
             let cmd = s.command.clone().unwrap_or_default();
-            d.password = cmd.iter().position(|a| a == "--requirepass").and_then(|i| cmd.get(i + 1).cloned());
+            return cmd.iter().position(|a| a == flag).and_then(|i| cmd.get(i + 1).cloned());
         }
-        ("redis-addon", Dialect::Bitnami) => d.password = get("REDIS_PASSWORD"),
-        ("mongodb-addon", Dialect::Official) => {
-            d.user = get("MONGO_INITDB_ROOT_USERNAME");
-            d.password = get("MONGO_INITDB_ROOT_PASSWORD");
-            d.database = get("MONGO_INITDB_DATABASE");
+        src.env.iter().find_map(|k| s.environment.get(k).and_then(|v| v.clone()).filter(|v| !v.is_empty())).or_else(|| src.default.clone())
+    };
+    let mut out = Declared { user: read(&d.user), password: read(&d.password), database: read(&d.database), root_password: read(&d.root_password) };
+    // `default_from` : un rôle vide prend la valeur d'un autre (une seule
+    // passe, un rôle ne dépend que d'un rôle lu directement).
+    let from = |role: &str, out: &Declared| match role {
+        "user" => out.user.clone(),
+        "password" => out.password.clone(),
+        "database" => out.database.clone(),
+        "root_password" => out.root_password.clone(),
+        _ => None,
+    };
+    if out.database.is_none() {
+        if let Some(r) = d.database.as_ref().and_then(|c| c.default_from.as_deref()) {
+            out.database = from(r, &out);
         }
-        ("mongodb-addon", Dialect::Bitnami) => {
-            d.user = get("MONGODB_ROOT_USER").or_else(|| Some("root".into()));
-            d.password = get("MONGODB_ROOT_PASSWORD");
-            d.database = get("MONGODB_DATABASE");
-        }
-        ("es-addon", _) => {
-            d.user = Some("elastic".into());
-            d.password = get("ELASTIC_PASSWORD");
-        }
-        _ => {}
     }
-    d
+    if out.user.is_none() {
+        if let Some(r) = d.user.as_ref().and_then(|c| c.default_from.as_deref()) {
+            out.user = from(r, &out);
+        }
+    }
+    out
 }
 
 /// Variables injectées par la liaison de l'addon, par rôle.

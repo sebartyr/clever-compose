@@ -36,3 +36,25 @@ ajoutée le 16/09/2026 après un `dev` demandé en 16 et servi en 15), le
 Sert au planificateur en dry-run (reconnaissance, choix de plan, coût
 annoncé, versions). L'exécuteur relit l'API. Régénérer par le script de
 `summary.md` (phase 5) ; ne pas éditer à la main.
+
+# addon-images.json
+
+Règles de reconnaissance des images substituables et de lecture de leurs
+identifiants, dérivées des entrypoints des images (18/09/2026) :
+`docker-library/postgres` (`docker_setup_env` : `POSTGRES_USER` défaut
+`postgres`, `POSTGRES_DB` défaut `$POSTGRES_USER`), `docker-library/mysql`
+et `mariadb` (`MYSQL_*`, `MARIADB_*` acceptés par les deux), `redis`
+(`--requirepass` dans la commande), `docker-library/mongo`
+(`MONGO_INITDB_*`), `elastic` (utilisateur fixe `elastic`,
+`ELASTIC_PASSWORD`), et les variantes Bitnami (`POSTGRESQL_*`,
+`MONGODB_*`, `REDIS_PASSWORD`).
+
+`dialects` : par nom, fournisseur cible, nom court, port du conteneur,
+règle de version depuis le tag (`major` ou `major.minor`), et pour chaque
+rôle (`user`, `password`, `database`, `root_password`) la source :
+`env` (liste de variables, la première renseignée), `default` (littéral)
+ou `default_from` (un autre rôle), `command_flag` (valeur qui suit le
+drapeau dans `command`), `fixed`. `images` : nom d'image (sans registre
+`docker.io/library/`) vers dialecte. Un service peut désigner un dialecte
+par `x-clever.dialect` (image custom). Relire les entrypoints avant
+d'ajouter une image ; jamais de souvenir.

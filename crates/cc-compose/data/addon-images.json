@@ -1,0 +1,96 @@
+{
+  "dialects": {
+    "postgres": {
+      "provider": "postgresql-addon", "kind": "postgres", "port": 5432, "version": "major",
+      "user": { "env": ["POSTGRES_USER"], "default": "postgres" },
+      "password": { "env": ["POSTGRES_PASSWORD"] },
+      "database": { "env": ["POSTGRES_DB"], "default_from": "user" }
+    },
+    "postgres-bitnami": {
+      "provider": "postgresql-addon", "kind": "postgres", "port": 5432, "version": "major",
+      "user": { "env": ["POSTGRESQL_USERNAME"], "default": "postgres" },
+      "password": { "env": ["POSTGRESQL_PASSWORD", "POSTGRES_PASSWORD"] },
+      "database": { "env": ["POSTGRESQL_DATABASE"], "default": "postgres" }
+    },
+    "mysql": {
+      "provider": "mysql-addon", "kind": "mysql", "port": 3306, "version": "major.minor",
+      "root_password": { "env": ["MYSQL_ROOT_PASSWORD", "MARIADB_ROOT_PASSWORD"] },
+      "user": { "env": ["MYSQL_USER", "MARIADB_USER"] },
+      "password": { "env": ["MYSQL_PASSWORD", "MARIADB_PASSWORD"] },
+      "database": { "env": ["MYSQL_DATABASE", "MARIADB_DATABASE"] }
+    },
+    "mariadb": {
+      "provider": "mysql-addon", "kind": "mariadb", "port": 3306, "version": "major.minor",
+      "root_password": { "env": ["MYSQL_ROOT_PASSWORD", "MARIADB_ROOT_PASSWORD"] },
+      "user": { "env": ["MYSQL_USER", "MARIADB_USER"] },
+      "password": { "env": ["MYSQL_PASSWORD", "MARIADB_PASSWORD"] },
+      "database": { "env": ["MYSQL_DATABASE", "MARIADB_DATABASE"] }
+    },
+    "mysql-bitnami": {
+      "provider": "mysql-addon", "kind": "mysql", "port": 3306, "version": "major.minor",
+      "root_password": { "env": ["MYSQL_ROOT_PASSWORD", "MARIADB_ROOT_PASSWORD"] },
+      "user": { "env": ["MYSQL_USER", "MARIADB_USER"] },
+      "password": { "env": ["MYSQL_PASSWORD", "MARIADB_PASSWORD"] },
+      "database": { "env": ["MYSQL_DATABASE", "MARIADB_DATABASE"] }
+    },
+    "mariadb-bitnami": {
+      "provider": "mysql-addon", "kind": "mariadb", "port": 3306, "version": "major.minor",
+      "root_password": { "env": ["MARIADB_ROOT_PASSWORD", "MYSQL_ROOT_PASSWORD"] },
+      "user": { "env": ["MARIADB_USER", "MYSQL_USER"] },
+      "password": { "env": ["MARIADB_PASSWORD", "MYSQL_PASSWORD"] },
+      "database": { "env": ["MARIADB_DATABASE", "MYSQL_DATABASE"] }
+    },
+    "redis": {
+      "provider": "redis-addon", "kind": "redis", "port": 6379, "version": "major",
+      "password": { "command_flag": "--requirepass" }
+    },
+    "redis-bitnami": {
+      "provider": "redis-addon", "kind": "redis", "port": 6379, "version": "major",
+      "password": { "env": ["REDIS_PASSWORD"] }
+    },
+    "mongo": {
+      "provider": "mongodb-addon", "kind": "mongo", "port": 27017, "version": "major.minor",
+      "user": { "env": ["MONGO_INITDB_ROOT_USERNAME"] },
+      "password": { "env": ["MONGO_INITDB_ROOT_PASSWORD"] },
+      "database": { "env": ["MONGO_INITDB_DATABASE"] }
+    },
+    "mongo-bitnami": {
+      "provider": "mongodb-addon", "kind": "mongo", "port": 27017, "version": "major.minor",
+      "user": { "env": ["MONGODB_ROOT_USER"], "default": "root" },
+      "password": { "env": ["MONGODB_ROOT_PASSWORD"] },
+      "database": { "env": ["MONGODB_DATABASE"] }
+    },
+    "elasticsearch": {
+      "provider": "es-addon", "kind": "elasticsearch", "port": 9200, "version": "major",
+      "user": { "fixed": "elastic" },
+      "password": { "env": ["ELASTIC_PASSWORD"] }
+    },
+    "elasticsearch-bitnami": {
+      "provider": "es-addon", "kind": "elasticsearch", "port": 9200, "version": "major",
+      "user": { "fixed": "elastic" },
+      "password": { "env": ["ELASTIC_PASSWORD"] }
+    }
+  },
+  "images": {
+    "postgres": "postgres",
+    "postgis/postgis": "postgres",
+    "pgvector/pgvector": "postgres",
+    "timescale/timescaledb": "postgres",
+    "timescale/timescaledb-ha": "postgres",
+    "bitnami/postgresql": "postgres-bitnami",
+    "mysql": "mysql",
+    "bitnami/mysql": "mysql-bitnami",
+    "mariadb": "mariadb",
+    "bitnami/mariadb": "mariadb-bitnami",
+    "redis": "redis",
+    "valkey/valkey": "redis",
+    "redis/redis-stack-server": "redis",
+    "bitnami/redis": "redis-bitnami",
+    "bitnami/valkey": "redis-bitnami",
+    "mongo": "mongo",
+    "bitnami/mongodb": "mongo-bitnami",
+    "elasticsearch": "elasticsearch",
+    "docker.elastic.co/elasticsearch/elasticsearch": "elasticsearch",
+    "bitnami/elasticsearch": "elasticsearch-bitnami"
+  }
+}
