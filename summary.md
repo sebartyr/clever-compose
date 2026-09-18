@@ -93,6 +93,15 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 *Décidé :*
 
+- **Bind de répertoire éphémère** (18/09/2026, cas réel Vikunja
+  `./files:/app/vikunja/files`) : un montage de répertoire suit la même
+  sortie qu'un volume nommé, `--allow-ephemeral` ou `x-clever.ephemeral:
+  true` → avertissement `volume-ephemeral` (rien n'est copié dans l'image,
+  données perdues au redéploiement) ; sinon `bind-directory` nomme les
+  sorties (stockage externe, Cellar, ou éphémère). Le contenu initial du
+  répertoire n'est pas copié : une copie serait une approximation (seed
+  figé dans l'image) et le plafond du contexte de build la rendrait
+  fragile.
 - **Catalogue embarqué** (`data/addon-providers.json`, provenance dans
   `data/PROVENANCE.md`) : plans avec id, slug, prix, zones, features (`Max
   connection limit`), versions dédiées et version par défaut, pour

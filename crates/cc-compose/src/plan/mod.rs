@@ -515,8 +515,11 @@ fn plan_service(
                 let meta = std::fs::metadata(&src);
                 match meta {
                     Ok(m) if m.is_file() => files.push(CopiedFile { source: shown.clone(), target: v.target.clone(), read_only: v.read_only }),
+                    Ok(_) if ctx.allow_ephemeral || x.ephemeral == Some(true) => {
+                        diags.push(Diagnostic::warning("volume-ephemeral", format!("le répertoire `{shown}` monté sur `{}` sera éphémère : rien n'est copié dans l'image et les données sont perdues à chaque redéploiement", v.target)).with_path(&vp));
+                    }
                     Ok(_) => {
-                        diags.push(Diagnostic::error("bind-directory", format!("le montage de répertoire `{shown}` vers `{}` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image", v.target)).with_path(&vp));
+                        diags.push(Diagnostic::error("bind-directory", format!("le montage de répertoire `{shown}` vers `{}` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image. Utilisez un stockage externe (addon, Cellar), ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données", v.target)).with_path(&vp));
                     }
                     Err(_) => {
                         diags.push(Diagnostic::error("bind-missing", format!("le chemin `{shown}` monté vers `{}` n'existe pas sur ce poste", v.target)).with_path(&vp));

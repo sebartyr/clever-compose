@@ -43,7 +43,7 @@ struct ProjectArgs {
 #[derive(Args, Clone)]
 #[command(next_help_heading = "Plan")]
 struct PlanArgs {
-    /// Accepte les volumes nommés des services non substituables comme stockage éphémère
+    /// Accepte les volumes nommés et les répertoires montés des services non substituables comme stockage éphémère
     #[arg(long)]
     allow_ephemeral: bool,
     /// Fixture d'images (sortie de `images`) au lieu des registres
