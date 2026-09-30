@@ -9,6 +9,7 @@ services:
     networks:
       default: null
     x-clever:
+      build_flavor: XXL
       flavor: M
       max_flavor: L
       max_instances: 2

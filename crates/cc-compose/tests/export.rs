@@ -23,6 +23,8 @@ struct PlanTestOptions {
     allow_ephemeral: bool,
     #[serde(default)]
     private_registries: Vec<String>,
+    #[serde(default)]
+    build_flavor: Option<String>,
 }
 
 fn cases() -> Vec<PathBuf> {
@@ -42,6 +44,7 @@ fn corpus_exports_match_golden_files() {
             project: Options { project_dir: dir.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine: false },
             allow_ephemeral: topts.allow_ephemeral,
             private_registries: Some(topts.private_registries.clone()),
+            build_flavor: topts.build_flavor.clone(),
         };
         let mut diags = Diagnostics::default();
         let Some(plan) = run(&opts, &fixture, &mut diags) else { continue };

@@ -1,0 +1,33 @@
+name: build-flavor
+services:
+  big:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    networks:
+      default: null
+    x-clever:
+      build_flavor: XL
+  inline:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    networks:
+      default: null
+    x-clever:
+      build_flavor: disabled
+  plain:
+    command:
+      - sh
+      - -c
+      - while true; do sleep 30; done
+    image: busybox:1.36
+    networks:
+      default: null
+networks:
+  default:
+    name: build-flavor_default

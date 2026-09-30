@@ -16,6 +16,8 @@ pub struct Options<'a> {
     pub dry_run: bool,
     /// Ne pas attendre la fin des déploiements.
     pub no_wait: bool,
+    /// Déploiements menés en même temps (au moins 1).
+    pub parallel: usize,
     /// Pousser les assets dans Cellar même si le compose ne le demande pas.
     pub assets: bool,
     /// La substitution par des addons est facturée : elle se confirme.
@@ -176,11 +178,12 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
             Some((x, tags)) => {
                 log(&format!("application {} : existe ({})", app.name, x.id));
                 let i = &x.instance;
-                if i.min_flavor.name != app.scaling.min_flavor || i.max_flavor.name != app.scaling.max_flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances {
+                if i.min_flavor.name != app.scaling.min_flavor || i.max_flavor.name != app.scaling.max_flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances || x.dedicated_build() != app.scaling.build_flavor.as_deref() {
                     if opts.dry_run {
-                        log(&format!("  scaling à mettre à jour : {}..{} x{}..{}", app.scaling.min_flavor, app.scaling.max_flavor, app.scaling.min_instances, app.scaling.max_instances));
+                        log(&format!("  scaling à mettre à jour : {}..{} x{}..{}{}", app.scaling.min_flavor, app.scaling.max_flavor, app.scaling.min_instances, app.scaling.max_instances, build_label(&app.scaling)));
                     } else {
                         platform.update_scaling(&x.id, &app.scaling).await?;
+                        check_build(&app.name, &app.scaling, &platform.get_app(&x.id).await?)?;
                         log("  scaling mis à jour");
                     }
                 }
@@ -204,6 +207,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                         description: format!("clever-compose : service `{}` du projet `{}`", app.service, plan.project),
                     })
                     .await?;
+                check_build(&app.name, &app.scaling, &created)?;
                 platform.set_tags(&created.id, &app.tags).await?;
                 log(&format!("application {} : créée ({})", app.name, created.id));
                 state.app_ids.insert(app.service.clone(), created.id);
@@ -349,72 +353,215 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         }
     }
 
-    // 6. Dépôts synthétiques et déploiements, dans l'ordre topologique du
-    // plan, en attendant chaque succès (depends_on).
+    // 6. Dépôts synthétiques et déploiements : chacun part dès que les
+    // applications dont il dépend (depends_on) sont déployées, au plus
+    // `opts.parallel` à la fois. Une tâche locale s'exécute seule (sortie
+    // du client sur le terminal, commande bloquante).
     let creds = platform.git_credentials();
-    for app in &all_apps {
-        if app.run == RunWhere::Local {
-            if opts.dry_run {
-                log(&format!("tâche {} : à exécuter depuis ce poste", app.name));
-            } else {
-                super::local::run_task(app, &state, platform, opts.project_dir, log).await?;
+    let index: BTreeMap<&str, usize> = all_apps.iter().enumerate().map(|(i, a)| (a.service.as_str(), i)).collect();
+    let deps: Vec<Vec<usize>> = all_apps.iter().map(|a| a.depends_on.iter().filter_map(|d| d.0.strip_prefix("app/").and_then(|s| index.get(s).copied())).collect()).collect();
+    let exclusive: Vec<bool> = all_apps.iter().map(|a| a.run == RunWhere::Local).collect();
+    let shared = Journal::new(log);
+    let (journal, st, creds, needs_restart, needs_restart_for_link) = (&shared, &state, &creds, &needs_restart, &needs_restart_for_link);
+    let names: Vec<&str> = all_apps.iter().map(|a| a.name.as_str()).collect();
+    let deployed = schedule(
+        &deps,
+        &exclusive,
+        opts.parallel,
+        |i| {
+            let app = all_apps[i];
+            let restart = needs_restart.get(&app.service).copied().unwrap_or(false) || needs_restart_for_link.contains(&app.service);
+            deploy(plan, app, st, platform, opts, creds, restart, journal)
+        },
+        |running| {
+            if let Some(oldest) = running.iter().map(|(_, t)| *t).min() {
+                let list: Vec<&str> = running.iter().map(|(i, _)| names[*i]).collect();
+                journal.say(&format!("{}déploiement en cours : {} ({}s)", crate::ui::PROGRESS, list.join(", "), oldest.elapsed().as_secs()));
             }
-            continue;
-        }
-        let app_id = &state.app_ids[&app.service];
-        let info = platform.get_app(app_id).await?;
-        // Lecture du contexte, dépôt synthétique et push (libgit2, réseau
-        // synchrone) hors du runtime : un serveur reste réactif pendant
-        // un `up`. Répertoire de travail propre à cet appel : deux `up` du
-        // même projet (deux clients, deux organisations) ne se marchent
-        // pas dessus.
-        let (project_dir, label, url, creds2) = (opts.project_dir.to_path_buf(), format!("{}-{}", plan.project, app.service), info.deployment.http_url.clone(), creds.clone());
-        let app2 = (*app).clone();
-        let (local, pushed) = tokio::task::spawn_blocking(move || -> Result<(git2::Oid, bool), String> {
-            let files = repo_files(&app2, &project_dir)?;
-            let work = unique_work_dir(&label)?;
-            let result = (|| {
-                let local = git::build(&work, &files)?;
-                let remote = git::remote_head(&work, &url, &creds2)?;
-                if remote == Some(local) {
-                    return Ok((local, false));
-                }
-                git::push(&work, &url, &creds2)?;
-                Ok((local, true))
-            })();
-            let _ = std::fs::remove_dir_all(&work);
-            result
-        })
-        .await
-        .map_err(|e| format!("application {} : {e}", app.name))??;
-        if pushed {
-            log(&format!("application {} : dépôt poussé ({})", app.name, &local.to_string()[..12]));
-        } else {
-            log(&format!("application {} : dépôt inchangé ({}), push sauté", app.name, &local.to_string()[..12]));
-        }
-        let restart = needs_restart.get(&app.service).copied().unwrap_or(false) || needs_restart_for_link.contains(&app.service);
-        let last = platform.last_deployment(app_id).await?;
-        let never_deployed = info.state == "SHOULD_BE_DOWN" && last.is_none();
-        // Un dernier déploiement en échec se retente : la cause est souvent
-        // externe (addon pas encore joignable) et rien dans le dépôt n'a changé.
-        let failed = last.as_ref().is_some_and(|d| matches!(d.state.as_str(), "FAIL" | "CANCELLED"));
-        // Un service arrêté (`stop`) repart : `up` veut le compose en marche.
-        // Une tâche, elle, a fini : elle ne se relance que si quelque chose change.
-        let stopped = app.kind != AppKind::Task && info.state == "SHOULD_BE_DOWN" && last.is_some() && !failed;
-        if !pushed && (restart || never_deployed || failed || stopped) {
-            platform.redeploy(app_id).await?;
-            log(&format!("application {} : redéploiement demandé{}", app.name, if failed { " (dernier déploiement en échec)" } else if stopped { " (arrêtée)" } else { "" }));
-        }
-        if (pushed || restart || never_deployed || failed || stopped) && !opts.no_wait {
-            wait_deployment(platform, app_id, &app.name, log).await?;
-        }
-    }
+        },
+    )
+    .await;
+    let log = shared.into_inner();
+    deployed?;
     // Assets : les fichiers du projet et le plan dans le bucket Cellar du
     // projet, pour une relecture depuis la plateforme.
     if plan.assets || opts.assets {
         super::assets::sync(&platform.owner_id(), plan, opts.project_dir, opts, log).await?;
     }
     Ok(state)
+}
+
+/// Dépôt synthétique poussé si besoin, puis déploiement (ou exécution
+/// locale d'une tâche) attendu jusqu'au succès sauf `no_wait`.
+#[allow(clippy::too_many_arguments)] // tout le contexte de l'étape 6
+async fn deploy<P: Platform>(plan: &Plan, app: &App, state: &State, platform: &P, opts: &Options<'_>, creds: &(String, String), restart: bool, journal: &Journal<'_>) -> Result<(), String> {
+    if app.run == RunWhere::Local {
+        return super::local::run_task(app, state, platform, opts.project_dir, &|m| journal.say(m)).await;
+    }
+    let app_id = &state.app_ids[&app.service];
+    let info = platform.get_app(app_id).await?;
+    // Lecture du contexte, dépôt synthétique et push (libgit2, réseau
+    // synchrone) hors du runtime : un serveur reste réactif pendant
+    // un `up`, et les autres déploiements avancent. Répertoire de travail
+    // propre à cet appel : deux `up` du même projet (deux clients, deux
+    // organisations) ne se marchent pas dessus.
+    let (project_dir, label, url, creds2) = (opts.project_dir.to_path_buf(), format!("{}-{}", plan.project, app.service), info.deployment.http_url.clone(), creds.clone());
+    let app2 = app.clone();
+    let (local, pushed) = tokio::task::spawn_blocking(move || -> Result<(git2::Oid, bool), String> {
+        let files = repo_files(&app2, &project_dir)?;
+        let work = unique_work_dir(&label)?;
+        let result = (|| {
+            let local = git::build(&work, &files)?;
+            let remote = git::remote_head(&work, &url, &creds2)?;
+            if remote == Some(local) {
+                return Ok((local, false));
+            }
+            git::push(&work, &url, &creds2)?;
+            Ok((local, true))
+        })();
+        let _ = std::fs::remove_dir_all(&work);
+        result
+    })
+    .await
+    .map_err(|e| format!("application {} : {e}", app.name))??;
+    if pushed {
+        journal.say(&format!("application {} : dépôt poussé ({})", app.name, &local.to_string()[..12]));
+    } else {
+        journal.say(&format!("application {} : dépôt inchangé ({}), push sauté", app.name, &local.to_string()[..12]));
+    }
+    let last = platform.last_deployment(app_id).await?;
+    let never_deployed = info.state == "SHOULD_BE_DOWN" && last.is_none();
+    // Un dernier déploiement en échec se retente : la cause est souvent
+    // externe (addon pas encore joignable) et rien dans le dépôt n'a changé.
+    let failed = last.as_ref().is_some_and(|d| matches!(d.state.as_str(), "FAIL" | "CANCELLED"));
+    // Un service arrêté (`stop`) repart : `up` veut le compose en marche.
+    // Une tâche, elle, a fini : elle ne se relance que si quelque chose change.
+    let stopped = app.kind != AppKind::Task && info.state == "SHOULD_BE_DOWN" && last.is_some() && !failed;
+    if !pushed && (restart || never_deployed || failed || stopped) {
+        platform.redeploy(app_id).await?;
+        journal.say(&format!("application {} : redéploiement demandé{}", app.name, if failed { " (dernier déploiement en échec)" } else if stopped { " (arrêtée)" } else { "" }));
+    }
+    if (pushed || restart || never_deployed || failed || stopped) && !opts.no_wait {
+        wait_deployment(platform, app_id, &app.name, journal, false).await?;
+    }
+    Ok(())
+}
+
+/// Déploiements menés en même temps par défaut (`up --parallel`).
+pub const DEFAULT_PARALLEL: usize = 4;
+
+/// Journal partagé par des déploiements concurrents. Ils sont menés par la
+/// même tâche et le verrou n'est jamais tenu pendant un `await`.
+pub struct Journal<'a>(std::sync::Mutex<&'a mut Log>);
+
+impl<'a> Journal<'a> {
+    pub fn new(log: &'a mut Log) -> Self {
+        Journal(std::sync::Mutex::new(log))
+    }
+
+    pub fn say(&self, line: &str) {
+        (self.0.lock().unwrap_or_else(|e| e.into_inner()))(line)
+    }
+
+    pub fn into_inner(self) -> &'a mut Log {
+        self.0.into_inner().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// Lance `start(i)` pour chaque élément dès que ses dépendances (`deps[i]`,
+/// des indices) ont réussi, au plus `parallel` à la fois, dans l'ordre des
+/// indices à disponibilité égale. Un élément `exclusive` attend que rien ne
+/// tourne, et rien ne part tant qu'il tourne. Après un échec, plus rien ne
+/// part : ceux en cours vont au bout, puis les erreurs sont rendues
+/// ensemble. `tick` reçoit toutes les 2 s les éléments en cours et leur
+/// départ.
+pub async fn schedule<'f, F, Fut>(deps: &[Vec<usize>], exclusive: &[bool], parallel: usize, start: F, mut tick: impl FnMut(&[(usize, std::time::Instant)])) -> Result<(), String>
+where
+    F: Fn(usize) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>> + 'f,
+{
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+    #[derive(Clone, Copy, PartialEq)]
+    enum St {
+        Pending,
+        Running,
+        Done,
+        Failed,
+    }
+    let n = deps.len();
+    let mut st = vec![St::Pending; n];
+    let mut running = FuturesUnordered::new();
+    let mut since: Vec<(usize, std::time::Instant)> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+    let mut alone = false;
+    let period = Duration::from_secs(2);
+    let mut ticker = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        if errors.is_empty() && !alone {
+            for i in 0..n {
+                if running.len() >= parallel.max(1) {
+                    break;
+                }
+                if st[i] != St::Pending || !deps[i].iter().all(|d| st[*d] == St::Done) {
+                    continue;
+                }
+                if exclusive[i] && !running.is_empty() {
+                    break;
+                }
+                st[i] = St::Running;
+                since.push((i, std::time::Instant::now()));
+                let fut = start(i);
+                running.push(async move { (i, fut.await) });
+                if exclusive[i] {
+                    alone = true;
+                    break;
+                }
+            }
+        }
+        if running.is_empty() {
+            break;
+        }
+        tokio::select! {
+            Some((i, r)) = running.next() => {
+                since.retain(|(j, _)| *j != i);
+                alone = false;
+                match r {
+                    Ok(()) => st[i] = St::Done,
+                    Err(e) => {
+                        st[i] = St::Failed;
+                        errors.push(e);
+                    }
+                }
+            }
+            _ = ticker.tick() => tick(&since),
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+    // Sans erreur tout est parti : les dépendances pointent vers l'amont
+    // (ordre topologique du plan). Une dépendance cyclique resterait ici.
+    match st.iter().position(|s| *s == St::Pending) {
+        Some(i) => Err(format!("dépendances circulaires : l'élément {i} ne peut pas partir")),
+        None => Ok(()),
+    }
+}
+
+/// ` build X` quand une instance de build dédiée est demandée.
+fn build_label(s: &Scaling) -> String {
+    s.build_flavor.as_ref().map(|f| format!(", build {f}")).unwrap_or_default()
+}
+
+/// L'API ignore sans erreur une flavor de build qu'elle ne connaît pas :
+/// ce qui est servi est relu, jamais supposé (pas de rabattement silencieux).
+fn check_build(name: &str, scaling: &Scaling, info: &super::platform::AppInfo) -> Result<(), String> {
+    let served = info.dedicated_build();
+    if served == scaling.build_flavor.as_deref() {
+        return Ok(());
+    }
+    let show = |f: Option<&str>| f.map(|f| format!("instance de build {f}")).unwrap_or_else(|| "sans instance de build dédiée".into());
+    Err(format!("application {name} : {} demandée, la plateforme sert {} ; choisissez une autre flavor dans `x-clever.build_flavor` ou `--build-flavor`, ou `disabled`", show(scaling.build_flavor.as_deref()), show(served)))
 }
 
 /// Un répertoire de travail neuf sous `temp_dir()`, jamais partagé :
@@ -467,7 +614,8 @@ pub fn repo_files(app: &App, project_dir: &FsPath) -> Result<Vec<sources::File>,
 
 /// `.dockerignore` du contexte : motifs glob (`*`, `**`, `?`), `!` pour
 /// réinclure, `#` commentaires ; la dernière règle qui correspond gagne.
-/// Toujours ignoré : `.git`.
+/// Toujours ignoré : tout répertoire `.git`, à la racine comme dans un
+/// dépôt imbriqué (git refuse cette composante dans un index).
 pub struct DockerIgnore {
     rules: Vec<(globset::GlobMatcher, bool)>,
 }
@@ -496,7 +644,7 @@ impl DockerIgnore {
     }
 
     pub fn ignored(&self, rel: &str) -> bool {
-        if rel == ".git" || rel.starts_with(".git/") {
+        if rel.split('/').any(|c| c.eq_ignore_ascii_case(".git")) {
             return true;
         }
         let mut ignored = false;
@@ -574,14 +722,18 @@ pub fn resolve(t: &Template, plan: &Plan, app: &App, state: &State, project_dir:
     Ok(out)
 }
 
-async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, log: &mut Log) -> Result<(), String> {
+/// Attend l'issue du dernier déploiement ; `progress` : une ligne de
+/// progression propre (sinon l'appelant en tient une commune).
+async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, journal: &Journal<'_>, progress: bool) -> Result<(), String> {
     let started = std::time::Instant::now();
     let mut last_seen: Option<u64> = None;
     loop {
         if started.elapsed() > Duration::from_secs(30 * 60) {
             return Err(format!("application {name} : déploiement trop long (30 min)"));
         }
-        log(&format!("{}application {name} : attente du déploiement ({}s)", crate::ui::PROGRESS, started.elapsed().as_secs()));
+        if progress {
+            journal.say(&format!("{}application {name} : attente du déploiement ({}s)", crate::ui::PROGRESS, started.elapsed().as_secs()));
+        }
         tokio::time::sleep(Duration::from_secs(2)).await;
         let Some(d) = platform.last_deployment(app_id).await? else { continue };
         if last_seen != Some(d.id) {
@@ -589,7 +741,7 @@ async fn wait_deployment<P: Platform>(platform: &P, app_id: &str, name: &str, lo
         }
         match d.state.as_str() {
             "OK" => {
-                log(&format!("application {name} : déployée"));
+                journal.say(&format!("application {name} : déployée"));
                 return Ok(());
             }
             "FAIL" | "CANCELLED" => return Err(format!("application {name} : déploiement {} ({})", d.state, d.uuid)),
@@ -633,7 +785,7 @@ pub async fn stop_start<P: Platform>(project: &str, platform: &P, start: bool, l
     if start && touched > 0 {
         for a in &inv.apps {
             if a.tagged && a.info.instance.lifetime != "TASK" && a.info.state != "SHOULD_BE_UP" {
-                wait_deployment(platform, &a.info.id, &a.info.name, log).await?;
+                wait_deployment(platform, &a.info.id, &a.info.name, &Journal::new(log), true).await?;
             }
         }
     }
@@ -758,6 +910,20 @@ mod env_tests {
 }
 
 #[cfg(test)]
+mod dockerignore_tests {
+    #[test]
+    fn nested_git_directories_are_ignored() {
+        let ignore = super::DockerIgnore { rules: Vec::new() };
+        assert!(ignore.ignored(".git"));
+        assert!(ignore.ignored(".git/HEAD"));
+        assert!(ignore.ignored("sandbox/.git"));
+        assert!(ignore.ignored("sandbox/.git/COMMIT_EDITMSG"));
+        assert!(!ignore.ignored(".gitignore"));
+        assert!(!ignore.ignored("sandbox/.github/workflow.yml"));
+    }
+}
+
+#[cfg(test)]
 mod tag_tests {
     #[test]
     fn user_tags_survive_and_stale_compose_tags_go() {
@@ -765,5 +931,88 @@ mod tag_tests {
         let planned = vec!["compose-project=p".to_string(), "compose-service=web".to_string(), "compose-spec=new".to_string()];
         let merged = super::merge_tags(&current, &planned);
         assert_eq!(merged, vec!["compose-project=p", "compose-service=web", "compose-spec=new", "prod", "team=infra"]);
+    }
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    /// Ordonnanceur de l'étape 6 sur des faux déploiements : journal des
+    /// départs et arrivées, concurrence maximale observée.
+    async fn run_schedule(deps: &[Vec<usize>], exclusive: &[bool], parallel: usize, fail: Option<usize>) -> (Result<(), String>, Vec<String>, usize) {
+        use std::sync::Mutex;
+        let events = Mutex::new(Vec::new());
+        let (now, max) = (Mutex::new(0usize), Mutex::new(0usize));
+        let result = super::schedule(
+            deps,
+            exclusive,
+            parallel,
+            |i| {
+                let (events, now, max) = (&events, &now, &max);
+                async move {
+                    events.lock().unwrap().push(format!("+{i}"));
+                    {
+                        let mut n = now.lock().unwrap();
+                        *n += 1;
+                        let mut m = max.lock().unwrap();
+                        *m = (*m).max(*n);
+                    }
+                    // Durées distinctes : 0 finit après 1 et 2.
+                    tokio::time::sleep(std::time::Duration::from_millis(if i == 0 { 60 } else { 20 })).await;
+                    *now.lock().unwrap() -= 1;
+                    events.lock().unwrap().push(format!("-{i}"));
+                    if fail == Some(i) {
+                        Err(format!("échec {i}"))
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+            |_| {},
+        )
+        .await;
+        (result, events.into_inner().unwrap(), max.into_inner().unwrap())
+    }
+
+    #[tokio::test]
+    async fn independent_deployments_run_together_within_the_limit() {
+        let (r, ev, max) = run_schedule(&[vec![], vec![], vec![], vec![]], &[false; 4], 2, None).await;
+        assert!(r.is_ok());
+        assert_eq!(max, 2);
+        assert_eq!(&ev[..2], ["+0", "+1"]);
+        assert_eq!(ev.len(), 8);
+    }
+
+    #[tokio::test]
+    async fn a_deployment_waits_for_its_dependencies_only() {
+        // 2 dépend de 1 (court), pas de 0 (long) : il part avant la fin de 0.
+        let (r, ev, _) = run_schedule(&[vec![], vec![], vec![1], vec![0, 2]], &[false; 4], 4, None).await;
+        assert!(r.is_ok());
+        let at = |e: &str| ev.iter().position(|x| x == e).unwrap();
+        assert!(at("+2") > at("-1") && at("+2") < at("-0"), "{ev:?}");
+        assert!(at("+3") > at("-0") && at("+3") > at("-2"), "{ev:?}");
+    }
+
+    #[tokio::test]
+    async fn parallel_one_is_sequential() {
+        let (r, ev, max) = run_schedule(&[vec![], vec![], vec![1]], &[false; 3], 1, None).await;
+        assert!(r.is_ok());
+        assert_eq!(max, 1);
+        assert_eq!(ev, ["+0", "-0", "+1", "-1", "+2", "-2"]);
+    }
+
+    #[tokio::test]
+    async fn a_failure_lets_running_ones_finish_and_starts_nothing_more() {
+        // 1 échoue pendant que 0 tourne : 0 va au bout, 2 (dépendant de 0) et
+        // 3 (libre) ne partent pas.
+        let (r, ev, _) = run_schedule(&[vec![], vec![], vec![0], vec![]], &[false; 4], 2, Some(1)).await;
+        assert_eq!(r.unwrap_err(), "échec 1");
+        assert_eq!(ev, ["+0", "+1", "-1", "-0"]);
+    }
+
+    #[tokio::test]
+    async fn an_exclusive_task_runs_alone() {
+        let (r, ev, _) = run_schedule(&[vec![], vec![], vec![]], &[false, true, false], 4, None).await;
+        assert!(r.is_ok());
+        assert_eq!(ev, ["+0", "-0", "+1", "-1", "+2", "-2"]);
     }
 }

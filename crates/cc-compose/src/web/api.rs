@@ -720,7 +720,7 @@ fn compute(s: &State, dir: &Path, confine: bool, allow_ephemeral: bool) -> Resul
     let resolver = s.registry(confine)?;
     let opts = crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine };
     let project_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
-    let popts = crate::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None };
+    let popts = crate::plan::cli::PlanOptions { project: opts, allow_ephemeral, private_registries: None, build_flavor: None };
     let mut diags = Diagnostics::default();
     let plan = crate::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
     let items: Vec<J> = diags
@@ -761,6 +761,9 @@ struct UpBody {
     allow_ephemeral: bool,
     #[serde(default)]
     assets: bool,
+    /// Déploiements menés en même temps (`--parallel`).
+    #[serde(default)]
+    parallel: Option<usize>,
 }
 
 async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org: Client, body: Option<Json<UpBody>>) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
@@ -780,7 +783,7 @@ async fn local_up(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, org
                 return Err(format!("{} : {LOCAL_EXECUTION_REFUSED}", local.join(", ")));
             }
         }
-        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, confirm_addons: b.yes, assets: b.assets };
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: b.dry_run, no_wait: b.no_wait, parallel: b.parallel.unwrap_or(crate::exec::reconcile::DEFAULT_PARALLEL).max(1), confirm_addons: b.yes, assets: b.assets };
         crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
@@ -819,7 +822,7 @@ async fn local_seed(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, o
         })
         .await
         .map_err(|e| e.to_string())??;
-        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, confirm_addons: b.yes, assets: false };
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: b.no_wait, parallel: crate::exec::reconcile::DEFAULT_PARALLEL, confirm_addons: b.yes, assets: false };
         crate::exec::reconcile::up(&plan, &api_of(&state, &org).await.map_err(|e| e.1)?, &opts, &mut log).await.map(|_| ())
     }))
 }
@@ -963,7 +966,7 @@ async fn local_assets_sync(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<Str
         let st = state.clone();
         let (plan, diags, project_dir) = tokio::task::spawn_blocking(move || compute(&st, &dir, confine, false)).await.map_err(|e| e.to_string())??;
         let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or("plan refusé : corrigez les erreurs")?;
-        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, confirm_addons: false, assets: true };
+        let opts = crate::exec::reconcile::Options { project_dir: &project_dir, dry_run: false, no_wait: true, parallel: crate::exec::reconcile::DEFAULT_PARALLEL, confirm_addons: false, assets: true };
         crate::exec::assets::sync(api.owner(), &plan, &project_dir, &opts, &mut log).await
     }))
 }

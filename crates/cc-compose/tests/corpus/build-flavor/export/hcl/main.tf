@@ -1,0 +1,84 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.2" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "build-flavor-default"
+  tags = ["compose-project=build-flavor", "compose-network=default", "compose-spec=98fcf00120eb071014f6e68a4581acd7"]
+}
+
+resource "clevercloud_docker" "plain" {
+  name               = "build-flavor-plain"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  build_flavor       = "M"
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "plain.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/plain"
+  }
+}
+
+resource "clevercloud_docker" "big" {
+  name               = "build-flavor-big"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  build_flavor       = "XL"
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "big.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/big"
+  }
+}
+
+resource "clevercloud_docker" "inline" {
+  name               = "build-flavor-inline"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "inline.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/inline"
+  }
+}

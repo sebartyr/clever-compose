@@ -21,6 +21,10 @@ pub struct XClever {
     pub max_flavor: Option<String>,
     pub min_instances: Option<u32>,
     pub max_instances: Option<u32>,
+    /// Instance de build dédiée de cette flavor, ou `disabled` pour s'en
+    /// passer malgré `--build-flavor` ; absente, le build se fait sur
+    /// l'instance d'exécution.
+    pub build_flavor: Option<String>,
     /// Service one-shot à déployer en Clever Task.
     pub task: Option<bool>,
     /// Port HTTP réel de l'image, relayé depuis 8080.

@@ -7,6 +7,7 @@ use std::process::ExitCode;
 
 use cc_compose::{compose, diagnostic};
 use cc_compose_model::plan::*;
+use clap::builder::TypedValueParser as _;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -46,6 +47,9 @@ struct PlanArgs {
     /// Accepte les volumes nommés et les répertoires montés des services non substituables comme stockage éphémère
     #[arg(long)]
     allow_ephemeral: bool,
+    /// Instance de build dédiée de cette flavor pour les services qui n'en déclarent pas (`x-clever.build_flavor`, `disabled` pour s'en passer) ; sans elle, le build se fait sur l'instance d'exécution
+    #[arg(long, value_name = "FLAVOR")]
+    build_flavor: Option<String>,
     /// Fixture d'images (sortie de `images`) au lieu des registres
     #[arg(long, value_name = "FIXTURE.json", hide = true)]
     images: Option<PathBuf>,
@@ -90,6 +94,9 @@ enum Command {
         /// N'attend pas la fin des déploiements
         #[arg(long, help_heading = "Exécution")]
         no_wait: bool,
+        /// Déploiements menés en même temps, chacun dès que ses dépendances sont déployées (1 : l'un après l'autre)
+        #[arg(long, value_name = "N", default_value_t = cc_compose::exec::reconcile::DEFAULT_PARALLEL, value_parser = clap::value_parser!(u16).range(1..).map(usize::from), help_heading = "Exécution")]
+        parallel: usize,
         /// Conserve les fichiers du projet et le plan dans un bucket Cellar de l'organisation (relecture depuis la plateforme) ; `x-clever.assets: true` fait pareil
         #[arg(long, help_heading = "Exécution")]
         assets: bool,
@@ -270,8 +277,8 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Plan { plan, json } => cmd_plan(opts, &plan, json),
         Command::Config { format } => cmd_config(opts, format),
-        Command::Up { org, plan, dry_run, yes, no_wait, assets } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, assets, None),
-        Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, false, Some((service, file, local))),
+        Command::Up { org, plan, dry_run, yes, no_wait, parallel, assets } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, parallel, assets, None),
+        Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, cc_compose::exec::reconcile::DEFAULT_PARALLEL, false, Some((service, file, local))),
         Command::Down { org, all, dry_run, yes } => cmd_down(opts, &org.org, all, dry_run, yes),
         Command::Ps { org } => cmd_ps(opts, &org.org),
         Command::Stop { org } => cmd_stop_start(opts, &org.org, false),
@@ -388,7 +395,7 @@ fn compute_plan(opts: compose::project::Options, args: &PlanArgs) -> Result<Comp
     let resolver = resolver(&args.images)?;
     let mut diags = diagnostic::Diagnostics::default();
     let project_dir = std::fs::canonicalize(&opts.project_dir).unwrap_or_else(|_| opts.project_dir.clone());
-    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral: args.allow_ephemeral, private_registries: None };
+    let popts = cc_compose::plan::cli::PlanOptions { project: opts, allow_ephemeral: args.allow_ephemeral, private_registries: None, build_flavor: args.build_flavor.clone() };
     let plan = cc_compose::plan::cli::run(&popts, resolver.as_ref(), &mut diags);
     Ok(Computed { plan, project_dir, resolver, diags })
 }
@@ -463,8 +470,8 @@ fn api(org: &str) -> Result<cc_compose::exec::platform::Api, String> {
     Ok(cc_compose::exec::platform::Api::new(org.to_string(), creds))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: bool, yes: bool, no_wait: bool, assets: bool, seed: Option<(String, PathBuf, bool)>) -> ExitCode {
+#[allow(clippy::too_many_arguments)] // les options de `up` et de `seed`, passées telles quelles
+fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: bool, yes: bool, no_wait: bool, parallel: usize, assets: bool, seed: Option<(String, PathBuf, bool)>) -> ExitCode {
     let api = match api(org) {
         Ok(a) => a,
         Err(e) => return fail(&e),
@@ -493,7 +500,7 @@ fn cmd_up(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: 
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let ui2 = ui.clone();
     let mut log: cc_compose::exec::reconcile::Log = Box::new(move |line: &str| ui2.lock().unwrap().log(line));
-    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, confirm_addons: yes, assets }, &mut log));
+    let result = rt.block_on(cc_compose::exec::reconcile::up(&plan, &api, &cc_compose::exec::reconcile::Options { project_dir: &project_dir, dry_run, no_wait, parallel, confirm_addons: yes, assets }, &mut log));
     drop(log);
     let mut ui = ui.lock().unwrap();
     match result {

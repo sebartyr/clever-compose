@@ -77,7 +77,7 @@ fn rank(f: &str) -> usize {
 /// `x-clever.flavor` (ou `min_flavor`/`max_flavor` pour le vertical), sinon
 /// de `deploy.resources` (mémoire et vCPU) ; les instances de
 /// `x-clever.min_instances`/`max_instances`, sinon de `deploy.replicas`.
-pub fn scaling(s: &Service, x: &XClever, px: &XClever, p: &Path, diags: &mut Diagnostics) -> Scaling {
+pub fn scaling(s: &Service, x: &XClever, px: &XClever, default_build: Option<&str>, p: &Path, diags: &mut Diagnostics) -> Scaling {
     let d = docker();
     let xp = p.child("x-clever");
     let (mem, cpus) = requested(s, p, diags);
@@ -143,5 +143,31 @@ pub fn scaling(s: &Service, x: &XClever, px: &XClever, p: &Path, diags: &mut Dia
     if max > d.max_instances {
         diags.push(Diagnostic::error("instances-too-many", format!("{max} instances demandées, maximum {}", d.max_instances)).with_path(p));
     }
-    Scaling { min_flavor, max_flavor, min_instances: min, max_instances: max }
+    let build_flavor = build_flavor(x, px, default_build, &xp, diags);
+    Scaling { min_flavor, max_flavor, min_instances: min, max_instances: max, build_flavor }
+}
+
+/// Instance de build dédiée : `x-clever.build_flavor` du service, sinon du
+/// projet, sinon `--build-flavor` ; `disabled` l'écarte explicitement.
+/// Aucune par défaut (le build se fait alors sur l'instance d'exécution).
+fn build_flavor(x: &XClever, px: &XClever, default_build: Option<&str>, xp: &Path, diags: &mut Diagnostics) -> Option<String> {
+    let (value, path) = match (&x.build_flavor, &px.build_flavor) {
+        (Some(v), _) => (v.clone(), Some(xp.child("build_flavor"))),
+        (None, Some(v)) => (v.clone(), Some(Path::root().child("x-clever").child("build_flavor"))),
+        (None, None) => (default_build?.to_string(), None),
+    };
+    if value == "disabled" {
+        return None;
+    }
+    let d = docker();
+    if d.flavors.iter().any(|f| f.name == value) {
+        return Some(value);
+    }
+    let msg = format!("flavor de build `{value}` inconnue ; disponibles : {}, ou `disabled`", d.flavors.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(", "));
+    let diag = Diagnostic::error("flavor-unknown", msg);
+    diags.push(match path {
+        Some(p) => diag.with_path(&p),
+        None => diag,
+    });
+    None
 }

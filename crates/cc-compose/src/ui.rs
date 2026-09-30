@@ -186,7 +186,8 @@ impl Ui {
                             _ => None,
                         })
                         .collect();
-                    let mut detail = format!("{image}, {scale}");
+                    let build = a.scaling.build_flavor.as_ref().map(|f| format!(", build {f}")).unwrap_or_default();
+                    let mut detail = format!("{image}, {scale}{build}");
                     if !extras.is_empty() {
                         detail.push_str(&format!(", {}", extras.join(", ")));
                     }

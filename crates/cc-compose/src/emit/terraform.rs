@@ -67,6 +67,10 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> J {
                 res.insert("biggest_flavor".into(), json!(app.scaling.max_flavor));
                 res.insert("min_instance_count".into(), json!(app.scaling.min_instances));
                 res.insert("max_instance_count".into(), json!(app.scaling.max_instances));
+                if let Some(f) = &app.scaling.build_flavor {
+                    check_attrs(&schema, "clevercloud_docker", &["build_flavor"], diags);
+                    res.insert("build_flavor".into(), json!(f));
+                }
                 if let Source::Context { .. } = &app.source {
                     res.insert("dockerfile".into(), json!(crate::plan::sources::CONTEXT_DOCKERFILE));
                 }

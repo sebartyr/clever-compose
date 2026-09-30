@@ -1,0 +1,3 @@
+compose.yaml:6:5: avertissement [worker] services.big: `big` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:11:5: avertissement [worker] services.inline: `inline` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080
+compose.yaml:3:5: avertissement [worker] services.plain: `plain` n'expose aucun port : traité comme un worker, le shim répondra au contrôle de santé sur 8080

@@ -45,6 +45,9 @@ pub struct Context<'a> {
     /// machine qui calcule le plan ne doit y entrer (variables
     /// d'environnement du serveur, identifiants Docker du serveur).
     pub confined: bool,
+    /// `--build-flavor` : instance de build dédiée des services qui n'en
+    /// déclarent pas dans `x-clever`.
+    pub build_flavor: Option<&'a str>,
 }
 
 impl Context<'_> {
@@ -800,7 +803,7 @@ fn plan_service(
     }
     env.sort_by(|a, b| a.key.cmp(&b.key));
 
-    let scaling = flavors::scaling(s, x, px, p, diags);
+    let scaling = flavors::scaling(s, x, px, ctx.build_flavor, p, diags);
     let region = x.region.clone().or_else(|| px.region.clone()).unwrap_or_else(|| "par".into());
 
     let mut depends_on: Vec<ResourceId> = Vec::new();

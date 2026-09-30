@@ -246,7 +246,11 @@ s'exécute sur la plateforme ou depuis le poste.
 ### Extension `x-clever`
 
 Niveau service : `region`, `flavor` (ou `min_flavor`/`max_flavor` :
-scaling vertical), `min_instances`/`max_instances` (horizontal), `task`,
+scaling vertical), `min_instances`/`max_instances` (horizontal),
+`build_flavor` (instance de build dédiée, aussi au niveau projet, sinon
+`--build-flavor` ; `disabled` pour s'en passer ; aucune par défaut ; le
+servi est relu après création ou mise à jour, l'API ignorant sans erreur
+une flavor inconnue), `task`,
 `http_port`, `protocol`, `domains`, `ephemeral`, `plan`, `version`,
 `tcp_namespace`, `engine` (`documentdb` | `mongodb`), `init` (`task` par
 défaut, `local`), `private` (vrai par défaut : addon membre du groupe ;
@@ -310,9 +314,12 @@ console survit (`reconcile::merge_env`, 18/09/2026). L'état se reconstruit depu
 Ordre du `up` : addons, groupes, apps sans déploiement, liaisons, variables
 (FQDN calculés), redirections, domaines, puis dépôts synthétiques (git2,
 commits déterministes, push sauté si l'arbre distant est identique) et
-déploiements dans l'ordre topologique, en attendant chaque succès. Une tâche
-`run: local` est exécutée depuis le poste à son tour (Docker si le démon
-répond, sinon le client du poste).
+déploiements **en parallèle** (30/09/2026) : chacun part dès que les
+applications de son `depends_on` sont déployées, au plus `--parallel N`
+(4 par défaut, `1` = séquentiel) ; après un échec plus rien ne part, ceux
+en cours vont au bout (`reconcile::schedule`). Une tâche `run: local` est
+exécutée depuis le poste à son tour, seule (Docker si le démon répond,
+sinon le client du poste).
 
 `down` supprime par nom et tag ; les addons seulement avec `--yes` ; les apps
 sans tag (créées par Terraform) sont laissées à `terraform destroy`.
@@ -372,7 +379,8 @@ usage (`down --yes`, `terraform destroy`).
 ```
 clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [--profile P] <commande>
   plan [--json] | config | images | export [all|terraform|script] -o DIR [--branches]
-  up [--dry-run] [--yes] [--no-wait] [--allow-ephemeral]
+  up [--dry-run] [--yes] [--no-wait] [--parallel N] [--allow-ephemeral]
+  (plan, up, export, seed) [--build-flavor FLAVOR|disabled]
   seed --service SVC --dump FICHIER [--local]
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
   orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]

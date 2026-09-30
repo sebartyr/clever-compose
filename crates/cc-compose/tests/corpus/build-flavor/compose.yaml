@@ -1,0 +1,14 @@
+services:
+  plain:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+  big:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    x-clever:
+      build_flavor: XL
+  inline:
+    image: busybox:1.36
+    command: sh -c "while true; do sleep 30; done"
+    x-clever:
+      build_flavor: disabled

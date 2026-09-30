@@ -93,6 +93,38 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 *Décidé :*
 
+- **Déploiements parallèles** (30/09/2026, demande du propriétaire) :
+  l'étape 6 du `up` n'attend plus chaque application avant la suivante.
+  Chacune part dès que les applications de son `depends_on` sont
+  déployées, au plus `--parallel N` à la fois (4 par défaut, choix du
+  propriétaire ; `1` redonne l'ordre séquentiel ; champ `parallel` du
+  corps de `POST /api/local/{id}/up`). Une tâche `run: local` s'exécute
+  seule (commande bloquante, sortie sur le terminal). Après un échec, plus
+  rien ne part, ceux en cours vont au bout, les erreurs sont rendues
+  ensemble. Une seule ligne de progression commune (`déploiement en
+  cours : a, b (42s)`). Ordonnanceur générique `reconcile::schedule`,
+  testé sans plateforme (`schedule_tests`).
+- **Instance de build dédiée** (30/09/2026, demande du propriétaire) :
+  `x-clever.build_flavor` (service, puis projet), sinon `--build-flavor`
+  (plan/up/export/seed) ; `disabled` l'écarte pour un service. Sans choix
+  explicite, pas de build dédié (comportement antérieur). Ajout additif au
+  plan : `Scaling.build_flavor`, absent du JSON quand il est vide (goldens
+  existants inchangés). Les tâches d'init générées n'en ont pas (build
+  trivial `FROM` + scripts). API : `separateBuild` + `buildFlavor` (nom) à
+  la création et au `PUT` de l'application, comme `clever scale
+  --build-flavor` ; vérifié dans cc-api : une flavor inconnue est ignorée
+  sans erreur (`ApplicationHelper`, `tmp.get(...)` nul), donc l'exécuteur
+  relit l'application et échoue si le servi diffère (pas de rabattement
+  silencieux). L'image Docker supporte le build séparé (`buildFlavor` du
+  variant : `S`, `/v2/products/instances` du 30/09/2026). Exports :
+  `build_flavor` de `clevercloud_docker` (schéma 2.2.0),
+  `clever scale --build-flavor`. Non vérifié en réel à ce jour.
+- **Dépôt git imbriqué dans un contexte de build** (30/09/2026, cas réel
+  `nodejs-sandbox-documentdb/.git`) : seul le `.git` racine était exclu,
+  libgit2 refusait l'index (`invalid path … class=Index`). Tout
+  répertoire `.git` du contexte est désormais écarté, à toute profondeur
+  (`DockerIgnore::ignored`, `dockerignore_tests`) ; git ne peut de toute
+  façon pas le porter.
 - **Bind de répertoire éphémère** (18/09/2026, cas réel Vikunja
   `./files:/app/vikunja/files`) : un montage de répertoire suit la même
   sortie qu'un volume nommé, `--allow-ephemeral` ou `x-clever.ephemeral:

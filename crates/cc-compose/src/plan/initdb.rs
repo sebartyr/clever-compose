@@ -292,7 +292,7 @@ pub fn task(project: &str, service: &str, rec: &Recognized, version: Option<&str
         name: format!("{project}-{name}"),
         kind: AppKind::Task,
         region: region.to_string(),
-        scaling: Scaling { min_flavor: super::flavors::docker().default_flavor.clone(), max_flavor: super::flavors::docker().default_flavor.clone(), min_instances: 1, max_instances: 1 },
+        scaling: Scaling { min_flavor: super::flavors::docker().default_flavor.clone(), max_flavor: super::flavors::docker().default_flavor.clone(), min_instances: 1, max_instances: 1, build_flavor: None },
         source: Source::Synthetic { image, private_registry: false, files, generated: vec![GeneratedFile { target: "/cc-init.sh".into(), content: script, executable: true }] },
         image: intrinsics,
         shim: ShimConfig { argv: vec!["sh".into(), "/cc-init.sh".into()], workdir: None, user: None, port: PlatformPort::Health { ready_port: None }, tcp: None, udp: None, secrets: Vec::new(), volumes: Vec::new() },

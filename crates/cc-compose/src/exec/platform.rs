@@ -23,6 +23,19 @@ pub struct AppInfo {
     #[serde(default)]
     pub state: String,
     pub instance: InstanceInfo,
+    /// Instance de build dédiée ; `buildFlavor` est renseignée même sans
+    /// (flavor de build par défaut de l'image), seule compte avec elle.
+    #[serde(rename = "separateBuild", default)]
+    pub separate_build: bool,
+    #[serde(rename = "buildFlavor", default)]
+    pub build_flavor: Option<Flavor>,
+}
+
+impl AppInfo {
+    /// La flavor de build dédiée effectivement posée, comme le plan l'écrit.
+    pub fn dedicated_build(&self) -> Option<&str> {
+        self.build_flavor.as_ref().filter(|_| self.separate_build).map(|f| f.name.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -274,6 +287,17 @@ pub trait Platform: Send + Sync {
     fn owner_id(&self) -> String;
 }
 
+/// Instance de build dédiée dans le corps d'une création ou d'une mise à
+/// jour d'application : `separateBuild` et `buildFlavor` (nom), comme
+/// `clever scale --build-flavor`. Une flavor inconnue de l'API est ignorée
+/// sans erreur (cc-api `ApplicationHelper`) : l'appelant relit l'application.
+fn set_build(body: &mut J, scaling: &Scaling) {
+    body["separateBuild"] = json!(scaling.build_flavor.is_some());
+    if let Some(f) = &scaling.build_flavor {
+        body["buildFlavor"] = json!(f);
+    }
+}
+
 /// Segment d'URL (`=` et `/` d'un tag `compose-project=x`).
 fn urlencode(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
@@ -437,7 +461,7 @@ impl Platform for Api {
 
     async fn create_app(&self, app: &NewApp) -> PResult<AppInfo> {
         let inst = self.docker_instance().await?;
-        let body = json!({
+        let mut body = json!({
             "name": app.name,
             "description": app.description,
             "deploy": "git",
@@ -452,13 +476,14 @@ impl Platform for Api {
             "instanceLifetime": if app.task { "TASK" } else { "REGULAR" },
             "shutdownable": false,
             "cancelOnPush": true,
-            "separateBuild": false,
         });
+        set_build(&mut body, &app.scaling);
         self.client.post(&format!("{}/applications", self.owner_path()), &body).await.map_err(|e| Self::e("création d'application", e))
     }
 
     async fn update_scaling(&self, app: &str, scaling: &Scaling) -> PResult<()> {
-        let body = json!({ "minFlavor": scaling.min_flavor, "maxFlavor": scaling.max_flavor, "minInstances": scaling.min_instances, "maxInstances": scaling.max_instances });
+        let mut body = json!({ "minFlavor": scaling.min_flavor, "maxFlavor": scaling.max_flavor, "minInstances": scaling.min_instances, "maxInstances": scaling.max_instances });
+        set_build(&mut body, scaling);
         self.send(reqwest::Method::PUT, &self.app_path(app), Some(&body)).await?;
         Ok(())
     }

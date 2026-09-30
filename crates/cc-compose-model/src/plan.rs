@@ -147,6 +147,10 @@ pub struct Scaling {
     /// ajoute et retire selon la charge (scaling horizontal).
     pub min_instances: u32,
     pub max_instances: u32,
+    /// Instance de build dédiée (`separateBuild`) de cette flavor ; absente,
+    /// le build se fait sur l'instance d'exécution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_flavor: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

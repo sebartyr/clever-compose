@@ -10,10 +10,10 @@ use std::process::{Command, Stdio};
 use cc_compose_model::plan::*;
 
 use super::platform::Platform;
-use super::reconcile::{Log, State};
+use super::reconcile::State;
 use crate::plan::initdb;
 
-pub async fn run_task<P: Platform>(app: &App, state: &State, platform: &P, project_dir: &FsPath, log: &mut Log) -> Result<(), String> {
+pub async fn run_task<P: Platform>(app: &App, state: &State, platform: &P, project_dir: &FsPath, log: &(dyn Fn(&str) + Sync)) -> Result<(), String> {
     // L'addon dont la tâche dépend fournit ses variables, comme le lien.
     let addon_service = app.depends_on.iter().find_map(|d| d.0.strip_prefix("addon/")).ok_or_else(|| format!("tâche {} : aucun addon dans depends_on", app.name))?;
     let addon_id = state.addon_ids.get(addon_service).ok_or_else(|| format!("tâche {} : addon `{addon_service}` inconnu", app.name))?;

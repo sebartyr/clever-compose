@@ -97,7 +97,7 @@ fn deposited_project_cannot_read_server_environment() {
     d.write("compose.yaml", "services:\n  web:\n    image: busybox:1.36\n    secrets: [s]\nsecrets:\n  s:\n    environment: HOME\n");
     let fixture: Fixture = serde_json::from_str(r#"{ "busybox:1.36": { "entrypoint": [], "cmd": ["sh"], "user": null, "workdir": null, "exposed_ports": [] } }"#).unwrap();
     let plan_with = |confine: bool| {
-        let opts = PlanOptions { project: Options { project_dir: d.0.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine }, allow_ephemeral: false, private_registries: None };
+        let opts = PlanOptions { project: Options { project_dir: d.0.clone(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine }, allow_ephemeral: false, private_registries: None, build_flavor: None };
         let mut diags = Diagnostics::default();
         let plan = run(&opts, &fixture, &mut diags);
         (plan.is_some(), diags.items.iter().map(|x| x.code.to_string()).collect::<Vec<_>>())

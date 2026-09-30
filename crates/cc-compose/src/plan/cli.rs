@@ -17,6 +17,9 @@ pub struct PlanOptions {
     /// Hôtes de registre avec identifiants sur le poste ; `None` = lus dans
     /// la configuration Docker (`private_registries_from_docker`).
     pub private_registries: Option<Vec<String>>,
+    /// Instance de build dédiée des services qui n'en déclarent pas
+    /// (`x-clever.build_flavor`).
+    pub build_flavor: Option<String>,
 }
 
 /// Les hôtes des `auths` de la configuration Docker du poste, normalisés
@@ -54,7 +57,7 @@ pub fn run(opts: &PlanOptions, images: &dyn ImageResolver, diags: &mut Diagnosti
     let project_dir = std::fs::canonicalize(&opts.project.project_dir).unwrap_or_else(|_| opts.project.project_dir.clone());
     // Un projet déposé ne voit pas les identifiants Docker de la machine.
     let private_registries = opts.private_registries.clone().unwrap_or_else(|| if opts.project.confine { Vec::new() } else { private_registries_from_docker() });
-    let ctx = Context { images, project_dir: &project_dir, spec_json: &spec, allow_ephemeral: opts.allow_ephemeral, private_registries: &private_registries, confined: opts.project.confine };
+    let ctx = Context { images, project_dir: &project_dir, spec_json: &spec, allow_ephemeral: opts.allow_ephemeral, private_registries: &private_registries, confined: opts.project.confine, build_flavor: opts.build_flavor.as_deref() };
     let before = diags.items.len();
     let result = plan(&typed, &ctx, diags);
     // Les diagnostics du plan reçoivent la position du nœud désigné par leur

@@ -7,3 +7,4 @@ services:
       max_flavor: L
       min_instances: 3
       max_instances: 2
+      build_flavor: XXL

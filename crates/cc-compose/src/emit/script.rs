@@ -107,7 +107,8 @@ pub fn emit(plan: &Plan, opts: &Options<'_>, diags: &mut Diagnostics) -> String 
             diags.push(Diagnostic::warning("script-task", format!("`{}` est une tâche : `clever create --task` attend la commande, laissée vide puisque le shim la porte ; vérifiez le résultat", a.service)));
         }
         let _ = writeln!(s, "APP_{}=\"$(clever create -t docker {} -o \"$ORG\" -r {}{task} -F json | jq -r .id)\"", ident(&a.service), sq(&a.name), sq(&a.region));
-        let _ = writeln!(s, "clever scale --app \"$APP_{}\" --min-flavor {} --max-flavor {} --min-instances {} --max-instances {}", ident(&a.service), sq(&a.scaling.min_flavor), sq(&a.scaling.max_flavor), a.scaling.min_instances, a.scaling.max_instances);
+        let build = a.scaling.build_flavor.as_ref().map(|f| format!(" --build-flavor {}", sq(f))).unwrap_or_default();
+        let _ = writeln!(s, "clever scale --app \"$APP_{}\" --min-flavor {} --max-flavor {} --min-instances {} --max-instances {}{build}", ident(&a.service), sq(&a.scaling.min_flavor), sq(&a.scaling.max_flavor), a.scaling.min_instances, a.scaling.max_instances);
         if let Source::Context { .. } = a.source {
             let _ = writeln!(s, "clever env set --app \"$APP_{}\" CC_DOCKERFILE {}", ident(&a.service), sq(crate::plan::sources::CONTEXT_DOCKERFILE));
         }
