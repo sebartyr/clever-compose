@@ -321,6 +321,16 @@ en cours vont au bout (`reconcile::schedule`). Une tâche `run: local` est
 exécutée depuis le poste à son tour, seule (Docker si le démon répond,
 sinon le client du poste).
 
+**Écarts plateforme / compose** (`exec/drift.rs`, 30/09/2026) : scaling,
+build dédié, plan d'addon et variables ajoutées hors compose sont comparés
+au plan. `up` les nomme (ce qu'il écrase, ce qu'il garde) ; `pull-config`
+(CLI) et l'onglet « Écarts » (UI, `GET`/`POST /api/local/{id}/drift`) les
+reprennent dans `x-clever` du fichier principal, sur choix explicite. Une
+variable est reprise **sans sa valeur** : `NOM: "${NOM:?…}"` dans
+`x-clever.environment`, à renseigner dans `.env` (sans elle le plan est
+refusé au lieu d'écraser la valeur de la console par du vide). Un plan
+d'addon repris met le compose d'accord avec l'existant (pas de migration).
+
 `down` supprime par nom et tag ; les addons seulement avec `--yes` ; les apps
 sans tag (créées par Terraform) sont laissées à `terraform destroy`.
 
@@ -382,6 +392,7 @@ clever-compose [-f FICHIER] [-p NOM] [--project-directory DIR] [--env-file F] [-
   up [--dry-run] [--yes] [--no-wait] [--parallel N] [--allow-ephemeral]
   (plan, up, export, seed) [--build-flavor FLAVOR|disabled]
   seed --service SVC --dump FICHIER [--local]
+  pull-config [--dry-run] [--service SVC...]
   down [--all] [--dry-run] [--yes] | stop | start | ps | logs [SERVICE...] [--since 1h] [-n N] [--follow]
   orgs | ui [--listen ADRESSE:PORT] [--no-open] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]
   api [--listen ADRESSE:PORT] [--cors ORIGINE...] [--public-url URL] [--api-key CLÉ] [--local-exec auto|on|off]
@@ -402,7 +413,9 @@ Scalabilité éditée depuis l'interface : `PUT /api/local/{id}/scaling`
 textuelle, formatage conservé) ; `PUT /api/local/{id}/addon` de même pour
 `plan`, `version`, `private` d'un addon, catalogue par `GET /api/addon-plans`
 (18/09/2026 ; un addon existant n'est pas migré : `up` le signale, voir §10) ; `POST …/assets/sync` pousse les assets
-sans `up`.
+sans `up`. L'éditeur de scaling porte aussi `build_flavor`, la barre
+d'outils `--parallel`, la vue plateforme le build dédié servi, l'onglet
+« Écarts » la reprise des réglages faits hors compose (30/09/2026).
 `clap` (aide par commande, `--org` ou `CLEVER_COMPOSE_ORG`). `plan` affiche un résumé
 lisible (ressources, coût, et sous chaque application les variables dont la
 valeur est réécrite : FQDN de membre, identifiant d'addon, secret) puis les diagnostics ; `--json` pour le plan

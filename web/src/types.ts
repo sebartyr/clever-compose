@@ -60,6 +60,8 @@ export interface Scaling {
   max_flavor: string;
   min_instances: number;
   max_instances: number;
+  /** Instance de build dédiée (absente : build sur l'instance d'exécution). */
+  build_flavor?: string | null;
 }
 
 export interface Flavor {
@@ -135,6 +137,25 @@ export interface ExportResult {
 
 export interface ScalingBody extends Scaling {
   service: string;
+}
+
+/** Écart entre la plateforme et le compose (`exec::drift::Drift`). */
+export interface Drift {
+  id: string;
+  service: string;
+  field: string;
+  name?: string;
+  compose: string | null;
+  platform: string | null;
+  text: string;
+}
+
+export interface AdoptResult {
+  ok: boolean;
+  path: string;
+  adopted: string[];
+  skipped: { service: string; reason: string }[];
+  env_to_fill: string[];
 }
 
 export interface AddonPlan {

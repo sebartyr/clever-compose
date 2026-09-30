@@ -10,7 +10,7 @@ import Diagram from './components/Diagram.vue';
 import SessionPanel from './components/SessionPanel.vue';
 import LogPanel from './components/LogPanel.vue';
 import NodeDetail from './components/NodeDetail.vue';
-import type { AddonBody, AddonPlans, Assets, Current, Diagnostic, ExportResult, Flavors, Graph, Info, Inventory, LocalProject, Org, Plan, ScalingBody, Session } from './types';
+import type { AddonBody, AddonPlans, Assets, Current, Diagnostic, Drift, ExportResult, Flavors, Graph, Info, Inventory, LocalProject, Org, Plan, ScalingBody, Session } from './types';
 
 
 type OptKey = 'yes' | 'dry_run' | 'allow_ephemeral' | 'no_wait' | 'assets';
@@ -36,6 +36,11 @@ const assetFile = ref('');
 const exportFile = ref('');
 const flavors = ref<Flavors | null>(null);
 const addonPlans = ref<AddonPlans | null>(null);
+// Écarts entre la plateforme et le compose (réglages faits hors compose),
+// repris dans x-clever sur demande ; `null` : pas encore lus.
+const drifts = ref<Drift[] | null>(null);
+const driftChosen = ref<string[]>([]);
+const driftNote = ref('');
 // Connexion : sans identifiants dans l'environnement, rien ne s'affiche
 // avant la session. La page part vers Clever Cloud et revient par le
 // callback du serveur, les jetons dans le fragment de l'URL.
@@ -69,7 +74,7 @@ const opRunning = computed(() => logs.running && !logs.tail);
 // logs, seed local, dernier projet ouvert, onglet.
 const remembered = <T extends object>(k: string, fallback: T): T => { try { return { ...fallback, ...(JSON.parse(localStorage.getItem('clever-compose.' + k) || 'null') || {}) }; } catch { return fallback; } };
 const remember = (k: string, value: unknown) => { try { localStorage.setItem('clever-compose.' + k, JSON.stringify(value)); } catch { /* stockage indisponible */ } };
-const opts = reactive(remembered('opts', { yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, assets: false, branches: false }));
+const opts = reactive(remembered('opts', { yes: false, dry_run: false, allow_ephemeral: false, no_wait: false, assets: false, branches: false, parallel: 4 }));
 const seed = reactive({ service: '', dump: '', uploading: false, ...remembered('seed', { local: false }) });
 const uploadDump = async (e: Event) => {
   const input = e.target as HTMLInputElement;
@@ -157,6 +162,29 @@ const loadPlan = async () => {
     setTimeout(() => { if (status.value.startsWith('Plan')) status.value = ''; }, 6000);
   } catch (e) { status.value = ''; notify(e); } finally { busy.value = false; }
 };
+const loadDrifts = async () => {
+  if (current.value?.type !== 'local' || !onPlatform.value || errors.value) { drifts.value = null; return; }
+  try {
+    drifts.value = (await api.drifts(current.value.id)).drifts;
+    driftChosen.value = driftChosen.value.filter((id) => drifts.value!.some((d) => d.id === id));
+  } catch (e) { drifts.value = null; notify(e); }
+};
+// Reprend les écarts choisis dans x-clever du compose, puis relit fichier,
+// plan et écarts ; les variables reprises restent à renseigner dans .env.
+const adoptDrifts = async (ids: string[]) => {
+  if (!current.value || !ids.length) return;
+  try {
+    const r = await api.adoptDrifts(current.value.id, ids);
+    const notes = [`${r.adopted.length} écart(s) repris dans ${r.path}`];
+    if (r.env_to_fill.length) notes.push(`à renseigner dans .env (valeurs non copiées, le plan les exige) : ${r.env_to_fill.join(', ')}`);
+    for (const k of r.skipped) notes.push(`non repris : ${k.service} : ${k.reason}`);
+    driftNote.value = notes.join(' · ');
+    driftChosen.value = [];
+    if (file.path && !file.dirty) await openFile(file.path);
+    await loadPlan();
+    await loadDrifts();
+  } catch (e) { notify(e); }
+};
 const loadInventory = async () => {
   if (!current.value || !session.value.org) return;
   try { inventory.value = await api.inventory(current.value.name); } catch (e) { inventory.value = null; if (current.value.type === 'platform') notify(e); }
@@ -172,6 +200,8 @@ const openLocal = async (p: LocalProject) => {
   if (compose) await openFile(compose);
   await loadPlan();
   await loadInventory();
+  drifts.value = null; driftNote.value = '';
+  await loadDrifts();
 };
 const loadAssets = async () => {
   assets.value = null;
@@ -230,9 +260,10 @@ const run = (title: string, starter: (onLog: OnLog) => Stream, tail = false) => 
     await refreshPlatform();
     await loadInventory();
     if (current.value?.type === 'local') viewPlatform.value = !!inventory.value;
+    await loadDrifts();
   });
 };
-const doUp = () => { const c = current.value!; run('up ' + c.name, (onLog) => api.up(c.id, { yes: opts.yes, dry_run: opts.dry_run, allow_ephemeral: opts.allow_ephemeral, no_wait: opts.no_wait, assets: opts.assets }, onLog)); };
+const doUp = () => { const c = current.value!; run('up ' + c.name, (onLog) => api.up(c.id, { yes: opts.yes, dry_run: opts.dry_run, allow_ephemeral: opts.allow_ephemeral, no_wait: opts.no_wait, assets: opts.assets, parallel: Math.max(1, Math.floor(Number(opts.parallel)) || 4) }, onLog)); };
 const doStop = () => { const c = current.value!; run('stop ' + c.name, (onLog) => api.stop(c.name, onLog)); };
 const doStart = () => { const c = current.value!; run('start ' + c.name, (onLog) => api.start(c.name, onLog)); };
 const doDown = () => { const c = current.value!; dialog.down = false; run('down ' + c.name, (onLog) => api.down(c.name, { yes: opts.yes, dry_run: opts.dry_run }, onLog)); };
@@ -368,6 +399,7 @@ watch(current, () => { sideOpen.value = false; });
           <span class="grow"></span>
           <template v-if="current.type === 'local'">
             <cc-toggle legend="Options" :hideText="false" :inline="true" title="--yes : confirme la création des addons (facturés). --dry-run : décrit sans rien modifier. --allow-ephemeral : volumes nommés acceptés comme stockage éphémère. --no-wait : n'attend pas les déploiements. --assets : fichiers et plan conservés dans le bucket Cellar configuré (CLEVER_COMPOSE_ASSETS_BUCKET)." :choices="[{label:'--yes', value:'yes'},{label:'--dry-run', value:'dry_run'},{label:'--allow-ephemeral', value:'allow_ephemeral'},{label:'--no-wait', value:'no_wait'},{label:'--assets', value:'assets'}]" :multipleValues="OPT_KEYS.filter(k => opts[k])" @cc-multi-select="setOptions"></cc-toggle>
+            <cc-input-text class="parallel" label="Parallèle" type="number" :inline="true" :value="String(opts.parallel)" @cc-input="(e: CustomEvent) => opts.parallel = e.detail" title="--parallel : déploiements menés en même temps, chacun dès que ses dépendances sont déployées (1 : l'un après l'autre)"></cc-input-text>
             <cc-button :outlined="true" :waiting="busy" title="Recalcule le plan et les diagnostics, sans rien créer" @cc-click="loadPlan">Plan</cc-button>
             <cc-button :primary="true" :disabled="errors > 0 || opRunning" title="Crée ou met à jour les ressources et déploie (--yes confirme les addons, facturés)" @cc-click="doUp">Up</cc-button>
             <cc-button :outlined="true" :disabled="!plan || opRunning" title="Charge un dump local dans un addon, une fois par contenu" @cc-click="dialog.seed = true">Seed</cc-button>
@@ -384,6 +416,7 @@ watch(current, () => { sideOpen.value = false; });
           <a v-if="current.type === 'local'" :class="{ active: tab === 'compose' }" href="#" @click.prevent="tab = 'compose'">Compose</a>
           <a v-if="current.type === 'platform' && assets" :class="{ active: tab === 'assets' }" href="#" @click.prevent="tab = 'assets'">Fichiers (Cellar)</a>
           <a v-if="current.type === 'local'" :class="{ active: tab === 'diagnostics' }" href="#" @click.prevent="tab = 'diagnostics'">Diagnostics <cc-badge v-if="diagnostics.length" :intent="errors ? 'danger' : 'warning'" weight="dimmed" circle>{{ diagnostics.length }}</cc-badge></a>
+          <a v-if="current.type === 'local' && onPlatform" :class="{ active: tab === 'drift' }" href="#" @click.prevent="tab = 'drift'; loadDrifts()">Écarts <cc-badge v-if="drifts?.length" intent="warning" weight="dimmed" circle>{{ drifts.length }}</cc-badge></a>
           <a v-if="exportResult" :class="{ active: tab === 'export' }" href="#" @click.prevent="tab = 'export'">Export</a>
           <span class="grow"></span>
           <label v-if="current.type === 'local' && onPlatform" class="switch" title="Diagramme de ce qui existe sur la plateforme (instances, déploiements) au lieu du plan"><input type="checkbox" v-model="viewPlatform" @change="loadInventory"> état sur la plateforme</label>
@@ -398,6 +431,20 @@ watch(current, () => { sideOpen.value = false; });
             <p v-else-if="current.type === 'platform'" class="dim">Pas d'assets dans Cellar pour ce projet : relancez <code>up</code> avec <code>--assets</code> ou <code>x-clever.assets: true</code> pour que le compose et le plan soient lisibles ici.</p>
           </div>
           <NodeDetail :node="selectedNode" :platform="current.type === 'platform' || viewPlatform" :flavors="flavors" :addonPlans="addonPlans" @close="selected = null" @logs="doLogs" @scaling="setScaling" @addon="setAddon" />
+        </div>
+        <div class="content drift" v-show="tab === 'drift'">
+          <p class="dim">Réglages faits sur la plateforme hors du compose (console, clever-tools). <code>up</code> écrase le scaling et le build dédié, garde les variables ajoutées sans les montrer, ne migre pas un addon existant. Les reprendre écrit <code>x-clever</code> du compose ; une variable est reprise sans sa valeur (<code>${NOM:?…}</code>, à renseigner dans <code>.env</code>).</p>
+          <cc-notice v-if="driftNote" intent="info" :message="driftNote" :closeable="true" @cc-notice-dismiss="driftNote = ''"></cc-notice>
+          <p v-if="drifts === null" class="dim">{{ errors ? 'Plan refusé : les écarts se comparent au plan.' : 'Écarts non lus.' }}</p>
+          <p v-else-if="!drifts.length" class="dim">Aucun écart : la plateforme suit le compose.</p>
+          <template v-else>
+            <label v-for="d in drifts" :key="d.id" class="drift-item"><input type="checkbox" :value="d.id" v-model="driftChosen"> {{ d.text }}</label>
+            <div class="drift-actions">
+              <cc-button :primary="true" :disabled="!driftChosen.length" title="Écrit les écarts cochés dans x-clever du compose et recalcule le plan" @cc-click="adoptDrifts(driftChosen)">Reprendre la sélection dans le compose</cc-button>
+              <cc-button :outlined="true" title="Écrit tous les écarts dans x-clever du compose" @cc-click="adoptDrifts(drifts.map((d) => d.id))">Tout reprendre</cc-button>
+              <cc-button :outlined="true" title="Relit la plateforme" @cc-click="loadDrifts">Rafraîchir</cc-button>
+            </div>
+          </template>
         </div>
         <div class="content compose" v-show="tab === 'compose'">
           <aside class="files"><a v-for="f in files" :key="f" href="#" :class="{ active: f === file.path }" @click.prevent="openFile(f)">{{ f }}</a></aside>

@@ -180,6 +180,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/local/{id}/export", post(local_export))
         .route("/api/local/{id}/scaling", axum::routing::put(local_scaling))
         .route("/api/local/{id}/addon", axum::routing::put(local_addon))
+        .route("/api/local/{id}/drift", get(local_drift).post(local_drift_adopt))
         .route("/api/local/{id}/assets/sync", post(local_assets_sync))
         .route("/api/flavors", get(flavors))
         .route("/api/addon-plans", get(addon_plans))
@@ -420,7 +421,7 @@ async fn inventory(AxState(s): AxState<Shared>, UrlPath(project): UrlPath<String
             "tagged": a.tagged,
             "state": a.info.state,
             "instances": instances.iter().map(|i| json!({ "id": i.id, "state": i.state, "flavor": i.flavor.as_ref().map(|f| f.name.clone()) })).collect::<Vec<_>>(),
-            "scaling": { "min_flavor": a.info.instance.min_flavor.name, "max_flavor": a.info.instance.max_flavor.name, "min_instances": a.info.instance.min_instances, "max_instances": a.info.instance.max_instances },
+            "scaling": { "min_flavor": a.info.instance.min_flavor.name, "max_flavor": a.info.instance.max_flavor.name, "min_instances": a.info.instance.min_instances, "max_instances": a.info.instance.max_instances, "build_flavor": a.info.dedicated_build() },
             "last_deployment": last.map(|d| json!({ "state": d.state, "id": d.uuid, "date": d.date })),
             "domains": domains.iter().map(|d| d.trim_end_matches('/')).collect::<Vec<_>>(),
             "tags": a.tags,
@@ -863,11 +864,15 @@ struct ScalingBody {
     max_flavor: Option<String>,
     min_instances: Option<u32>,
     max_instances: Option<u32>,
+    /// Instance de build dédiée : une flavor, `disabled`, ou absente (clé
+    /// retirée : `--build-flavor` ou pas de build dédié).
+    #[serde(default)]
+    build_flavor: Option<String>,
 }
 
 /// Le fichier compose principal du projet (celui que la découverte prend).
 fn main_compose(dir: &Path) -> Option<PathBuf> {
-    ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].iter().map(|f| dir.join(f)).find(|p| p.is_file())
+    crate::compose::project::main_file(&crate::compose::project::Options { project_dir: dir.to_path_buf(), files: Vec::new(), project_name: None, env_files: Vec::new(), profiles: Vec::new(), confine: false })
 }
 
 /// Pose la scalabilité d'un service dans `x-clever` du compose, sans
@@ -877,7 +882,8 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
     let path = main_compose(&dir).ok_or_else(|| bad("aucun fichier compose dans le projet"))?;
     let text = std::fs::read_to_string(&path).map_err(|e| internal(e.to_string()))?;
     let d = crate::plan::flavors::docker();
-    for f in [&b.min_flavor, &b.max_flavor].into_iter().flatten() {
+    let build = b.build_flavor.clone().filter(|f| !f.is_empty());
+    for f in [&b.min_flavor, &b.max_flavor, &build.clone().filter(|f| f != "disabled")].into_iter().flatten() {
         if !d.flavors.iter().any(|x| &x.name == f) {
             return Err(bad(format!("flavor `{f}` inconnue")));
         }
@@ -896,10 +902,67 @@ async fn local_scaling(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>
         Entry { key: "max_flavor", value: if same_flavor { None } else { b.max_flavor.clone() } },
         Entry { key: "min_instances", value: b.min_instances.map(|v| v.to_string()) },
         Entry { key: "max_instances", value: b.max_instances.map(|v| v.to_string()) },
+        Entry { key: "build_flavor", value: build },
     ];
     let out = crate::compose::edit::set_xclever(&text, &b.service, &entries).map_err(bad)?;
     std::fs::write(&path, &out).map_err(|e| internal(e.to_string()))?;
     Ok(Json(json!({ "ok": true, "path": path.strip_prefix(&dir).unwrap_or(&path).to_string_lossy() })))
+}
+
+/// Plan du projet et écarts avec la plateforme (`pull-config`).
+async fn drifts_of(s: &Shared, id: &str, c: &Client) -> Result<(PathBuf, Plan, Vec<crate::exec::drift::Drift>), ApiError> {
+    let (dir, confine) = project_dir(s, id, c).await?;
+    let api = api_of(s, c).await?;
+    let st = s.clone();
+    let d2 = dir.clone();
+    let (plan, diags, _) = tokio::task::spawn_blocking(move || compute(&st, &d2, confine, false)).await.map_err(|e| internal(e.to_string()))?.map_err(internal)?;
+    let plan = plan.filter(|_| !diags.as_array().into_iter().flatten().any(|d| d["severity"] == "error")).ok_or_else(|| bad("plan refusé : corrigez les erreurs, il sert de comparaison"))?;
+    let drifts = crate::exec::drift::detect(&plan, &api).await.map_err(internal)?;
+    Ok((dir, plan, drifts))
+}
+
+fn drift_json(d: &crate::exec::drift::Drift) -> J {
+    let mut v = serde_json::to_value(d).unwrap_or_default();
+    v["id"] = json!(d.id());
+    v["text"] = json!(d.describe());
+    v
+}
+
+/// Écarts entre la plateforme et le compose (réglages faits hors compose).
+async fn local_drift(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client) -> Result<Json<J>, ApiError> {
+    let (_, _, drifts) = drifts_of(&s, &id, &c).await?;
+    Ok(Json(json!({ "drifts": drifts.iter().map(drift_json).collect::<Vec<_>>() })))
+}
+
+#[derive(Deserialize)]
+struct AdoptBody {
+    /// Identifiants des écarts à reprendre (`Drift::id`).
+    ids: Vec<String>,
+}
+
+/// Reprend des écarts dans `x-clever` du compose ; les valeurs de variables
+/// ne sont jamais copiées (`${NOM:?…}`, à renseigner dans `.env`).
+async fn local_drift_adopt(AxState(s): AxState<Shared>, UrlPath(id): UrlPath<String>, c: Client, Json(b): Json<AdoptBody>) -> Result<Json<J>, ApiError> {
+    let (dir, plan, mut drifts) = drifts_of(&s, &id, &c).await?;
+    drifts.retain(|d| b.ids.contains(&d.id()));
+    if drifts.is_empty() {
+        return Err(bad("aucun de ces écarts n'existe encore (déjà repris, ou plateforme modifiée entre-temps)"));
+    }
+    let path = main_compose(&dir).ok_or_else(|| bad("aucun fichier compose dans le projet"))?;
+    let text = std::fs::read_to_string(&path).map_err(|e| internal(e.to_string()))?;
+    let (out, skipped) = crate::exec::drift::adopt(&text, &plan, &drifts);
+    if out != text {
+        std::fs::write(&path, &out).map_err(|e| internal(e.to_string()))?;
+    }
+    drifts.retain(|d| !skipped.iter().any(|(s, _)| s == &d.service));
+    let vars: Vec<&str> = drifts.iter().filter(|d| d.field == "environment").filter_map(|d| d.name.as_deref()).collect();
+    Ok(Json(json!({
+        "ok": skipped.is_empty(),
+        "path": path.strip_prefix(&dir).unwrap_or(&path).to_string_lossy(),
+        "adopted": drifts.iter().map(|d| d.id()).collect::<Vec<_>>(),
+        "skipped": skipped.iter().map(|(s, why)| json!({ "service": s, "reason": why })).collect::<Vec<_>>(),
+        "env_to_fill": vars,
+    })))
 }
 
 /// Catalogue des addons (plans, prix, zones, versions), pour le formulaire

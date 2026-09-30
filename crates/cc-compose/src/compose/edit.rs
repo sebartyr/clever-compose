@@ -46,18 +46,89 @@ fn block_end(lines: &[&str], start: usize, indent: usize) -> usize {
     i
 }
 
-pub fn set_xclever(text: &str, service: &str, entries: &[Entry<'_>]) -> Result<String, String> {
-    let lines: Vec<&str> = text.lines().collect();
+/// Le bloc d'un service : (ligne du service, son indentation, fin du bloc,
+/// indentation de ses clés).
+fn locate_service(lines: &[&str], service: &str) -> Result<(usize, usize, usize, usize), String> {
     let services = lines.iter().position(|l| key_at(l, 0, "services")).ok_or("pas de `services:` à la racine")?;
-    let services_end = block_end(&lines, services, 0);
+    let services_end = block_end(lines, services, 0);
     // Indentation des services : celle de la première clé du bloc.
     let svc_indent = lines[services + 1..services_end].iter().find(|l| !is_blank_or_comment(l)).map(|l| indent_of(l)).ok_or("`services:` est vide")?;
     let svc = (services + 1..services_end).find(|&i| key_at(lines[i], svc_indent, service)).ok_or_else(|| format!("service `{service}` introuvable dans ce fichier (défini dans un autre fichier ou par `extends` ?)"))?;
-    let svc_end = block_end(&lines, svc, svc_indent);
+    let svc_end = block_end(lines, svc, svc_indent);
     let child_indent = lines[svc + 1..svc_end].iter().find(|l| !is_blank_or_comment(l)).map(|l| indent_of(l)).unwrap_or(svc_indent + 2);
     if child_indent <= svc_indent {
         return Err(format!("service `{service}` sans contenu indenté"));
     }
+    Ok((svc, svc_indent, svc_end, child_indent))
+}
+
+/// Pose des entrées de la carte `x-clever.environment` d'un service
+/// (`NOM: valeur`, valeur déjà rendue en YAML), en créant `x-clever` et
+/// `environment` au besoin.
+pub fn set_xclever_environment(text: &str, service: &str, entries: &[Entry<'_>]) -> Result<String, String> {
+    // `environment:` d'abord, vide s'il manque (même chemin que les autres clés).
+    let mut text = text.to_string();
+    {
+        let lines: Vec<&str> = text.lines().collect();
+        let (svc, _, svc_end, child_indent) = locate_service(&lines, service)?;
+        let has_env = (svc + 1..svc_end).find(|&i| key_at(lines[i], child_indent, "x-clever")).is_some_and(|x| {
+            let x_end = block_end(&lines, x, child_indent);
+            let key_indent = lines[x + 1..x_end].iter().find(|l| !is_blank_or_comment(l)).map(|l| indent_of(l)).unwrap_or(0);
+            (x + 1..x_end).any(|i| key_at(lines[i], key_indent, "environment"))
+        });
+        if !has_env {
+            text = set_xclever(&text, service, &[Entry { key: "environment", value: Some(String::new()) }])?;
+        }
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    let (svc, svc_indent, svc_end, child_indent) = locate_service(&lines, service)?;
+    let step = child_indent - svc_indent;
+    let x = (svc + 1..svc_end).find(|&i| key_at(lines[i], child_indent, "x-clever")).ok_or("`x-clever` introuvable après écriture")?;
+    let x_end = block_end(&lines, x, child_indent);
+    let key_indent = lines[x + 1..x_end].iter().find(|l| !is_blank_or_comment(l)).map(|l| indent_of(l)).unwrap_or(child_indent + step);
+    let env = (x + 1..x_end).find(|&i| key_at(lines[i], key_indent, "environment")).ok_or("`x-clever.environment` introuvable après écriture")?;
+    let inline = lines[env][key_indent + "environment".len()..].trim_start().trim_start_matches(':').trim().to_string();
+    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
+    match inline.as_str() {
+        "" => out[env] = out[env].trim_end().to_string(),
+        "{}" => out[env] = format!("{}environment:", " ".repeat(key_indent)),
+        _ => return Err(format!("`x-clever.environment` de `{service}` est écrit en une ligne ou en liste : passez-le en bloc (`NOM: valeur`) pour l'édition")),
+    }
+    let env_end = block_end(&lines, env, key_indent);
+    let var_indent = lines[env + 1..env_end].iter().find(|l| !is_blank_or_comment(l)).map(|l| indent_of(l)).unwrap_or(key_indent + step);
+    let mut insertions: Vec<String> = Vec::new();
+    let mut removals: Vec<usize> = Vec::new();
+    for e in entries {
+        match (env + 1..env_end).find(|&i| key_at(lines[i], var_indent, e.key)) {
+            Some(i) => match &e.value {
+                Some(v) => out[i] = format!("{}{}: {v}", " ".repeat(var_indent), e.key),
+                None => removals.push(i),
+            },
+            None => {
+                if let Some(v) = &e.value {
+                    insertions.push(format!("{}{}: {v}", " ".repeat(var_indent), e.key));
+                }
+            }
+        }
+    }
+    let removed = removals.len();
+    removals.sort_unstable_by(|a, b| b.cmp(a));
+    for i in removals {
+        out.remove(i);
+    }
+    for (k, l) in insertions.into_iter().enumerate() {
+        out.insert(env_end - removed + k, l);
+    }
+    let mut s = out.join("\n");
+    if text.ends_with('\n') {
+        s.push('\n');
+    }
+    Ok(s)
+}
+
+pub fn set_xclever(text: &str, service: &str, entries: &[Entry<'_>]) -> Result<String, String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let (svc, svc_indent, svc_end, child_indent) = locate_service(&lines, service)?;
     let step = child_indent - svc_indent;
     let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
     let pad = |n: usize| " ".repeat(n);
@@ -134,6 +205,16 @@ mod tests {
         let out = set_xclever(SRC, "api", &[Entry { key: "flavor", value: None }, Entry { key: "min_flavor", value: Some("M".into()) }, Entry { key: "task", value: Some("false".into()) }]).unwrap();
         assert!(out.contains("    x-clever:\n      task: false\n      min_flavor: M\nnetworks:"), "{out}");
         assert!(!out.contains("flavor: S"));
+    }
+
+    #[test]
+    fn environment_block_created_then_extended() {
+        let out = set_xclever_environment(SRC, "web", &[Entry { key: "A", value: Some("\"${A:?x}\"".into()) }]).unwrap();
+        assert!(out.contains("      - \"8080:80\"\n    x-clever:\n      environment:\n        A: \"${A:?x}\"\n  api:"), "{out}");
+        let out = set_xclever_environment(&out, "web", &[Entry { key: "B", value: Some("b".into()) }, Entry { key: "A", value: Some("a".into()) }]).unwrap();
+        assert!(out.contains("      environment:\n        A: a\n        B: b\n  api:"), "{out}");
+        let out = set_xclever_environment(SRC, "api", &[Entry { key: "C", value: Some("c".into()) }]).unwrap();
+        assert!(out.contains("      flavor: S\n      task: true\n      environment:\n        C: c\nnetworks:"), "{out}");
     }
 
     #[test]

@@ -93,6 +93,29 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 *Décidé :*
 
+- **Écarts plateforme / compose** (30/09/2026, demande du propriétaire,
+  design validé) : `exec/drift.rs` compare le plan à l'existant (scaling
+  min/max flavor et instances, build dédié, plan d'addon hors Cellar,
+  variables ni posées par le plan ni listées dans `CLEVER_COMPOSE_MANAGED`
+  ni de l'exécuteur). `up` le dit : scaling « avant → après (compose) »,
+  « variables hors compose conservées : … », plan d'addon non appliqué,
+  chacun avec la sortie `pull-config`. `pull-config [--dry-run]
+  [--service]` et l'onglet « Écarts » de l'UI reprennent dans `x-clever`
+  du fichier principal (`compose::project::main_file`) : scaling écrit en
+  entier (`flavor` si min = max, comme l'éditeur), build retiré sur la
+  plateforme → `build_flavor: disabled`, plan d'addon → `x-clever.plan`,
+  variable → `x-clever.environment.NOM: "${NOM:?…}"` (nouvel
+  `edit::set_xclever_environment`) : jamais de valeur copiée (règle
+  « aucun secret littéral »), et sans `.env` l'interpolation refuse le
+  plan (vérifié) au lieu que `up` pose une chaîne vide sur la valeur de la
+  console. `plan` reste sans appel à l'API : la détection n'y est pas.
+  Service absent du fichier principal (override, `extends`, tâche
+  générée) : non repris, raison affichée.
+- **Interface à niveau** (30/09/2026) : `build_flavor` dans l'éditeur de
+  scaling (vide = rien dans `x-clever`, `disabled`, ou une flavor),
+  champ « Parallèle » (`parallel` du `up`, mémorisé), scaling et build
+  dédié servis dans la vue plateforme (`inventory` renvoie
+  `scaling.build_flavor`), onglet « Écarts ».
 - **Déploiements parallèles** (30/09/2026, demande du propriétaire) :
   l'étape 6 du `up` n'attend plus chaque application avant la suivante.
   Chacune part dès que les applications de son `depends_on` sont

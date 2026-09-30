@@ -80,6 +80,10 @@ body { margin: 0; }
 .hint { color: var(--cc-color-text-weak, #666); font-size: .9em; }
 .row-end { display: flex; justify-content: flex-end; gap: .5em; }
 .switch { display: inline-flex; gap: .4em; align-items: center; }
+.toolbar .parallel { width: 9em; }
+.content.drift { display: flex; flex-direction: column; gap: .6em; padding: .5em 0; }
+.drift-item { display: flex; gap: .5em; align-items: baseline; }
+.drift-actions { display: flex; gap: .5em; flex-wrap: wrap; }
 cc-dialog cc-input-text { display: block; margin-bottom: .6em; }
 .detail .scaling { display: grid; grid-template-columns: 1fr 1fr; gap: .5em .8em; margin: .3em 0 .8em; }
 .detail .scaling cc-button { grid-column: 1 / -1; justify-self: start; }

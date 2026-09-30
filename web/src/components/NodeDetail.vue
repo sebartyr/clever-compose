@@ -12,16 +12,19 @@ const env = computed(() => ((props.node?.data?.env || []) as { key: string; valu
 const json = computed(() => JSON.stringify(props.node?.data || {}, null, 2));
 // Formulaire de scalabilité, rempli depuis le plan à chaque sélection ;
 // « Appliquer » l'écrit dans x-clever du compose.
-const scaling = reactive({ min_flavor: '', max_flavor: '', min_instances: 1 as number | string, max_instances: 1 as number | string, saving: false });
+const scaling = reactive({ min_flavor: '', max_flavor: '', min_instances: 1 as number | string, max_instances: 1 as number | string, build_flavor: '', saving: false });
 watch(() => props.node, (n) => {
   const s = n?.data?.scaling;
   if (!s) return;
-  scaling.min_flavor = s.min_flavor; scaling.max_flavor = s.max_flavor; scaling.min_instances = s.min_instances; scaling.max_instances = s.max_instances;
+  scaling.min_flavor = s.min_flavor; scaling.max_flavor = s.max_flavor; scaling.min_instances = s.min_instances; scaling.max_instances = s.max_instances; scaling.build_flavor = s.build_flavor || '';
 }, { immediate: true });
 const flavorOptions = computed(() => (props.flavors?.flavors || []).map((f) => ({ value: f.name, label: `${f.name} — ${f.cpus} vCPU, ${Math.round(f.memory_bytes / 1048576)} Mio` })));
+// Build dédié : vide = aucun choix dans x-clever (`--build-flavor` ou pas
+// de build dédié) ; `disabled` = écarté explicitement.
+const buildOptions = computed(() => [{ value: '', label: 'aucune (build sur l’instance d’exécution)' }, { value: 'disabled', label: 'disabled (malgré --build-flavor)' }, ...flavorOptions.value]);
 const scalingDirty = computed(() => {
   const s = props.node?.data?.scaling;
-  return !!s && (s.min_flavor !== scaling.min_flavor || s.max_flavor !== scaling.max_flavor || s.min_instances !== Number(scaling.min_instances) || s.max_instances !== Number(scaling.max_instances));
+  return !!s && (s.min_flavor !== scaling.min_flavor || s.max_flavor !== scaling.max_flavor || s.min_instances !== Number(scaling.min_instances) || s.max_instances !== Number(scaling.max_instances) || (s.build_flavor || '') !== scaling.build_flavor);
 });
 // Formulaire d'addon (plan, version, accès), même mécanique : lu depuis
 // le plan, écrit dans x-clever du service substitué.
@@ -51,7 +54,7 @@ const applyAddon = () => {
 };
 const applyScaling = () => {
   if (!props.node) return;
-  emit('scaling', { service: props.node.data.service, min_flavor: scaling.min_flavor, max_flavor: scaling.max_flavor, min_instances: Number(scaling.min_instances), max_instances: Number(scaling.max_instances) });
+  emit('scaling', { service: props.node.data.service, min_flavor: scaling.min_flavor, max_flavor: scaling.max_flavor, min_instances: Number(scaling.min_instances), max_instances: Number(scaling.max_instances), build_flavor: scaling.build_flavor || null });
 };
 </script>
 
@@ -68,6 +71,8 @@ const applyScaling = () => {
       <dl>
         <dt>Identifiant</dt><dd><code>{{ node.data.id }}</code></dd>
         <dt>Instances</dt><dd>{{ node.data.instances.length ? node.data.instances.map((i: any) => i.state.toLowerCase() + ' (' + (i.flavor || '?') + ')').join(', ') : 'aucune' }}</dd>
+        <dt>Scaling</dt><dd>{{ node.data.scaling.min_flavor }}..{{ node.data.scaling.max_flavor }} ×{{ node.data.scaling.min_instances }}..{{ node.data.scaling.max_instances }}</dd>
+        <dt>Build dédié</dt><dd>{{ node.data.scaling.build_flavor || 'non' }}</dd>
         <dt>Dernier déploiement</dt><dd>{{ node.data.last_deployment ? node.data.last_deployment.state : 'aucun' }}</dd>
         <dt v-if="node.data.domains.length">Domaines</dt><dd v-if="node.data.domains.length"><a v-for="d in node.data.domains" :key="d" :href="'https://' + d" target="_blank" rel="noopener">{{ d }}</a></dd>
         <dt>Tags</dt><dd>{{ node.data.tags.join(', ') || '—' }}</dd>
@@ -96,6 +101,7 @@ const applyScaling = () => {
         <cc-select label="Flavor maximale" :options="flavorOptions" :value="scaling.max_flavor" @cc-select="(e: CustomEvent) => scaling.max_flavor = e.detail" title="Taille d'instance sous charge (x-clever.max_flavor)"></cc-select>
         <cc-input-text label="Instances minimales" type="number" :value="String(scaling.min_instances)" @cc-input="(e: CustomEvent) => scaling.min_instances = e.detail" title="x-clever.min_instances"></cc-input-text>
         <cc-input-text label="Instances maximales" type="number" :value="String(scaling.max_instances)" @cc-input="(e: CustomEvent) => scaling.max_instances = e.detail" :title="'x-clever.max_instances (au plus ' + (flavors?.max_instances || '?') + ')'"></cc-input-text>
+        <cc-select label="Instance de build dédiée" :options="buildOptions" :value="scaling.build_flavor" @cc-select="(e: CustomEvent) => scaling.build_flavor = e.detail" title="x-clever.build_flavor : le build se fait sur une instance à part, de cette taille"></cc-select>
         <cc-button :primary="true" :disabled="!scalingDirty" :waiting="scaling.saving" title="Écrit ces valeurs dans x-clever du compose et recalcule le plan ; un up appliquera le changement aux applications existantes sans les recréer" @cc-click="applyScaling">Appliquer au compose</cc-button>
       </div>
       <h4 v-if="env.length">Environnement</h4>

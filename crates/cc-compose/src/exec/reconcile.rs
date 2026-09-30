@@ -57,7 +57,7 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                         return Err(format!("l'addon `{}` ({}) existe avec le fournisseur {}, le plan demande {}", a.name, x.id, x.provider, a.provider));
                     }
                     if x.plan_slug != a.plan {
-                        log(&format!("addon {} : existe ({}) avec le plan `{}`, le plan demandé `{}` n'est pas appliqué (changement de plan manuel)", a.name, x.id, x.plan_slug, a.plan));
+                        log(&format!("addon {} : existe ({}) avec le plan `{}`, le plan demandé `{}` n'est pas appliqué (changement de plan manuel) ; `pull-config` reprend `{}` dans le compose", a.name, x.id, x.plan_slug, a.plan, x.plan_slug));
                     } else {
                         log(&format!("addon {} : existe ({})", a.name, x.id));
                     }
@@ -179,12 +179,17 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
                 log(&format!("application {} : existe ({})", app.name, x.id));
                 let i = &x.instance;
                 if i.min_flavor.name != app.scaling.min_flavor || i.max_flavor.name != app.scaling.max_flavor || i.min_instances != app.scaling.min_instances || i.max_instances != app.scaling.max_instances || x.dedicated_build() != app.scaling.build_flavor.as_deref() {
+                    // Écart avec la plateforme : changement du compose, ou
+                    // réglage fait hors du compose que `up` écrase ; on le
+                    // dit, avec la sortie pour le garder.
+                    let served = Scaling { min_flavor: i.min_flavor.name.clone(), max_flavor: i.max_flavor.name.clone(), min_instances: i.min_instances, max_instances: i.max_instances, build_flavor: x.dedicated_build().map(str::to_string) };
+                    let shown = |s: &Scaling| format!("{}..{} x{}..{}{}", s.min_flavor, s.max_flavor, s.min_instances, s.max_instances, build_label(s));
                     if opts.dry_run {
-                        log(&format!("  scaling à mettre à jour : {}..{} x{}..{}{}", app.scaling.min_flavor, app.scaling.max_flavor, app.scaling.min_instances, app.scaling.max_instances, build_label(&app.scaling)));
+                        log(&format!("  scaling à mettre à jour : {} → {} (compose) ; `pull-config` pour garder celui de la plateforme", shown(&served), shown(&app.scaling)));
                     } else {
                         platform.update_scaling(&x.id, &app.scaling).await?;
                         check_build(&app.name, &app.scaling, &platform.get_app(&x.id).await?)?;
-                        log("  scaling mis à jour");
+                        log(&format!("  scaling mis à jour : {} → {} (compose)", shown(&served), shown(&app.scaling)));
                     }
                 }
                 // Seuls les tags `compose-*` sont à nous : les nôtres
@@ -308,6 +313,13 @@ pub async fn up<P: Platform>(plan: &Plan, platform: &P, opts: &Options<'_>, log:
         }
         let mut current = platform.get_env(app_id).await?;
         current.sort_by(|a, b| a.name.cmp(&b.name));
+        let foreign: Vec<&str> = {
+            let managed: std::collections::BTreeSet<&str> = current.iter().find(|e| e.name == MANAGED_VAR).map(|e| e.value.split(',').filter(|s| !s.is_empty()).collect()).unwrap_or_default();
+            current.iter().map(|e| e.name.as_str()).filter(|n| *n != MANAGED_VAR && !managed.contains(n) && !wanted.iter().any(|w| w.name == *n)).collect()
+        };
+        if !foreign.is_empty() {
+            log(&format!("application {} : variables hors compose conservées : {} ; `pull-config` pour les reprendre", app.name, foreign.join(", ")));
+        }
         let mut wanted = merge_env(&current, wanted);
         wanted.sort_by(|a, b| a.name.cmp(&b.name));
         if current != wanted {

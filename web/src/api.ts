@@ -1,7 +1,7 @@
 // Client de l'API locale de `clever-compose ui`. Les opérations longues
 // arrivent en SSE (événements `log` puis `done`), y compris en POST : on lit
 // le corps de la réponse `fetch` en flux.
-import type { AddonBody, AddonPlans, Assets, ExportResult, Flavors, Info, Inventory, Json, LocalProject, Org, Plan, Diagnostic, ScalingBody, Session } from './types';
+import type { AddonBody, AddonPlans, AdoptResult, Assets, Drift, ExportResult, Flavors, Info, Inventory, Json, LocalProject, Org, Plan, Diagnostic, ScalingBody, Session } from './types';
 
 export type OnLog = (line: string) => void;
 /** Une opération en cours : sa fin, et de quoi l'interrompre. */
@@ -80,6 +80,8 @@ export const api = {
   setScaling: (id: string, body: ScalingBody) => json('PUT', `/api/local/${encodeURIComponent(id)}/scaling`, body),
   addonPlans: () => json<AddonPlans>('GET', '/api/addon-plans'),
   setAddon: (id: string, body: AddonBody) => json('PUT', `/api/local/${encodeURIComponent(id)}/addon`, body),
+  drifts: (id: string) => json<{ drifts: Drift[] }>('GET', `/api/local/${encodeURIComponent(id)}/drift`),
+  adoptDrifts: (id: string, ids: string[]) => json<AdoptResult>('POST', `/api/local/${encodeURIComponent(id)}/drift`, { ids }),
   syncAssets: (id: string, onLog: OnLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/assets/sync`, null, onLog),
   /** Connexion : rend { mode: 'redirect', url }. */
   // Retour après la danse : relatif quand l'API sert la page (même
@@ -156,7 +158,7 @@ export const api = {
     return { done, cancel: () => controller.abort() };
   },
 
-  up: (id: string, body: { yes: boolean; dry_run: boolean; allow_ephemeral: boolean; no_wait: boolean; assets: boolean }, onLog: OnLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/up`, body, onLog),
+  up: (id: string, body: { yes: boolean; dry_run: boolean; allow_ephemeral: boolean; no_wait: boolean; assets: boolean; parallel: number }, onLog: OnLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/up`, body, onLog),
   seed: (id: string, body: { service: string; dump: string; local: boolean; yes: boolean; no_wait: boolean }, onLog: OnLog) => api.stream('POST', `/api/local/${encodeURIComponent(id)}/seed`, body, onLog),
   stop: (project: string, onLog: OnLog) => api.stream('POST', `/api/platform/projects/${encodeURIComponent(project)}/stop`, null, onLog),
   start: (project: string, onLog: OnLog) => api.stream('POST', `/api/platform/projects/${encodeURIComponent(project)}/start`, null, onLog),

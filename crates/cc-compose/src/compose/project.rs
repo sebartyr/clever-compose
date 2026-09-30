@@ -207,6 +207,12 @@ fn apply_profiles(tree: &mut Node, active: &[String], warnings: &mut Vec<Diagnos
     Ok(())
 }
 
+/// Le fichier compose qu'on édite : le premier `-f`, sinon celui que la
+/// découverte prend dans le répertoire du projet.
+pub fn main_file(opts: &Options) -> Option<PathBuf> {
+    discover(opts).ok()?.into_iter().next()
+}
+
 pub fn project_dir_of(file: &FsPath) -> PathBuf {
     file.parent().map(FsPath::to_path_buf).unwrap_or_else(|| PathBuf::from("."))
 }

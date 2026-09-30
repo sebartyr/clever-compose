@@ -172,6 +172,19 @@ enum Command {
         #[arg(long, help_heading = "Sélection")]
         follow: bool,
     },
+    /// Reprend dans x-clever du compose ce qui a changé sur la plateforme hors du compose (scaling, build dédié, plan d'addon, variables ajoutées)
+    PullConfig {
+        #[command(flatten)]
+        org: OrgArgs,
+        #[command(flatten)]
+        plan: PlanArgs,
+        /// Montre les écarts sans écrire le compose
+        #[arg(long, help_heading = "Exécution")]
+        dry_run: bool,
+        /// Ne reprend que ce service (répétable ; sinon tous)
+        #[arg(long = "service", value_name = "SERVICE", help_heading = "Sélection")]
+        services: Vec<String>,
+    },
     /// Écrit la traduction en Terraform et en script clever-tools
     Export {
         #[command(flatten)]
@@ -280,6 +293,7 @@ fn main() -> ExitCode {
         Command::Up { org, plan, dry_run, yes, no_wait, parallel, assets } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, parallel, assets, None),
         Command::Seed { org, plan, service, file, local, dry_run, yes, no_wait } => cmd_up(opts, &org.org, &plan, dry_run, yes, no_wait, cc_compose::exec::reconcile::DEFAULT_PARALLEL, false, Some((service, file, local))),
         Command::Down { org, all, dry_run, yes } => cmd_down(opts, &org.org, all, dry_run, yes),
+        Command::PullConfig { org, plan, dry_run, services } => cmd_pull_config(opts, &org.org, &plan, dry_run, &services),
         Command::Ps { org } => cmd_ps(opts, &org.org),
         Command::Stop { org } => cmd_stop_start(opts, &org.org, false),
         Command::Start { org } => cmd_stop_start(opts, &org.org, true),
@@ -566,6 +580,58 @@ fn ui_log(stdout: bool) -> cc_compose::exec::reconcile::Log {
     }
     let ui = std::sync::Mutex::new(cc_compose::ui::Ui::stderr());
     Box::new(move |line: &str| ui.lock().unwrap().log(line))
+}
+
+/// Écarts plateforme / compose, repris dans `x-clever` sauf `--dry-run`.
+fn cmd_pull_config(opts: compose::project::Options, org: &str, args: &PlanArgs, dry_run: bool, services: &[String]) -> ExitCode {
+    let api = match api(org) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let file = compose::project::main_file(&opts);
+    let computed = match compute_plan(opts, args) {
+        Ok(c) => c,
+        Err(e) => return fail(&e),
+    };
+    let mut ui = cc_compose::ui::Ui::stderr();
+    if !computed.report(&mut ui) {
+        ui.done(false, "plan refusé : corrigez les erreurs ci-dessus, il sert de comparaison");
+        return ExitCode::from(1);
+    }
+    let Some(plan) = computed.plan else { return ExitCode::from(1) };
+    let Some(file) = file else { return fail("aucun fichier compose à éditer") };
+    ui.blank();
+    run_stateless(async move {
+        let mut drifts = cc_compose::exec::drift::detect(&plan, &api).await?;
+        drifts.retain(|d| services.is_empty() || services.contains(&d.service));
+        let mut ui = cc_compose::ui::Ui::stderr();
+        if drifts.is_empty() {
+            ui.done(true, "aucun écart : la plateforme suit le compose");
+            return Ok(());
+        }
+        for d in &drifts {
+            ui.log(&d.describe());
+        }
+        if dry_run {
+            ui.done(true, &format!("{} écart(s) ; rien n'a été écrit (--dry-run)", drifts.len()));
+            return Ok(());
+        }
+        let text = std::fs::read_to_string(&file).map_err(|e| format!("{} : {e}", file.display()))?;
+        let (out, skipped) = cc_compose::exec::drift::adopt(&text, &plan, &drifts);
+        for (service, why) in &skipped {
+            ui.log(&format!("non repris : {service} : {why}"));
+        }
+        drifts.retain(|d| !skipped.iter().any(|(s, _)| s == &d.service));
+        if out != text {
+            std::fs::write(&file, &out).map_err(|e| format!("{} : {e}", file.display()))?;
+        }
+        let vars: Vec<&str> = drifts.iter().filter(|d| d.field == "environment").filter_map(|d| d.name.as_deref()).collect();
+        if !vars.is_empty() {
+            ui.log(&format!("à renseigner dans .env (valeurs non copiées, le plan les exige) : {}", vars.join(", ")));
+        }
+        ui.done(skipped.is_empty(), &format!("{} écart(s) repris dans x-clever de {}", drifts.len(), file.display()));
+        Ok(())
+    })
 }
 
 fn cmd_down(opts: compose::project::Options, org: &str, all: bool, dry_run: bool, yes: bool) -> ExitCode {

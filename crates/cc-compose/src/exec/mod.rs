@@ -5,6 +5,7 @@
 //! déploiement dans l'ordre topologique, en attendant chaque succès.
 
 pub mod assets;
+pub mod drift;
 pub mod git;
 pub mod inspect;
 pub mod local;
