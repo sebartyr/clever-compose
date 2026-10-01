@@ -93,6 +93,20 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 *Décidé :*
 
+- **Le shim cède 8080 à l'image** (01/10/2026, demande du propriétaire). Cas
+  rencontré : une image (gateway DocumentDB + pgpool) qui sert elle-même
+  « ok » sur 8080 et publie 27017. Le plan choisissait le répondeur de santé
+  conditionné à 27017. Dès 27017 ouvert, le shim prenait 8080 et le httpd de
+  l'image échouait (`Address already in use`), arrêtant le conteneur (vu en
+  local avec le shim précédent). Deux processus ne peuvent pas tenir le port :
+  si l'image le sert, le shim n'a de toute façon rien à y faire. Désormais,
+  en modes `forward` et `health`, une fois le port réel joignable, le shim sonde
+  `127.0.0.1:8080` et `[::1]:8080` pendant 3 s et s'efface si l'image écoute.
+  Il s'efface aussi si le bind échoue en `EADDRINUSE`. Le plan ne change
+  pas, `x-clever.http_port: 8080` reste la déclaration déterministe. Limite :
+  une image qui n'ouvre 8080 que plus de 3 s après son port réel perd encore
+  la course. Tests : `relay::tests` (port déjà servi, ouvert pendant la grâce,
+  libre en santé et en relais).
 - **Écarts plateforme / compose** (30/09/2026, demande du propriétaire,
   design validé) : `exec/drift.rs` compare le plan à l'existant (scaling
   min/max flavor et instances, build dédié, plan d'addon hors Cellar,

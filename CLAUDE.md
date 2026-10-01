@@ -176,7 +176,10 @@ s'exécute sur la plateforme ou depuis le poste.
   vers le port réel ; TCP et UDP entrent par 4040.
 - Le déployeur fait un GET HTTP sur 8080 et accepte 200 à 500 (2xx avec
   `CC_HEALTH_CHECK_PATH`). Tout conteneur doit répondre en HTTP sur 8080,
-  worker et tâche compris : le shim porte un répondeur de santé.
+  worker et tâche compris : le shim porte un répondeur de santé. Il
+  n'impose jamais son écoute : une image qui sert elle-même 8080 sans
+  `x-clever.http_port` le garde (sonde locale pendant 3 s une fois le port
+  réel joignable, et `EADDRINUSE` au bind, `relay.rs`, 01/10/2026).
 - La plateforme n'expanse pas les variables entre elles : le shim expanse
   celles listées dans `CLEVER_COMPOSE_EXPAND` au démarrage (identifiants d'addon
   jamais dupliqués dans la configuration ni dans l'export).

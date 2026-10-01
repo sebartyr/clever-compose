@@ -4,8 +4,13 @@
 //! HTTP qui écoute ailleurs est relayée ici, et une image non HTTP reçoit un
 //! répondeur de santé, le déployeur validant par un GET HTTP. Dans les deux
 //! cas 8080 n'ouvre qu'une fois le port réel joignable.
+//!
+//! Le shim n'impose jamais son écoute : une image qui sert elle-même 8080 sans
+//! l'avoir déclaré (`x-clever.http_port`) le garde. Deux processus ne peuvent
+//! pas tenir le port ; si le shim le prenait, c'est l'image qui tomberait.
 
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::io::ErrorKind;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 
 use std::collections::HashMap;
@@ -18,13 +23,22 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 const READY_POLL: Duration = Duration::from_millis(500);
+/// Délai laissé à l'image, une fois le port réel joignable, pour ouvrir 8080
+/// elle-même avant que le shim ne le prenne.
+const IMAGE_GRACE: Duration = Duration::from_secs(3);
+const IMAGE_POLL: Duration = Duration::from_millis(200);
 
 fn local(port: u16) -> SocketAddr {
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
 }
 
 pub async fn serve(port: PlatformPort) {
-    let listen = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PLATFORM_HTTP_PORT));
+    serve_on(PLATFORM_HTTP_PORT, port, IMAGE_GRACE).await;
+}
+
+/// [`serve`] sur un port donné, avec un délai de grâce donné (tests).
+async fn serve_on(http_port: u16, port: PlatformPort, grace: Duration) {
+    let listen = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, http_port));
     let (forward_to, ready) = match port {
         PlatformPort::Image => return,
         PlatformPort::Forward { target_port } => (Some(local(target_port)), Some(local(target_port))),
@@ -35,8 +49,17 @@ pub async fn serve(port: PlatformPort) {
         wait_ready(ready).await;
     }
 
+    if image_listens(http_port, grace).await {
+        eprintln!("cc-shim: {listen} servi par l'image, le shim s'efface");
+        return;
+    }
     let listener = match TcpListener::bind(listen).await {
         Ok(l) => l,
+        // L'image l'a ouvert entre la sonde et le bind : même conclusion.
+        Err(e) if e.kind() == ErrorKind::AddrInUse => {
+            eprintln!("cc-shim: {listen} pris par l'image, le shim s'efface");
+            return;
+        }
         Err(e) => {
             // Un échec ici est fatal pour le déploiement : la plateforme ne
             // verra jamais 8080. On le dit clairement plutôt que d'échouer en
@@ -157,6 +180,22 @@ pub async fn serve_udp(relay: UdpRelay) {
     }
 }
 
+/// Vrai si un processus écoute déjà sur `port` en local (IPv4 ou IPv6), sondé
+/// jusqu'à `grace`.
+async fn image_listens(port: u16, grace: Duration) -> bool {
+    let v6 = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0));
+    let deadline = tokio::time::Instant::now() + grace;
+    loop {
+        if TcpStream::connect(local(port)).await.is_ok() || TcpStream::connect(v6).await.is_ok() {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(IMAGE_POLL).await;
+    }
+}
+
 async fn wait_ready(target: SocketAddr) {
     loop {
         match TcpStream::connect(target).await {
@@ -205,4 +244,74 @@ async fn health(mut inbound: TcpStream) {
         .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\nConnection: close\r\n\r\nok\n")
         .await;
     let _ = inbound.shutdown().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un port libre en local (attribué par le noyau puis relâché).
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    }
+
+    async fn get(port: u16) -> String {
+        let mut s = TcpStream::connect(local(port)).await.unwrap();
+        s.write_all(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).await.unwrap();
+        out
+    }
+
+    #[tokio::test]
+    async fn efface_si_l_image_sert_deja_le_port() {
+        let image = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = image.local_addr().unwrap().port();
+        let served = tokio::time::timeout(
+            Duration::from_secs(2),
+            serve_on(port, PlatformPort::Health { ready_port: None }, Duration::from_secs(1)),
+        )
+        .await;
+        assert!(served.is_ok(), "le shim doit rendre la main sans écouter");
+    }
+
+    #[tokio::test]
+    async fn efface_si_l_image_ouvre_le_port_pendant_la_grace() {
+        let port = free_port();
+        let shim = tokio::spawn(serve_on(port, PlatformPort::Health { ready_port: None }, Duration::from_secs(2)));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let image = TcpListener::bind(local(port)).await;
+        assert!(image.is_ok(), "l'image doit pouvoir ouvrir le port");
+        let done = tokio::time::timeout(Duration::from_secs(3), shim).await;
+        assert!(done.is_ok(), "le shim doit s'effacer");
+    }
+
+    #[tokio::test]
+    async fn repond_si_le_port_reste_libre() {
+        let port = free_port();
+        tokio::spawn(serve_on(port, PlatformPort::Health { ready_port: None }, Duration::from_millis(100)));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(get(port).await.starts_with("HTTP/1.1 200"));
+    }
+
+    #[tokio::test]
+    async fn relaie_vers_le_port_reel_si_le_port_reste_libre() {
+        let real = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_port = real.local_addr().unwrap().port();
+        // En boucle : wait_ready ouvre déjà une connexion de sonde.
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = real.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 1024];
+                    if matches!(s.read(&mut buf).await, Ok(n) if n > 0) {
+                        let _ = s.write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n").await;
+                    }
+                });
+            }
+        });
+        let port = free_port();
+        tokio::spawn(serve_on(port, PlatformPort::Forward { target_port }, Duration::from_millis(100)));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(get(port).await.starts_with("HTTP/1.1 204"));
+    }
 }
