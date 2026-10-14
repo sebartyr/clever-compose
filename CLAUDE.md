@@ -319,8 +319,11 @@ Ordre du `up` : addons, groupes, apps sans déploiement, liaisons, variables
 commits **empilés sur le `master` distant**, récupéré avant d'être étendu :
 contenu déterministe mais date réelle, l'arbre décide du push (sauté si le
 commit distant porte déjà cet arbre), avance rapide sans force, un refus dit
-que le distant a bougé ; repli forcé seulement si l'historique distant est
-illisible, annoncé dans le journal ; décision du 14/10/2026) et
+que le distant a bougé : `git::publish` reprend alors son nouveau head
+(trois tentatives), aucun push forcé, aucun repli — le dépôt d'une
+application est clonable, le déployeur le clone lui-même
+(`clone-app.sh`), donc un échec de récupération est propagé ; décision du
+14/10/2026) et
 déploiements **en parallèle** (30/09/2026) : chacun part dès que les
 applications de son `depends_on` sont déployées, au plus `--parallel N`
 (4 par défaut, `1` = séquentiel) ; après un échec plus rien ne part, ceux

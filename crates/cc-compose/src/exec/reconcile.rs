@@ -419,33 +419,18 @@ async fn deploy<P: Platform>(plan: &Plan, app: &App, state: &State, platform: &P
     // organisations) ne se marchent pas dessus.
     let (project_dir, label, url, creds2) = (opts.project_dir.to_path_buf(), format!("{}-{}", plan.project, app.service), info.deployment.http_url.clone(), creds.clone());
     let app2 = app.clone();
-    let (local, pushed, warning) = tokio::task::spawn_blocking(move || -> Result<(git2::Oid, bool, Option<String>), String> {
+    let built = tokio::task::spawn_blocking(move || -> Result<git::Built, String> {
         let files = repo_files(&app2, &project_dir)?;
         let work = unique_work_dir(&label)?;
-        let result = (|| {
-            // L'historique distant est repris : le commit du `up` s'empile
-            // sur le `master` déployé. Illisible (dépôt neuf à part) :
-            // commit racine et push forcé, dit dans le journal.
-            let (parent, replace, warning) = match git::fetch_head(&work, &url, &creds2) {
-                Ok(parent) => (parent, false, None),
-                Err(e) => (None, true, Some(format!("historique distant illisible ({e}) : l'historique du dépôt est remplacé"))),
-            };
-            match git::build(&work, &files, parent)? {
-                git::Built::Unchanged(oid) => Ok((oid, false, warning)),
-                git::Built::Commit(oid) => {
-                    git::push(&work, &url, &creds2, replace)?;
-                    Ok((oid, true, warning))
-                }
-            }
-        })();
+        // L'historique distant est repris : le commit du `up` prolonge le
+        // `master` déployé (`git::publish`).
+        let result = git::publish(&work, &files, &url, &creds2);
         let _ = std::fs::remove_dir_all(&work);
         result
     })
     .await
     .map_err(|e| format!("application {} : {e}", app.name))??;
-    if let Some(w) = warning {
-        journal.say(&format!("application {} : {w}", app.name));
-    }
+    let (local, pushed) = (built.oid(), matches!(built, git::Built::Commit(_)));
     if pushed {
         journal.say(&format!("application {} : commit poussé ({}), sur l'historique du dépôt", app.name, &local.to_string()[..12]));
     } else {

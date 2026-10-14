@@ -116,15 +116,26 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   c'est elle que l'export Terraform déploie, donc celle que l'utilisateur
   garde après la migration). Repli non silencieux : si l'historique
   distant est illisible, commit racine et push forcé, dit dans le journal
-  (« historique distant illisible (…) : l'historique du dépôt est
-  remplacé »). Tests unitaires sur un dépôt **nu local** (`exec/git.rs`,
-  même transport libgit2, sans réseau) : dépôt vide → commit racine ;
-  même contenu → aucun commit ; contenu changé → deux commits chaînés ;
-  deux `up` partis du même état → le second refusé, le distant intact,
-  puis accepté en forcé. **À vérifier en réel** : la vraie URL de push
-  Clever Cloud doit servir un `fetch` d'objets, pas seulement le
-  `ls-remote` qu'on faisait avant ; si elle ne le fait pas, le repli
-  s'active et le journal le dira au premier `up`.
+  (« historique distant illisible (…) »). **Repli retiré le même jour** :
+  « clever sert un vrai repo clonable », confirmé à la source — le
+  déployeur clone lui-même le dépôt de l'application
+  (`rubydeployer/src/scripts/clone-app.sh:48`, `git clone -b <branche>`
+  avec `OAUTH_TOKEN`). Un échec de récupération est donc une anomalie, et
+  un repli forcé y réécrirait l'historique sur une simple panne réseau :
+  l'erreur est propagée. À la place, `git::publish` (récupérer, commiter,
+  pousser) **reprend le nouveau head** quand le distant a avancé pendant
+  le `up` (deux `up` du même projet en parallèle), jusqu'à trois
+  tentatives : le contenu ne dépend pas du parent. Le refus est reconnu
+  par le code de libgit2 (`ErrorCode::NotFastForward`, relevé en test et
+  non deviné) ou par le texte du serveur (`PushFail::Moved`,
+  `status_is_moved`). Le commit ne passe plus par HEAD mais par une
+  référence locale (`refs/heads/cc-publish`) : `commit(Some("HEAD"), …)`
+  exige que le tip courant soit le premier parent, faux dès la seconde
+  tentative — défaut trouvé par le test de reprise. Tests unitaires sur
+  un dépôt **nu local** (`exec/git.rs`, même transport libgit2, sans
+  réseau) : dépôt vide → commit racine ; même contenu → aucun commit ;
+  contenu changé → deux commits chaînés ; deux `up` partis du même état →
+  le second refusé, distant intact, puis empilé sur le head de l'autre.
 - **Le shim cède 8080 à l'image** (01/10/2026, demande du propriétaire). Cas
   rencontré : une image (gateway DocumentDB + pgpool) qui sert elle-même
   « ok » sur 8080 et publie 27017. Le plan choisissait le répondeur de santé
