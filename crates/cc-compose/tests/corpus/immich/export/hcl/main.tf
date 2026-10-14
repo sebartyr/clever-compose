@@ -1,0 +1,125 @@
+terraform {
+  required_providers {
+    clevercloud = { source = "CleverCloud/clevercloud", version = "~> 2.2" }
+  }
+}
+
+provider "clevercloud" {
+  organisation = var.organisation
+}
+
+variable "organisation" {
+  type        = string
+  description = "Organisation Clever Cloud (orga_xxx ou user_xxx)"
+  sensitive   = true
+}
+
+variable "repository" {
+  type        = string
+  description = "Dépôt git qui porte les branches clever-compose/<service> (écrites par `clever-compose export --branches`) : URL distante, ou `file:///chemin/local` (ouvert sur place par le provider)"
+}
+
+resource "clevercloud_networkgroup" "default" {
+  name = "immich-default"
+  tags = ["compose-project=immich", "compose-network=default", "compose-spec=9c4e555a4763a27270cdeeefe61bd634"]
+}
+
+resource "clevercloud_docker" "redis" {
+  name               = "immich-redis"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "redis.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/redis"
+  }
+}
+
+resource "clevercloud_docker" "database" {
+  name               = "immich-database"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    POSTGRES_DB          = "immich"
+    POSTGRES_INITDB_ARGS = "--data-checksums"
+    POSTGRES_PASSWORD    = "postgres"
+    POSTGRES_USER        = "postgres"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "database.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/database"
+  }
+}
+
+resource "clevercloud_docker" "immich_server" {
+  name               = "immich-immich-server"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    CLEVER_COMPOSE_DNS_MAP = "database=${clevercloud_docker.database.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud,redis=${clevercloud_docker.redis.id}.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    DB_DATABASE_NAME       = "immich"
+    DB_DATA_LOCATION       = "./postgres"
+    DB_PASSWORD            = "postgres"
+    DB_USERNAME            = "postgres"
+    IMMICH_VERSION         = "v3"
+    UPLOAD_LOCATION        = "./library"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "immich-server.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/immich-server"
+  }
+  depends_on         = [clevercloud_docker.redis, clevercloud_docker.database]
+}
+
+resource "clevercloud_docker" "immich_machine_learning" {
+  name               = "immich-immich-machine-learning"
+  region             = "par"
+  smallest_flavor    = "XS"
+  biggest_flavor     = "XS"
+  min_instance_count = 1
+  max_instance_count = 1
+  environment        = {
+    DB_DATABASE_NAME = "immich"
+    DB_DATA_LOCATION = "./postgres"
+    DB_PASSWORD      = "postgres"
+    DB_USERNAME      = "postgres"
+    IMMICH_VERSION   = "v3"
+    UPLOAD_LOCATION  = "./library"
+  }
+  networkgroups      = [
+    {
+      networkgroup_id = clevercloud_networkgroup.default.id
+      fqdn            = "immich-machine-learning.m.${clevercloud_networkgroup.default.id}.cc-ng.cloud"
+    },
+  ]
+  deployment {
+    repository = var.repository
+    commit     = "refs/heads/clever-compose/immich-machine-learning"
+  }
+}

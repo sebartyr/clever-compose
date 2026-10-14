@@ -1,0 +1,19 @@
+# Les quatre formes de bind mount, du point de vue du poste.
+services:
+  app:
+    image: busybox:1.36
+    command: sleep infinity
+    volumes:
+      # Fichier présent : copié dans l'image.
+      - ./conf/app.conf:/etc/app.conf:ro
+      # Chemin absent : `create_host_path` par défaut, `docker compose` y
+      # créerait un répertoire vide.
+      - ./absent:/var/lib/app
+      # Répertoire présent : même sortie que le chemin absent.
+      - ./vide:/var/cache/app
+      # Chemin absent avec création interdite : `docker compose` échoue aussi.
+      - type: bind
+        source: ./interdit
+        target: /mnt/interdit
+        bind:
+          create_host_path: false

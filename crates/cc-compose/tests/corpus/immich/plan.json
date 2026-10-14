@@ -1,1 +1,445 @@
-null
+{
+  "project": "immich",
+  "spec_hash": "9c4e555a4763a27270cdeeefe61bd634",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "immich-default",
+      "tags": [
+        "compose-project=immich",
+        "compose-network=default",
+        "compose-spec=9c4e555a4763a27270cdeeefe61bd634"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/redis",
+      "service": "redis",
+      "name": "immich-redis",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "docker.io/valkey/valkey:9@sha256:70739f85ad2ee01a726a965584a0f94895f01b0c60b3cc8b0aeef11eaa6888cf",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "valkey-server"
+        ],
+        "user": null,
+        "workdir": "/data",
+        "exposed_ports": [
+          6379
+        ]
+      },
+      "shim": {
+        "argv": [
+          "docker-entrypoint.sh",
+          "valkey-server"
+        ],
+        "workdir": "/data",
+        "port": {
+          "mode": "health",
+          "ready_port": 6379
+        }
+      },
+      "env": [],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=immich",
+        "compose-service=redis",
+        "compose-spec=9c4e555a4763a27270cdeeefe61bd634"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/database",
+      "service": "database",
+      "name": "immich-database",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/usr/local/bin/immich-docker-entrypoint.sh"
+        ],
+        "cmd": [
+          "postgres",
+          "-c",
+          "config_file=/etc/postgresql/postgresql.conf"
+        ],
+        "user": null,
+        "workdir": null,
+        "exposed_ports": [
+          5432
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/usr/local/bin/immich-docker-entrypoint.sh",
+          "postgres",
+          "-c",
+          "config_file=/etc/postgresql/postgresql.conf"
+        ],
+        "port": {
+          "mode": "health",
+          "ready_port": 5432
+        },
+        "volumes": [
+          "/var/lib/postgresql/data"
+        ]
+      },
+      "env": [
+        {
+          "key": "POSTGRES_DB",
+          "value": [
+            {
+              "literal": "immich"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_INITDB_ARGS",
+          "value": [
+            {
+              "literal": "--data-checksums"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_PASSWORD",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "POSTGRES_USER",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=immich",
+        "compose-service=database",
+        "compose-spec=9c4e555a4763a27270cdeeefe61bd634"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/immich-server",
+      "service": "immich-server",
+      "name": "immich-immich-server",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "ghcr.io/immich-app/immich-server:v3",
+        "private_registry": false,
+        "files": [
+          {
+            "source": "/etc/localtime",
+            "target": "/etc/localtime",
+            "read_only": true
+          }
+        ]
+      },
+      "image": {
+        "entrypoint": [
+          "tini",
+          "--",
+          "/bin/bash",
+          "-c"
+        ],
+        "cmd": [
+          "start.sh"
+        ],
+        "user": null,
+        "workdir": "/usr/src/app",
+        "exposed_ports": [
+          2283
+        ]
+      },
+      "shim": {
+        "argv": [
+          "tini",
+          "--",
+          "/bin/bash",
+          "-c",
+          "start.sh"
+        ],
+        "workdir": "/usr/src/app",
+        "port": {
+          "mode": "forward",
+          "target_port": 2283
+        },
+        "volumes": [
+          "/data"
+        ]
+      },
+      "env": [
+        {
+          "key": "CLEVER_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "database="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/database@default"
+              }
+            },
+            {
+              "literal": ",redis="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/redis@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "DB_DATABASE_NAME",
+          "value": [
+            {
+              "literal": "immich"
+            }
+          ]
+        },
+        {
+          "key": "DB_DATA_LOCATION",
+          "value": [
+            {
+              "literal": "./postgres"
+            }
+          ]
+        },
+        {
+          "key": "DB_PASSWORD",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "DB_USERNAME",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "IMMICH_VERSION",
+          "value": [
+            {
+              "literal": "v3"
+            }
+          ]
+        },
+        {
+          "key": "UPLOAD_LOCATION",
+          "value": [
+            {
+              "literal": "./library"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "app/redis",
+        "app/database"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=immich",
+        "compose-service=immich-server",
+        "compose-spec=9c4e555a4763a27270cdeeefe61bd634"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/immich-machine-learning",
+      "service": "immich-machine-learning",
+      "name": "immich-immich-machine-learning",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "ghcr.io/immich-app/immich-machine-learning:v3",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "tini",
+          "--"
+        ],
+        "cmd": [
+          "python",
+          "-m",
+          "immich_ml"
+        ],
+        "user": null,
+        "workdir": "/usr/src",
+        "exposed_ports": []
+      },
+      "shim": {
+        "argv": [
+          "tini",
+          "--",
+          "python",
+          "-m",
+          "immich_ml"
+        ],
+        "workdir": "/usr/src",
+        "port": {
+          "mode": "health"
+        },
+        "volumes": [
+          "/cache"
+        ]
+      },
+      "env": [
+        {
+          "key": "DB_DATABASE_NAME",
+          "value": [
+            {
+              "literal": "immich"
+            }
+          ]
+        },
+        {
+          "key": "DB_DATA_LOCATION",
+          "value": [
+            {
+              "literal": "./postgres"
+            }
+          ]
+        },
+        {
+          "key": "DB_PASSWORD",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "DB_USERNAME",
+          "value": [
+            {
+              "literal": "postgres"
+            }
+          ]
+        },
+        {
+          "key": "IMMICH_VERSION",
+          "value": [
+            {
+              "literal": "v3"
+            }
+          ]
+        },
+        {
+          "key": "UPLOAD_LOCATION",
+          "value": [
+            {
+              "literal": "./library"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=immich",
+        "compose-service=immich-machine-learning",
+        "compose-spec=9c4e555a4763a27270cdeeefe61bd634"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/immich-server@default",
+      "member": "app/immich-server",
+      "group": "ng/default",
+      "aliases": [
+        "immich-server"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/immich-machine-learning@default",
+      "member": "app/immich-machine-learning",
+      "group": "ng/default",
+      "aliases": [
+        "immich-machine-learning"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/redis@default",
+      "member": "app/redis",
+      "group": "ng/default",
+      "aliases": [
+        "redis"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/database@default",
+      "member": "app/database",
+      "group": "ng/default",
+      "aliases": [
+        "database"
+      ]
+    }
+  ]
+}

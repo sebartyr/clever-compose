@@ -219,6 +219,26 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
   pour un montage ; même chose pour un `tmpfs`. Le Dockerfile généré passe
   en `USER 0:0` : une image `FROM scratch` n'a pas de `/etc/passwd` et
   Docker ne sait pas y résoudre `root`.
+- **Chemin de bind absent = répertoire vide** (14/10/2026, même cas Vikunja
+  `./files:/app/vikunja/files` sur un poste où `./files` n'existe pas) :
+  `bind-missing` était une erreur dure que `--allow-ephemeral` ne débloquait
+  pas, alors qu'un simple `mkdir files` donnait `bind-directory`, lui
+  déblocable ; deux sorties pour une seule situation. Source : `create_host_path`
+  vaut `true` par défaut (compose-go `transform/volume.go`) et Compose passe
+  alors `CreateMountpoint: true` au démon (`pkg/compose/create.go`), qui crée
+  le chemin manquant **en répertoire vide**. Absent et vide sont donc le même
+  cas et prennent la même sortie : `bind-directory`, ou `volume-ephemeral` sous
+  `--allow-ephemeral` / `x-clever.ephemeral: true`, le message disant qu'un
+  répertoire vide serait créé pour que le fichier oublié reste visible. Règle
+  unique, sans heuristique sur l'extension du chemin (décision du propriétaire
+  pour `./clickhouse/logs.xml` de Plausible). `create_host_path: false`
+  explicite garde `bind-missing` en erreur dure : `docker compose` échoue aussi.
+  Effet de bord : immich et plausible, qui planifient avec `allow_ephemeral`,
+  n'étaient bloqués que par ça ; leurs goldens portent désormais un plan
+  complet et un export validé. Bug de fidélité trouvé au passage par le
+  nouveau cas `bind-paths` : `omit_zero_at` effaçait le `create_host_path:
+  false` explicite (règle `is_zero` générale) alors que l'oracle le garde,
+  `OptOut` ayant `true` pour valeur zéro ; corrigé dans `typed.rs`.
 - **Cellar déclaré** (18/09/2026, demande du propriétaire) : `x-clever.cellar`
   niveau projet (buckets, `name` d'un addon existant), `cellar: [n]` niveau
   service. Plan : ressource `Addon` `cellar-addon` avec champs additifs

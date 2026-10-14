@@ -243,7 +243,7 @@ s'exécute sur la plateforme ou depuis le poste.
 | `deploy.replicas`, `resources.limits.{memory,cpus}` | instances fixes (`replicas-fixed` : pas d'autoscaling sans `x-clever`), plus petite flavor couvrant mémoire et vCPU |
 | réseaux | network groups selon `x-clever.network_groups` (exigé dès deux réseaux) |
 | postgres, mysql/mariadb, redis/valkey, mongo, elasticsearch | addon managé (coût annoncé, `--yes` au `up`), identifiants expansés par le shim ; scripts d'init rejoués par une tâche (PG, MySQL, Mongo) ; `seed` pour tous |
-| volumes nommés, bind de répertoire | refus (`volume-unsupported`, `bind-directory`) sauf `--allow-ephemeral` / `x-clever.ephemeral: true` → `volume-ephemeral` (rien copié, données perdues au redéploiement ; décision du 18/09/2026) |
+| volumes nommés, bind de répertoire | refus (`volume-unsupported`, `bind-directory`) sauf `--allow-ephemeral` / `x-clever.ephemeral: true` → `volume-ephemeral` (rien copié, données perdues au redéploiement ; décision du 18/09/2026). Un chemin de bind **absent** du poste est le même cas qu'un répertoire vide (`create_host_path` vaut `true` par défaut : le démon le créerait vide ; 14/10/2026) ; `bind-missing` ne reste une erreur dure que sous `create_host_path: false` |
 | `privileged`, `cap_add`, `devices`, `network_mode`, `sysctls`… | refus avec diagnostic |
 
 ### Extension `x-clever`

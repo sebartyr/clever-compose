@@ -571,18 +571,32 @@ fn plan_service(
             "bind" => {
                 let src = v.source.clone().unwrap_or_default();
                 let shown = ctx.display(&src);
+                // `create_host_path` vaut `true` par défaut (compose-go,
+                // `transform/volume.go`) : un chemin absent est alors créé par le
+                // démon sous la forme d'un répertoire **vide**
+                // (`CreateMountpoint`, `pkg/compose/create.go`). Absent et vide
+                // sont donc le même cas, et prennent la même sortie.
+                let create_host_path = v.bind.as_ref().and_then(|b| b.get("create_host_path")).and_then(serde_json::Value::as_bool).unwrap_or(true);
                 let meta = std::fs::metadata(&src);
+                let missing = meta.is_err();
                 match meta {
                     Ok(m) if m.is_file() => files.push(CopiedFile { source: shown.clone(), target: v.target.clone(), read_only: v.read_only }),
-                    Ok(_) if ctx.allow_ephemeral || x.ephemeral == Some(true) => {
+                    Err(_) if !create_host_path => {
+                        diags.push(Diagnostic::error("bind-missing", format!("le chemin `{shown}` monté vers `{}` n'existe pas sur ce poste et `create_host_path: false` interdit de le créer : `docker compose` échouerait aussi", v.target)).with_path(&vp));
+                    }
+                    _ if ctx.allow_ephemeral || x.ephemeral == Some(true) => {
                         ephemeral_dirs.push(v.target.clone());
-                        diags.push(Diagnostic::warning("volume-ephemeral", format!("le répertoire `{shown}` monté sur `{}` sera éphémère : rien n'est copié dans l'image et les données sont perdues à chaque redéploiement", v.target)).with_path(&vp));
+                        let quoi = if missing { format!("le chemin `{shown}`, absent de ce poste (`docker compose` y créerait un répertoire vide),") } else { format!("le répertoire `{shown}`") };
+                        diags.push(Diagnostic::warning("volume-ephemeral", format!("{quoi} monté sur `{}` sera éphémère : rien n'est copié dans l'image et les données sont perdues à chaque redéploiement", v.target)).with_path(&vp));
                     }
-                    Ok(_) => {
-                        diags.push(Diagnostic::error("bind-directory", format!("le montage de répertoire `{shown}` vers `{}` n'a pas d'équivalent : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image. Utilisez un stockage externe (addon, Cellar), ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données", v.target)).with_path(&vp));
-                    }
-                    Err(_) => {
-                        diags.push(Diagnostic::error("bind-missing", format!("le chemin `{shown}` monté vers `{}` n'existe pas sur ce poste", v.target)).with_path(&vp));
+                    _ => {
+                        let quoi = if missing {
+                            format!("le chemin `{shown}` monté vers `{}` n'existe pas sur ce poste ; `docker compose` y créerait un répertoire vide, qui n'a pas d'équivalent", v.target)
+                        } else {
+                            format!("le montage de répertoire `{shown}` vers `{}` n'a pas d'équivalent", v.target)
+                        };
+                        let fichier = if missing { "S'il manque un fichier à ce chemin, ajoutez-le ; sinon utilisez" } else { "Utilisez" };
+                        diags.push(Diagnostic::error("bind-directory", format!("{quoi} : pas de volume sur le runtime Docker ; un fichier seul serait copié dans l'image. {} un stockage externe (addon, Cellar), ou `--allow-ephemeral` / `x-clever.ephemeral: true` pour accepter la perte des données", fichier)).with_path(&vp));
                     }
                 }
             }

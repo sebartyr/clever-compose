@@ -1,1 +1,263 @@
-null
+{
+  "project": "plausible",
+  "spec_hash": "9f6f941066f236936479d8a2b1a7a52f",
+  "resources": [
+    {
+      "resource": "network_group",
+      "id": "ng/default",
+      "network": "default",
+      "name": "plausible-default",
+      "tags": [
+        "compose-project=plausible",
+        "compose-network=default",
+        "compose-spec=9f6f941066f236936479d8a2b1a7a52f"
+      ]
+    },
+    {
+      "resource": "addon",
+      "id": "addon/plausible_db",
+      "service": "plausible_db",
+      "name": "plausible-plausible_db",
+      "provider": "postgresql-addon",
+      "plan": "xxs_sml",
+      "region": "par",
+      "version": "16",
+      "tags": [
+        "compose-project=plausible",
+        "compose-service=plausible_db",
+        "compose-spec=9f6f941066f236936479d8a2b1a7a52f"
+      ],
+      "private": true
+    },
+    {
+      "resource": "app",
+      "id": "app/plausible_events_db",
+      "service": "plausible_events_db",
+      "name": "plausible-plausible_events_db",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "clickhouse/clickhouse-server:24.12-alpine",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/entrypoint.sh"
+        ],
+        "cmd": [],
+        "user": null,
+        "workdir": "/",
+        "exposed_ports": [
+          8123,
+          9000,
+          9009
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/entrypoint.sh"
+        ],
+        "workdir": "/",
+        "port": {
+          "mode": "health",
+          "ready_port": 8123
+        },
+        "volumes": [
+          "/var/lib/clickhouse",
+          "/var/log/clickhouse-server",
+          "/etc/clickhouse-server/config.d/logs.xml",
+          "/etc/clickhouse-server/config.d/ipv4-only.xml",
+          "/etc/clickhouse-server/config.d/low-resources.xml"
+        ]
+      },
+      "env": [
+        {
+          "key": "CC_HEALTH_CHECK_PATH",
+          "value": [
+            {
+              "literal": "/ping"
+            }
+          ]
+        },
+        {
+          "key": "CLICKHOUSE_SKIP_USER_SETUP",
+          "value": [
+            {
+              "literal": "1"
+            }
+          ]
+        }
+      ],
+      "depends_on": [],
+      "health_check_path": "/ping",
+      "tags": [
+        "compose-project=plausible",
+        "compose-service=plausible_events_db",
+        "compose-spec=9f6f941066f236936479d8a2b1a7a52f"
+      ]
+    },
+    {
+      "resource": "app",
+      "id": "app/plausible",
+      "service": "plausible",
+      "name": "plausible-plausible",
+      "kind": "service",
+      "region": "par",
+      "scaling": {
+        "min_flavor": "XS",
+        "max_flavor": "XS",
+        "min_instances": 1,
+        "max_instances": 1
+      },
+      "source": {
+        "type": "synthetic",
+        "image": "ghcr.io/plausible/community-edition:v3.0.1",
+        "private_registry": false,
+        "files": []
+      },
+      "image": {
+        "entrypoint": [
+          "/entrypoint.sh"
+        ],
+        "cmd": [
+          "run"
+        ],
+        "user": "999",
+        "workdir": "/app",
+        "exposed_ports": [
+          8000
+        ]
+      },
+      "shim": {
+        "argv": [
+          "/entrypoint.sh",
+          "sh",
+          "-c",
+          "/entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh run"
+        ],
+        "workdir": "/app",
+        "user": "999",
+        "port": {
+          "mode": "forward",
+          "target_port": 8000
+        },
+        "volumes": [
+          "/var/lib/plausible"
+        ]
+      },
+      "env": [
+        {
+          "key": "BASE_URL",
+          "value": [
+            {
+              "literal": ""
+            }
+          ]
+        },
+        {
+          "key": "CLEVER_COMPOSE_DNS_MAP",
+          "value": [
+            {
+              "literal": "plausible_db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/plausible_db@default"
+              }
+            },
+            {
+              "literal": ",plausible_events_db="
+            },
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/plausible_events_db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "POSTGRESQL_ADDON_NG_HOST",
+          "value": [
+            {
+              "ref": {
+                "ref": "member_fqdn",
+                "member": "member/plausible_db@default"
+              }
+            }
+          ]
+        },
+        {
+          "key": "POSTGRESQL_ADDON_NG_PORT",
+          "value": [
+            {
+              "literal": "8080"
+            }
+          ]
+        },
+        {
+          "key": "SECRET_KEY_BASE",
+          "value": [
+            {
+              "literal": ""
+            }
+          ]
+        },
+        {
+          "key": "TMPDIR",
+          "value": [
+            {
+              "literal": "/var/lib/plausible/tmp"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "addon/plausible_db",
+        "app/plausible_events_db"
+      ],
+      "health_check_path": null,
+      "tags": [
+        "compose-project=plausible",
+        "compose-service=plausible",
+        "compose-spec=9f6f941066f236936479d8a2b1a7a52f"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/plausible_db@default",
+      "member": "addon/plausible_db",
+      "group": "ng/default",
+      "aliases": [
+        "plausible_db"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/plausible_events_db@default",
+      "member": "app/plausible_events_db",
+      "group": "ng/default",
+      "aliases": [
+        "plausible_events_db"
+      ]
+    },
+    {
+      "resource": "membership",
+      "id": "member/plausible@default",
+      "member": "app/plausible",
+      "group": "ng/default",
+      "aliases": [
+        "plausible"
+      ]
+    }
+  ]
+}

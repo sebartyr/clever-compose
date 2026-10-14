@@ -1,0 +1,31 @@
+name: bind-paths
+services:
+  app:
+    command:
+      - sleep
+      - infinity
+    image: busybox:1.36
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/bind-paths/conf/app.conf
+        target: /etc/app.conf
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/bind-paths/absent
+        target: /var/lib/app
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/bind-paths/vide
+        target: /var/cache/app
+        bind: {}
+      - type: bind
+        source: /home/sebartyr/cc-compose/clever-compose/crates/cc-compose/tests/corpus/bind-paths/interdit
+        target: /mnt/interdit
+        bind:
+          create_host_path: false
+networks:
+  default:
+    name: bind-paths_default

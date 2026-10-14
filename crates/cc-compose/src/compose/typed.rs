@@ -618,13 +618,18 @@ fn omit_zero_at(node: Node, p: &Path) -> Node {
                     continue;
                 }
                 let cp = p.child(&k);
+                // `OptOut` : booléen dont la valeur zéro est `true`. C'est
+                // donc `true` qu'`omitzero` efface, et un `false` explicite
+                // qui survit (l'inverse de la règle générale `is_zero`).
+                if cp.matches("services.*.volumes.[].bind.create_host_path") {
+                    if v.value == Value::Bool(false) {
+                        out.insert(k, v);
+                    }
+                    continue;
+                }
                 // `ServiceDependency.Required` n'a pas d'omitempty.
                 let always = cp.matches("services.*.depends_on.*.required");
                 if !value_map && !always && is_zero(&v) {
-                    continue;
-                }
-                // `OptOut` : booléen dont la valeur zéro est `true`.
-                if cp.matches("services.*.volumes.[].bind.create_host_path") && v.value == Value::Bool(true) {
                     continue;
                 }
                 out.insert(k, omit_zero_at(v, &cp));
