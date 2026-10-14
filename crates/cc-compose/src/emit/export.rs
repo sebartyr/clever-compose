@@ -27,13 +27,20 @@ pub fn write(plan: &Plan, project_dir: &FsPath, out_dir: &FsPath, what: &What, d
             let Resource::App(app) = r else { continue };
             let files = repo_files(app, project_dir).map_err(|e| Diagnostic::error("export-sources", format!("{} : {e}", app.service)))?;
             match crate::exec::git::write_branch(project_dir, &app.service, &files) {
-                Ok((oid, o)) => {
+                Ok((built, o)) => {
+                    let oid = built.oid();
                     // La plateforme clone en HTTPS : `git@host:x/y.git` → `https://host/x/y.git`.
                     origin = origin.or(o.map(|u| match u.strip_prefix("git@").and_then(|r| r.split_once(':')) {
                         Some((host, path)) => format!("https://{host}/{path}"),
                         None => u,
                     }));
-                    diags.push(Diagnostic::warning("export-branch", format!("branche clever-compose/{} écrite ({}) ; à pousser : git push origin 'refs/heads/clever-compose/*'", app.service, &oid.to_string()[..12])));
+                    // La branche est prolongée, pas réécrite : son
+                    // historique est celui des déploiements.
+                    let state = match built {
+                        crate::exec::git::Built::Unchanged(_) => "inchangée",
+                        crate::exec::git::Built::Commit(_) => "prolongée",
+                    };
+                    diags.push(Diagnostic::warning("export-branch", format!("branche clever-compose/{} {state} ({}) ; à pousser : git push origin 'refs/heads/clever-compose/*'", app.service, &oid.to_string()[..12])));
                 }
                 Err(e) => diags.push(Diagnostic::warning("export-branch", e)),
             }

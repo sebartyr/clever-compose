@@ -64,8 +64,10 @@ Options de projet, avant ou après la commande, comme `docker compose` :
   traduite, ignorée avec avertissement, ou refusée : rien n'est approximé.
 - `up` réconcilie sans état local : les ressources se retrouvent par nom et
   par tags, l'environnement n'est remplacé que s'il change, les dépôts
-  synthétiques ont un commit déterministe et le push est sauté s'il est
-  déjà là. Les addons sont facturés : `--yes` confirme leur création.
+  synthétiques **prolongent l'historique du dépôt de l'application** (un
+  commit par déploiement, avance rapide) et le push est sauté quand le
+  contenu est déjà celui du dernier commit. Les addons sont facturés :
+  `--yes` confirme leur création.
 - `--allow-ephemeral` accepte les volumes des services non substituables
   comme stockage éphémère ; `x-clever.ephemeral: true` garde une base en
   conteneur au lieu d'un addon.

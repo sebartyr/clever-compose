@@ -316,7 +316,11 @@ console survit (`reconcile::merge_env`, 18/09/2026). L'état se reconstruit depu
 
 Ordre du `up` : addons, groupes, apps sans déploiement, liaisons, variables
 (FQDN calculés), redirections, domaines, puis dépôts synthétiques (git2,
-commits déterministes, push sauté si l'arbre distant est identique) et
+commits **empilés sur le `master` distant**, récupéré avant d'être étendu :
+contenu déterministe mais date réelle, l'arbre décide du push (sauté si le
+commit distant porte déjà cet arbre), avance rapide sans force, un refus dit
+que le distant a bougé ; repli forcé seulement si l'historique distant est
+illisible, annoncé dans le journal ; décision du 14/10/2026) et
 déploiements **en parallèle** (30/09/2026) : chacun part dès que les
 applications de son `depends_on` sont déployées, au plus `--parallel N`
 (4 par défaut, `1` = séquentiel) ; après un échec plus rien ne part, ceux
@@ -347,8 +351,9 @@ structure. Cellar : `clevercloud_cellar` (nom seul) et
 `<service>.m.<ng>.cc-ng.cloud`, validé par le provider contre `cc-ng.cloud`),
 `deployment { repository = var.repository, commit = "refs/heads/clever-compose/<service>" }`
 (`repository` accepte `file://` : dépôt local ouvert sur place),
-`dependencies` vers les ids d'addons. `export --branches` écrit les branches
-dans le dépôt du projet. Aucun secret en littéral : références d'addon
+`dependencies` vers les ids d'addons. `export --branches` **prolonge** les
+branches `clever-compose/<service>` du dépôt du projet (même règle que le
+push : l'arbre décide, l'historique reste). Aucun secret en littéral : références d'addon
 expansées par le shim, secrets en `file()` ou variables sensibles.
 
 Manques du provider (avertissements d'export, PR candidates) : lifetime Task,

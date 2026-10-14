@@ -93,6 +93,38 @@ Les consommateurs du corpus (WordPress) se connectent sans intervention.
 
 *Décidé :*
 
+- **Le dépôt de l'application garde son historique** (14/10/2026, demande
+  du propriétaire : « j'aimerais qu'on reparte du dépôt git s'il existe
+  pour empiler les commits », cadrée par « terraform c'est surtout pour
+  permettre de migrer vers un autre format » — le dépôt est l'un des
+  formats de sortie, son historique dit ce qui a été déployé et quand).
+  Avant : `git::build` initialisait un dépôt neuf, un commit racine à date
+  fixe (`Time::new(0,0)`), comparé au distant par `ls-remote`, poussé en
+  `+HEAD:refs/heads/master` — l'historique distant était effacé à chaque
+  `up`, et un commit poussé à la main disparaissait sans un mot.
+  Maintenant : `git::fetch_head` récupère `+refs/heads/*:refs/remotes/origin/*`
+  dans le répertoire de travail (dépôt vide = `None`, pas une erreur),
+  `build(.., parent)` commite dessus, et `push` est en **avance rapide**
+  (`HEAD:refs/heads/master`) : un refus signale que le distant a bougé
+  pendant le `up` au lieu d'écraser. Ce qui remplace la détermination du
+  commit : l'**arbre** décide. Le contenu reste déterministe (entrées
+  triées, modes figés), donc si le commit distant porte déjà cet arbre,
+  `Built::Unchanged` — pas de commit vide, pas de push, `up` reste
+  idempotent. La date, elle, devient réelle : un historique empilé daté de
+  1970 ne se lit pas. `export --branches` fait de même sur
+  `refs/heads/clever-compose/<service>` (branche prolongée, pas réécrite :
+  c'est elle que l'export Terraform déploie, donc celle que l'utilisateur
+  garde après la migration). Repli non silencieux : si l'historique
+  distant est illisible, commit racine et push forcé, dit dans le journal
+  (« historique distant illisible (…) : l'historique du dépôt est
+  remplacé »). Tests unitaires sur un dépôt **nu local** (`exec/git.rs`,
+  même transport libgit2, sans réseau) : dépôt vide → commit racine ;
+  même contenu → aucun commit ; contenu changé → deux commits chaînés ;
+  deux `up` partis du même état → le second refusé, le distant intact,
+  puis accepté en forcé. **À vérifier en réel** : la vraie URL de push
+  Clever Cloud doit servir un `fetch` d'objets, pas seulement le
+  `ls-remote` qu'on faisait avant ; si elle ne le fait pas, le repli
+  s'active et le journal le dira au premier `up`.
 - **Le shim cède 8080 à l'image** (01/10/2026, demande du propriétaire). Cas
   rencontré : une image (gateway DocumentDB + pgpool) qui sert elle-même
   « ok » sur 8080 et publie 27017. Le plan choisissait le répondeur de santé
